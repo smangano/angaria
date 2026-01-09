@@ -1,0 +1,2 @@
+# angaria
+C++ IPC Framework
