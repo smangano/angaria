@@ -1,67 +1,110 @@
 #pragma once
-#include <cstdint>
-#include <unordered_map>
-#include <vector>
-#include <string>
-#include <variant> 
+#include "angaria/bip.h"
+#include "angaria/types.h"
+#include <memory>
+
+/**
+* The Registry stores meta data in shared memory that is accessible and writeable by any Task that registers as an angoria 
+* participant. Once a tasks updates the registry in any way the change is permanent for the lifetime of the session.
+*/
 
 namespace angaria 
 {
-    enum class FieldType : uint16_t ;
-    enum class MsgType : uint16_t ;
 
-    class FieldInfo 
-    {
-    public:
+  /**
+  * Registry meta data for a Task - an execution unit using angaria to communicate.
+  */
+  struct RegistryTask
+  {
+    TID_t     taskID ;              //Every task is assigned a unique task id when it registers with angaria
+    char      taskName[NAMELEN] ;   //A human readable name for the task
+    LCTOFF    createTime ;          //The time the task registered with angoria as an offset to the LCT
+    LCTOFF    lastCreateTime ;      //The time the task was last registered. Different from createTime due to restarts.
+    PID_t     lastPID;              //The process id or thread id of the currently active task. 
+    bool      active ;              //True if the Task identified by lastPID is actively running and registered with angoria
+    uint16_t  restartCount ;        //The number of restarts for the task. Zero on initial task registration 
+    VARCHAR   doc ;                 //A doc string describing the task. Empty if not supplied by the task or configuration 
+  } ;
+
+  /**
+  * Registry meta data for a Queue - the basic communication facility between Tasks
+  */
+  struct RegistryQueue
+  {
+    QID_t queueID ;
+    char taskName[NAMELEN] ; 
+    TID_t createdByTask ;
+    QSID_t ownedByQueueSet ;
+    LCTOFF createTime ;
+    uint64_t maxMessageSize ;
+    VARCHAR doc ;
+  }
+
+  /**
+  * Registry meta data for a Queue Set - a collection of queues that a Task can use to 
+  * implement prioritized reads or multi task publishing.
+  */
+  struct RegistryQueueSet
+  {
+    QSID_t queueSetID ;
+    char queueSetName[NAMELEN] ;
+    QSET_TYPE queueSetType;
+    QID_t membership[MAX_QUEUES_PER_SET];
+    uint8_t priority[MAX_QUEUES_PER_SET] ;
+    LCTOFF createTime;
+    TID_t createdByTask;
+    TID_t ownedByTask; 
+    VARCHAR doc;
+  }
+
+  /** 
+  * Registry meta data for a Message - the basic unit of data that is transmitted between tasks 
+  * via queues.
+  */
+
+  struct RegistryMessage
+  {
+    MSGTYPE msgType ;
+    char msgName[NAMELEN] ;
+    LCTOFF createTime ;
+    uint32_t msgVersion; 
+    TID createTaskID; 
+    VARCHAR doc ;
+  } ;
+
+  /** 
+  * Registry meta data desribing the fields that make up a message. 
+  */
+  struct RegistryMessageDef
+  {
+    MSGTYPE msgType ;
+    uint16_t fieldCount ;
+    FLDTYPE filelds[]
+  } ;
+
+  /**
+  * Regisistry meta data describing a specific field in a message.
+  */
+  struct RegistryField
+  {
+    FLDTYPE flytype ;
+    char fieldName [NAMELEN]
+    size_t fldSize ;
+    FLDBASE fldBaseType ;
+    VARCHAR doc ;
+  } ;
+
+  class Registry 
+  {
+  public:
+    using NamedMutex = boost::interprocess::named_mutex ;
+    using NamedMutexPtr = std::unique_ptr<NamedMutex> ;
+
+         
+
+
+  private:
     
-    using Ptr = std::shared_ptr<FieldInfo>;
-
-        FieldInfo(FieldType fieldType)
-        {}
-
-
-    private:
-        FieldType m_fieldType;
-        std::string m_fieldName;    
-        std::string m_fieldDescription;
-
-
-    };
-
-    class NumericFieldInfo : public FieldInfo 
-    {
-
-    public:
-        NumericFieldInfo(FieldType fieldType,
-                         std::variant<double, int64_t> minValue,
-                         std::variant<double, int64_t> maxValue)
-            : FieldInfo(fieldType),
-              m_minValue(minValue),
-              m_maxValue(maxValue)
-        {}
-    private:
-        std::variant<double, int64_t> m_minValue;
-        std::variant<double, int64_t> m_maxValue; 
-    };
-
     
-    class Registry {
-    public:
-    using MsgFieldMap = std::unordered_map<MsgType, std::vector<FieldType>>;
-    using MsgMap
-
-    void registerMsgType(MsgType msgType)
-    {
-        return *this;    
-    }
-
-    Registry& registerFieldType(MsgType msgType, FieldType fieldType)
-    {
-        registerMsgType(msgType);
-
-        
-    }
-
-    std::unorde
-    };
+  };
 }   
