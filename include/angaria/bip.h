@@ -6,4 +6,4 @@
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <boost/interprocess/detail/os_thread_functions.hpp>
-#include <boost/interprocess/offset_ptr.h>
+#include <boost/interprocess/offset_ptr.hpp>

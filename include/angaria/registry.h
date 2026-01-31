@@ -18,12 +18,12 @@ namespace angaria
   {
     TID_t     taskID ;              //Every task is assigned a unique task id when it registers with angaria
     char      taskName[NAMELEN] ;   //A human readable name for the task
-    LCTOFF    createTime ;          //The time the task registered with angoria as an offset to the LCT
-    LCTOFF    lastCreateTime ;      //The time the task was last registered. Different from createTime due to restarts.
+    LCTOFF_t    createTime ;          //The time the task registered with angoria as an offset to the LCT
+    LCTOFF_t    lastCreateTime ;      //The time the task was last registered. Different from createTime due to restarts.
     PID_t     lastPID;              //The process id or thread id of the currently active task. 
     bool      active ;              //True if the Task identified by lastPID is actively running and registered with angoria
     uint16_t  restartCount ;        //The number of restarts for the task. Zero on initial task registration 
-    VARCHAR   doc ;                 //A doc string describing the task. Empty if not supplied by the task or configuration 
+    VARCHAR_t   doc ;                 //A doc string describing the task. Empty if not supplied by the task or configuration 
   } ;
 
   /**
@@ -35,9 +35,9 @@ namespace angaria
     char taskName[NAMELEN] ; 
     TID_t createdByTask ;
     QSID_t ownedByQueueSet ;
-    LCTOFF createTime ;
+    LCTOFF_t createTime ;
     uint64_t maxMessageSize ;
-    VARCHAR doc ;
+    VARCHAR_t doc ;
   }
 
   /**
@@ -51,10 +51,10 @@ namespace angaria
     QSET_TYPE queueSetType;
     QID_t membership[MAX_QUEUES_PER_SET];
     uint8_t priority[MAX_QUEUES_PER_SET] ;
-    LCTOFF createTime;
+    LCTOFF_t createTime;
     TID_t createdByTask;
     TID_t ownedByTask; 
-    VARCHAR doc;
+    VARCHAR_t doc;
   }
 
   /** 
@@ -66,10 +66,10 @@ namespace angaria
   {
     MSGTYPE msgType ;
     char msgName[NAMELEN] ;
-    LCTOFF createTime ;
+    LCTOFF_t createTime ;
     uint32_t msgVersion; 
     TID createTaskID; 
-    VARCHAR doc ;
+    VARCHAR_t doc ;
   } ;
 
   /** 
@@ -91,7 +91,7 @@ namespace angaria
     char fieldName [NAMELEN]
     size_t fldSize ;
     FLDBASE fldBaseType ;
-    VARCHAR doc ;
+    VARCHAR_t doc ;
   } ;
 
   class Registry 
