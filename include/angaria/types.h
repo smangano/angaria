@@ -1,11 +1,13 @@
 #pragma once
-#include "anagria/constants.h"
+#include "angaria/constants.h"
 #include <cstdint>
+#include <ctime>
 
 namespace angaria 
 {
   enum class EFieldType : uint16_t;
   enum class EMsgType : uint16_t ;
+  enum class EQSetTpe : uint16_t { SOURCE, PUBLISHER } ;
   //User can optionally specify a field is a model of a specific type
   //This assits tools which display log messages
   enum class EFieldBase : uint16_t 
@@ -59,5 +61,5 @@ namespace angaria
   using LCT_t = timestamp_t ;   
   using LCTOFF_t = uint64_t ;   
   using NAME_t = char[NAMELEN] ; 
-  struct VARCHAR_t = { uint16_t len ; uint8_t text[] ; } ;
+  struct VARCHAR_t { uint16_t len ; uint8_t text[] ; } ;
 }

@@ -9,20 +9,21 @@ namespace angaria
         time_t seconds;
         uint64_t nanoseconds;
     };
+
     class MessageHdr 
     {
     public:
-        MessageHdr(MsgType msgType, uint32_t msgSize)
+        MessageHdr(EMsgType msgType, uint32_t msgSize)
             : m_msgType(msgType), m_msgSize(msgSize), m_enqueueTime({0,0}), m_dequeueTime({0,0}),
               m_enqueTID(0), m_dequeTID(0), m_flags(0)      
         {}
 
-        MsgType getMsgType() const { return m_msgType; }
+        EMsgType getMsgType() const { return m_msgType; }
         uint32_t getMsgSize() const { return m_msgSize; }
 
     private:
 
-        MsgType m_msgType;
+        EMsgType m_msgType;
         uint32_t m_msgSize;
         timestamp m_enqueueTime;
         timestamp m_dequeueTime;
@@ -34,4 +35,8 @@ namespace angaria
     class Message 
     {
     public:
+
+    private:
+        MessageHdr m_header;
+    };
 }
