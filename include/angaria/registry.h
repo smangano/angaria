@@ -105,7 +105,7 @@ namespace angaria
     inline
     static Registry& instance()
     {
-      static Registry& theRegistry ;
+      static Registry theRegistry ;
       return theRegistry ;
     }
   
