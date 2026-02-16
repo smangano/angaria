@@ -1,6 +1,6 @@
 #include "angaria/field.h"
 #include <gtest/gtest.h>
-namespace anagaria
+namespace angaria
 {
 
 
@@ -12,9 +12,11 @@ namespace anagaria
   } ;
 }
 
+using namespace angaria ;
+
 TEST(Field, Int32)
 {
-  using Fld1 = Int32Filed<TestField1> ;
+  using Fld1 = Int32Field<EFieldType::TestField1> ;
 
   Fld1 fld1(100) ;
 }

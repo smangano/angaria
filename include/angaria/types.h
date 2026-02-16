@@ -94,7 +94,6 @@ namespace angaria
   class Registry ;
   class Message ;
   class MessageHdr ;
-  class Field ;
 
   using TID_t = uint16_t; 		    // Task ID
   using QID_t = uint16_t; 		    // Queue ID

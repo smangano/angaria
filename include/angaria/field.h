@@ -1,4 +1,5 @@
 #pragma once
+#include "angaria/registry.h"
 #include "angaria/types.h"
 #include <cstdint> 
 #include <mutex>
@@ -20,8 +21,8 @@ namespace angaria
 
       MaybeHasFldType(const MaybeHasFldType& other) = default ;
       MaybeHasFldType& operator=(const MaybeHasFldType& other) = default ;
-      void writeType(std::ostream & os) const {os.write(static_cast<const char*>(&fieldType), sizeof(fieldType); }
-      void readType(std::istream & is) {is.read(static_cast<char*>(&fieldType), sizeof(fieldType); }
+      void writeType(std::ostream & os) const {auto tmp = std::underlying_type(fieldType); os.write(static_cast<const char*>(&tmp), sizeof(tmp)); }
+      void readType(std::istream & is) {int16_t tmp; is.read(reinterpret_cast<char*>(&tmp), sizeof(tmp)); fieldType = static_cast<EFieldType>(tmp);}
       EFieldType fieldType {};
     } ;
 
@@ -55,14 +56,14 @@ namespace angaria
         std::string toString() const { return static_cast<const FLD*>(this)->toStringImpl() ; } 
         void write(std::ostream & os) const
         {
-          writeType(os) ;
+          Base::writeType(os) ;
           static_cast<const FLD*>(this)->writeImpl(os) ;
         }
          
         void read(std::istream & is) 
         {
-          readType(os) ;
-          static_cast<const FLD*>(this)->readImpl(os) ;
+          Base::readType(is) ;
+          static_cast<const FLD*>(this)->readImpl(is) ;
         }
 
         void registerField(Registry& registry) const
@@ -73,13 +74,13 @@ namespace angaria
   
    
     template <EFieldType FT, typename T>  
-    class IntegerField :  public Field<FT, IntegerField<T>> 
+    class IntegerField :  public Field<FT, IntegerField<FT,T>>
     {
     public:
        
         using Self = IntegerField<FT, T> ;
         using Type = T ;
-        using Base = Field<FT, IntegerField<T>> ; 
+        using Base = Field<FT, IntegerField<FT,T>> ;
 
         IntegerField(T value) :
           Base(), _value(value) 
@@ -95,24 +96,24 @@ namespace angaria
         Self& operator++() { ++_value; return *this;}
         Self& operator--() { --_value; return *this;}
 
-        Self& operator +=(T v) { _value += v; return *this }
-        Self& operator -=(T v) { _value -= v; return *this }
-        Self& operator *=(T v) { _value *= v; return *this }
-        Self& operator /=(T v) { _value /= v; return *this }
+        Self& operator +=(T v) { _value += v; return *this; }
+        Self& operator -=(T v) { _value -= v; return *this; }
+        Self& operator *=(T v) { _value *= v; return *this; }
+        Self& operator /=(T v) { _value /= v; return *this; }
 
-        T operator +(Self f, T v) { return f.get() + v ; }
-        T operator -(Self f, T v) { return f.get() - v ; }
-        T operator *(Self f, T) { return f.get() * v ; } 
-        T operator /(Self f, T) { return f.get()  / v ; }
+        friend T operator +(Self f, T v) { return f.get() + v ; }
+        friend T operator -(Self f, T v) { return f.get() - v ; }
+        friend T operator *(Self f, T) { return f.get() * v ; } 
+        friend T operator /(Self f, T) { return f.get()  / v ; }
 
         auto operator<=>(const Self&) const = default;
 
-        static inline bool operator==(Self f, T v) { return f.get() == v ; }
-        static inline bool operator!=(Self f, T v) { return f.get() != v ; }
-        static inline bool operator<=(Self f, T v) { return f.get() <= v ; }
-        static inline bool operator>=(Self f, T v) { return f.get() >= v ; }
-        static inline bool operator<(Self f, T v) { return f.get() < v ; }
-        static inline bool operator>(Self f, T v) { return f.get() > v ;  }
+        friend inline bool operator==(Self f, T v) { return f.get() == v ; }
+        friend inline bool operator!=(Self f, T v) { return f.get() != v ; }
+        friend inline bool operator<=(Self f, T v) { return f.get() <= v ; }
+        friend inline bool operator>=(Self f, T v) { return f.get() >= v ; }
+        friend inline bool operator<(Self f, T v) { return f.get() < v ; }
+        friend inline bool operator>(Self f, T v) { return f.get() > v ;  }
 
         void writeImpl(std::ostream & os) const
         {
@@ -126,7 +127,7 @@ namespace angaria
         
         void registerFieldImpl(Registry& registry, std::string name, std::string doc = "") const
         {
-          registry.registerField(FLT, std::move(name), type_to_base<T>.value, std::move(doc)) ; 
+          registry.registerField(FT, std::move(name), type_to_base<T>().value, std::move(doc)) ;
         }
 
     private:
@@ -135,11 +136,11 @@ namespace angaria
     };
 
     template <EFieldType FT>
-    class Int32Filed : public IntegerFiled<FT, int32_t>
+    class Int32Field : public IntegerField<FT, int32_t>
     {
     public:
 
-      using Base = IntegerFiled<FT, int32_t> ;
+      using Base = IntegerField<FT, int32_t> ;
       Int32Field(int32_t value) : Base(value) {}
       
     } ;
