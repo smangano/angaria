@@ -40,6 +40,51 @@ namespace angaria
     BASE_STRING 
     } ;
 
+  template <typename T>
+  struct type_to_base {
+    static constexpr EFieldBase value = EFieldBase::BASE_NONE;
+  };
+
+  template <>
+  struct type_to_base<char> {
+    static constexpr EFieldBase value = EFieldBase::BASE_CHAR;
+  };
+
+  template <>
+  struct type_to_base<uint8_t> {
+    static constexpr EFieldBase value = EFieldBase::BASE_BYTE;
+  };
+
+  template <>
+  struct type_to_base<uint16_t> {
+    static constexpr EFieldBase value = EFieldBase::BASE_UINT16;
+  };
+
+  template <>
+  struct type_to_base<int32_t> {
+    static constexpr EFieldBase value = EFieldBase::BASE_INT32;
+  };
+
+  template <>
+  struct type_to_base<uint32_t> {
+    static constexpr EFieldBase value = EFieldBase::BASE_UINT32;
+  };
+
+  template <>
+  struct type_to_base<int64_t> {
+    static constexpr EFieldBase value = EFieldBase::BASE_INT64;
+  };
+
+  template <>
+  struct type_to_base<float> {
+    static constexpr EFieldBase value = EFieldBase::BASE_FLOAT32;
+  };
+
+  template <>
+  struct type_to_base<double> {
+    static constexpr EFieldBase value = EFieldBase::BASE_FLOAT64;
+  };
+
   struct RegistryTask;
   struct RegistryQueue ;
   struct RegistryQueueSet ;

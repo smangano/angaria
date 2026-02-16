@@ -40,28 +40,15 @@ namespace angaria
 
     constexpr bool INCLUDE_FLD = true ;
 
-    template <typename FLD>
+    template <FieldType FT, typename FLD>
     class Field : public MaybeHasFldType<INCLUDE_FLD, FLD>
     {
-    
-    private:
-
-        static void registerFieldTypes(MsgType msgType, FieldType fieldType)
-        {
-            std::call_once(s_field_registration_flag, []() {
-                
-                
-            });
-        }   
-
     public:
 
         using Base = MaybeHasFldType<INCLUDE_FLD, FLD> ;
 
-        Field(MsgType msgType, FieldType fieldType) : Base(fieldType) 
-        {
-          registerFieldTypes(msgType, fieldType) ;
-        }
+        Field()  : Base(FT) {}
+
 
         size_t size() const {return sizeof(*this) ; }
         size_t dataSize() const {return sizeof(FLD) ; }
@@ -78,20 +65,79 @@ namespace angaria
           static_cast<const FLD*>(this)->readImpl(os) ;
         }
 
-        static std::once_flag s_field_registration_flag;
+        void registerField(Registry& registry) const
+        {
+            static_cast<const FLD*>(this)->registerFieldImpl(registry) ;
+        } 
     } ;
   
    
-    template <typename T>  
-    class IntegerField :  public Field<IntegerField<T>> 
+    template <FieldType FT, typename T>  
+    class IntegerField :  public Field<FT, IntegerField<T>> 
     {
     public:
-        
-        IntegerField(MsgType msgType, FieldType fieldType, T value)
-        {
+       
+        using Self = IntegerField<FT, T> ;
+        using Type = T ;
+        using Base = Field<FT, IntegerField<T>> ; 
 
+        IntegerField(Registry& registry, EMsgType msgType, std::string name, std::string doc) : 
+          Field(registry, msgType)
+        {
+          EFieldBase base = type_to_base<Type>.value ;
+          registry.registerField(FT, std::move(name), base, std::move(doc)) ;
         }
-               
+
+        IntegerField(T value) :
+          Base(), _value(value) 
+        {
+        }
+
+        IntegerField(const IntegerField<FT,T>& other) = default ;
+        IntegerField<FT,T>& operator=(const IntegerField<FT,T>& other) = default ;
+
+        T get() const { return _value ;}
+        void set(T v) const {_value  = v ;}
+
+        Self& operator++() { ++_value; return *this;}
+        Self& operator--() { --_value; return *this;}
+
+        Self& operator +=(T v) { _value += v; return *this }
+        Self& operator -=(T v) { _value -= v; return *this }
+        Self& operator *=(T v) { _value *= v; return *this }
+        Self& operator /=(T v) { _value /= v; return *this }
+
+        T operator +(Self f, T v) { return f.get() + v ; }
+        T operator -(Self f, T v) { return f.get() - v ; }
+        T operator *(Self f, T) { return f.get() * v ; } 
+        T operator /(Self f, T) { return f.get()  / v ; }
+
+        auto operator<=>(const Self&) const = default;
+
+        static inline bool operator==(Self f, T v) { return f.get() == v ; }
+        static inline bool operator!=(Self f, T v) { return f.get() != v ; }
+        static inline bool operator<=(Self f, T v) { return f.get() <= v ; }
+        static inline bool operator>=(Self f, T v) { return f.get() >= v ; }
+        static inline bool operator<(Self f, T v) { return f.get() < v ; }
+        static inline bool operator>(Self f, T v) { return f.get() > v ;  
+
+        void writeImpl(std::ostream & os) const
+        {
+          os.write(static_cast<const char*>(&_value), sizeof(_value)) ;
+        }
+
+        void readImpl(std::istream & is) const
+        {
+          is.read(static_cast<char*>(&_value), sizeof(_value)) ;
+        }
+        
+        void registerFieldImpl(Registry& registry) const
+        {
+          registry.registerField(FLT, 
+        }
+    private:
+
+      T _value ;               
     };
 
 }

@@ -39,4 +39,6 @@ namespace angaria
     private:
         MessageHdr m_header;
     };
+
+
 }

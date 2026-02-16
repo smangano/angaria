@@ -4,7 +4,7 @@
 #include <memory>
 
 /**
-* The Registry stores meta data in shared memory that is accessible and writeable by any Task that registers as an angoria 
+* The Registry stores meta data in shared memory that is accessible and writeable by any Task that registers as an Angaria 
 * participant. Once a tasks updates the registry in any way the change is permanent for the lifetime of the session.
 */
 
@@ -12,16 +12,16 @@ namespace angaria
 {
 
   /**
-  * Registry meta data for a Task - an execution unit using angaria to communicate.
+  * Registry meta data for a Task - an execution unit using Angaria to communicate.
   */
   struct RegistryTask
   {
-    TID_t     taskID ;              //Every task is assigned a unique task id when it registers with angaria
+    TID_t     taskID ;              //Every task is assigned a unique task id when it registers with Angaria
     char      taskName[NAMELEN] ;   //A human readable name for the task
-    LCTOFF_t  createTime ;          //The time the task registered with angoria as an offset to the LCT
+    LCTOFF_t  createTime ;          //The time the task registered with Angaria as an offset to the LCT
     LCTOFF_t  lastCreateTime ;      //The time the task was last registered. Different from createTime due to restarts.
     PID_t     lastPID;              //The process id or thread id of the currently active task. 
-    bool      active ;              //True if the Task identified by lastPID is actively running and registered with angoria
+    bool      active ;              //True if the Task identified by lastPID is actively running and registered with Angaria
     uint16_t  restartCount ;        //The number of restarts for the task. Zero on initial task registration 
     VARCHAR_t doc ;                 //A doc string describing the task. Empty if not supplied by the task or configuration 
   } ;
@@ -73,7 +73,7 @@ namespace angaria
   } ;
 
   /** 
-  * Registry meta data desribing the fields that make up a message. 
+  * Registry meta data describing the fields that make up a message. 
   */
   struct RegistryMessageDef
   {
@@ -118,7 +118,7 @@ namespace angaria
     /**
     * Register a Queue Set 
     * name - the unique name of the queue set.
-    * type - either a EQSetTpe::SOURCE or a EQSetTpe::PUBLISHER
+    * type - either a EQSetType::SOURCE or a EQSetType::PUBLISHER
     * creator - the task ID of the task creating the queue set. Also becomes the owner until another task adopts the queue set.
     * doc - An optional description of how this queue set is used in the application. 
     */
@@ -135,7 +135,7 @@ namespace angaria
     void adoptQueueSet(QSID_t qsetID, TID_t ownwerTask) ;
 
     /**
-     * Add a queue to a source queueset with specified priority.
+     * Add a queue to a source queue set with specified priority.
      *
      * qsetID - the queue set to modify
      * qid - the queue to add 
@@ -161,9 +161,15 @@ namespace angaria
     */ 
     void addQueueAsDest(QSID_t qsetID, QID_t qid) ; 
 
+   
+    void addFieldToMsg(EMsgType msgType, FieldType fieldType) ; 
+    void registerField(EFieldType fieldType, std::string name, size_t size, EFieldBase base, std::string doc) ;
 
   private:
     
   
   };
 }   
+
+#include "angaria/detail/registery.h"
+
