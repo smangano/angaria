@@ -103,8 +103,8 @@ namespace angaria
 
         friend T operator +(Self f, T v) { return f.get() + v ; }
         friend T operator -(Self f, T v) { return f.get() - v ; }
-        friend T operator *(Self f, T) { return f.get() * v ; } 
-        friend T operator /(Self f, T) { return f.get()  / v ; }
+        friend T operator *(Self f, T v) { return f.get() * v ; } 
+        friend T operator /(Self f, T v) { return f.get()  / v ; }
 
         auto operator<=>(const Self&) const = default;
 
