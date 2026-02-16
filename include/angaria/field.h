@@ -13,7 +13,7 @@ namespace angaria
     template <typename FLD>
     struct MaybeHasFldType<true, FLD>
     {
-      MaybeHasFldType(FieldType ft) :
+      MaybeHasFldType(EFieldType ft) :
         fieldType(ft)
       {
       }
@@ -22,13 +22,13 @@ namespace angaria
       MaybeHasFldType& operator=(const MaybeHasFldType& other) = default ;
       void writeType(std::ostream & os) const {os.write(static_cast<const char*>(&fieldType), sizeof(fieldType); }
       void readType(std::istream & is) {is.read(static_cast<char*>(&fieldType), sizeof(fieldType); }
-      FieldType fieldType {};
+      EFieldType fieldType {};
     } ;
 
     template <typename FLD>
     struct MaybeHasFldType<false, FLD>
     {
-      MaybeHasFldType(FieldType ft) 
+      MaybeHasFldType(EFieldType ft) 
       {
       }
 
@@ -40,7 +40,7 @@ namespace angaria
 
     constexpr bool INCLUDE_FLD = true ;
 
-    template <FieldType FT, typename FLD>
+    template <EFieldType FT, typename FLD>
     class Field : public MaybeHasFldType<INCLUDE_FLD, FLD>
     {
     public:
@@ -72,7 +72,7 @@ namespace angaria
     } ;
   
    
-    template <FieldType FT, typename T>  
+    template <EFieldType FT, typename T>  
     class IntegerField :  public Field<FT, IntegerField<T>> 
     {
     public:
@@ -80,13 +80,6 @@ namespace angaria
         using Self = IntegerField<FT, T> ;
         using Type = T ;
         using Base = Field<FT, IntegerField<T>> ; 
-
-        IntegerField(Registry& registry, EMsgType msgType, std::string name, std::string doc) : 
-          Field(registry, msgType)
-        {
-          EFieldBase base = type_to_base<Type>.value ;
-          registry.registerField(FT, std::move(name), base, std::move(doc)) ;
-        }
 
         IntegerField(T value) :
           Base(), _value(value) 
@@ -119,7 +112,7 @@ namespace angaria
         static inline bool operator<=(Self f, T v) { return f.get() <= v ; }
         static inline bool operator>=(Self f, T v) { return f.get() >= v ; }
         static inline bool operator<(Self f, T v) { return f.get() < v ; }
-        static inline bool operator>(Self f, T v) { return f.get() > v ;  
+        static inline bool operator>(Self f, T v) { return f.get() > v ;  }
 
         void writeImpl(std::ostream & os) const
         {
@@ -131,13 +124,23 @@ namespace angaria
           is.read(static_cast<char*>(&_value), sizeof(_value)) ;
         }
         
-        void registerFieldImpl(Registry& registry) const
+        void registerFieldImpl(Registry& registry, std::string name, std::string doc = "") const
         {
-          registry.registerField(FLT, 
+          registry.registerField(FLT, std::move(name), type_to_base<T>.value, std::move(doc)) ; 
         }
+
     private:
 
       T _value ;               
     };
 
+    template <EFieldType FT>
+    class Int32Filed : public IntegerFiled<FT, int32_t>
+    {
+    public:
+
+      using Base = IntegerFiled<FT, int32_t> ;
+      Int32Field(int32_t value) : Base(value) {}
+      
+    } ;
 }

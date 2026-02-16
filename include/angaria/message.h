@@ -23,21 +23,24 @@ namespace angaria
 
     private:
 
-        EMsgType m_msgType;
-        uint32_t m_msgSize;
-        timestamp m_enqueueTime;
-        timestamp m_dequeueTime;
-        TID_t m_enqueTID;
-        TID_t m_dequeTID;
-        BITMASK_t m_flags;
+        EMsgType _msgType;
+        uint32_t _msgSize;
+        timestamp _enqueueTime;
+        timestamp _dequeueTime;
+        TID_t _enqueTID;
+        TID_t _dequeTID;
+        BITMASK_t _flags;
     };
 
     class Message 
     {
     public:
-
+      Message(MsgType msgType, uint32_t msgSize) :
+      _header(msgType, msgSize) 
+      {
+      } 
     private:
-        MessageHdr m_header;
+        MessageHdr _header;
     };
 
 

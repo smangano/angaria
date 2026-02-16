@@ -162,7 +162,7 @@ namespace angaria
     void addQueueAsDest(QSID_t qsetID, QID_t qid) ; 
 
    
-    void addFieldToMsg(EMsgType msgType, FieldType fieldType) ; 
+    void addFieldToMsg(EMsgType msgType, EFieldType fieldType) ; 
     void registerField(EFieldType fieldType, std::string name, size_t size, EFieldBase base, std::string doc) ;
 
   private:
@@ -171,5 +171,5 @@ namespace angaria
   };
 }   
 
-#include "angaria/detail/registery.h"
+#include "angaria/detail/registry.h"
 
