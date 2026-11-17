@@ -1,129 +1,69 @@
-#include "angaria/types.h"
-
-#include <boost/interprocess/ipc/message_queue.hpp>
-#include <boost/interprocess/permissions.hpp>
+#include "angaria/session.h"
 
 #include <charconv>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
-#include <string>
 #include <string_view>
-
-namespace angaria
-{
-  enum class EMsgType : uint16_t
-  {
-    Reading = 1
-  };
-} // namespace angaria
 
 namespace
 {
-  namespace bip = boost::interprocess;
-
-  struct MessageSchema
+  template <typename Integer>
+  Integer parse_integer(std::string_view text, const char* error)
   {
-    angaria::EMsgType _type;
-    std::string_view _name;
-    std::string_view _fieldName;
-  };
-
-  // The single schema is shared by the producer and consumer commands.
-  constexpr MessageSchema READING_SCHEMA{angaria::EMsgType::Reading, "Reading", "value"};
-
-  struct QueueMessage
-  {
-    std::int32_t _type;
-    std::int32_t _value;
-  };
-
-  static_assert(sizeof(QueueMessage) == 2 * sizeof(std::int32_t));
-
-  constexpr auto READING_TYPE = static_cast<std::int32_t>(READING_SCHEMA._type);
-  constexpr bip::message_queue::size_type QUEUE_CAPACITY = 2;
-  constexpr unsigned int MESSAGE_PRIORITY = 0;
-
-  std::string queue_name(std::string_view session)
-  {
-    constexpr std::string_view validCharacters =
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
-    if (session.empty() || session.size() > 16 || session.find_first_not_of(validCharacters) != session.npos)
-    {
-      throw std::invalid_argument("session must contain 1 to 16 letters, digits, underscores, or dashes");
-    }
-    return "angaria-demo-" + std::string(session);
-  }
-
-  std::int32_t parse_value(std::string_view text)
-  {
-    std::int32_t value{};
+    Integer value{};
     const auto end = text.data() + text.size();
     const auto result = std::from_chars(text.data(), end, value);
     if (result.ec != std::errc{} || result.ptr != end)
     {
-      throw std::invalid_argument("value must be a signed 32-bit integer");
+      throw std::invalid_argument(error);
     }
     return value;
   }
 
-  void send_reading(bip::message_queue& queue, std::int32_t value)
-  {
-    const QueueMessage message{READING_TYPE, value};
-    if (!queue.try_send(&message, sizeof(message), MESSAGE_PRIORITY))
-    {
-      throw std::runtime_error("queue is full");
-    }
-  }
-
-  void receive_reading(bip::message_queue& queue)
-  {
-    QueueMessage message{};
-    bip::message_queue::size_type size{};
-    unsigned int priority{};
-    if (!queue.try_receive(&message, sizeof(message), size, priority))
-    {
-      throw std::runtime_error("queue is empty");
-    }
-    if (size != sizeof(message) || priority != MESSAGE_PRIORITY || message._type != READING_TYPE)
-    {
-      throw std::runtime_error("unrecognized queue message");
-    }
-
-    std::cout << READING_SCHEMA._name << ' ' << READING_SCHEMA._fieldName << '=' << message._value << '\n';
-  }
-
-  void run_command(std::string_view command, const std::string& queueName, std::string_view value)
+  int run_command(std::string_view command, const std::filesystem::path& path, const char* argument)
   {
     if (command == "create")
     {
-      const bip::permissions permissions(0600);
-      bip::message_queue queue(bip::create_only, queueName.c_str(), QUEUE_CAPACITY, sizeof(QueueMessage),
-                               permissions);
-      return;
+      const auto maxLogBytes = argument == nullptr
+                                   ? angaria::DEFAULT_SESSION_LOG_LIMIT
+                                   : parse_integer<std::uint64_t>(argument, "log limit must be a byte count");
+      angaria::create_session(path, maxLogBytes);
     }
-    if (command == "remove")
+    else if (command == "send")
     {
-      if (!bip::message_queue::remove(queueName.c_str()))
+      const auto value = parse_integer<std::int32_t>(argument, "value must be a signed 32-bit integer");
+      switch (angaria::send_reading(path, value))
       {
-        throw std::runtime_error("could not remove the demo queue");
+      case angaria::SendResult::Sent:
+        return 0;
+      case angaria::SendResult::QueueFull:
+        std::cerr << "angaria_queue_demo: queue is full\n";
+        return 3;
+      case angaria::SendResult::LogFull:
+        std::cerr << "angaria_queue_demo: session log is full\n";
+        return 4;
       }
-      return;
     }
-
-    bip::message_queue queue(bip::open_only, queueName.c_str());
-    if (queue.get_max_msg() != QUEUE_CAPACITY || queue.get_max_msg_size() != sizeof(QueueMessage))
+    else if (command == "receive")
     {
-      throw std::runtime_error("queue does not match the demo configuration");
+      const auto value = angaria::receive_reading(path);
+      if (!value)
+      {
+        throw std::runtime_error("queue is empty");
+      }
+      std::cout << "Reading value=" << *value << '\n';
     }
-    if (command == "send")
+    else if (command == "inspect")
     {
-      send_reading(queue, parse_value(value));
+      angaria::inspect_session(path, std::cout);
     }
     else
     {
-      receive_reading(queue);
+      angaria::remove_queue(path);
     }
+    return 0;
   }
 } // namespace
 
@@ -131,19 +71,20 @@ int main(int argc, char** argv)
 {
   const std::string_view command = argc > 1 ? argv[1] : "";
   const bool validCommand =
-      command == "send" ? argc == 4
-                        : (command == "create" || command == "receive" || command == "remove") && argc == 3;
+      (command == "create" && (argc == 3 || argc == 4)) || (command == "send" && argc == 4) ||
+      ((command == "receive" || command == "remove" || command == "inspect") && argc == 3);
   if (!validCommand)
   {
-    std::cerr << "Usage: angaria_queue_demo create|receive|remove SESSION\n"
-                 "       angaria_queue_demo send SESSION VALUE\n";
+    std::cerr << "Usage: angaria_queue_demo create SESSION [MAX_LOG_BYTES]\n"
+                 "       angaria_queue_demo send SESSION VALUE\n"
+                 "       angaria_queue_demo receive|remove SESSION\n"
+                 "       angaria_queue_demo inspect LOG_FILE\n";
     return 2;
   }
 
   try
   {
-    run_command(command, queue_name(argv[2]), argc == 4 ? argv[3] : "");
-    return 0;
+    return run_command(command, argv[2], argc == 4 ? argv[3] : nullptr);
   }
   catch (const std::exception& error)
   {

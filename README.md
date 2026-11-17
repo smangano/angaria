@@ -29,10 +29,16 @@ In another terminal in the same checkout, receive the message.
 # Reading value=42
 ```
 
-Remove the session when both endpoints are done.
+Inspect the log after both endpoints exit. The inspector reads the recorded schema and shows the queue, sequence, timestamp, type, and value.
+
+```sh
+./build/angaria_queue_demo inspect demo/session.ang
+```
+
+Remove the live queue when you are done. This preserves the log for inspection or archiving.
 
 ```sh
 ./build/angaria_queue_demo remove demo
 ```
 
-The demo uses a Boost.Interprocess queue with room for two messages. A full queue rejects a send, and an empty queue rejects a receive. A successful receive removes the message. The [roadmap](ROADMAP.md) describes the session log, inspector, restart, and acknowledgment milestones.
+The FIFO holds two messages. The session log defaults to 1 MiB. Pass a byte count after `create demo` to set a different cap. A send exits with status 3 if the queue is full or status 4 if the log is full. A successful receive frees a queue slot and leaves the log intact. See the [session format](docs/session-format.md) for the file layout and process-crash behavior.

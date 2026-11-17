@@ -1,31 +1,48 @@
 cmake_minimum_required(VERSION 3.20)
 
-string(RANDOM LENGTH 12 ALPHABET abcdef0123456789 session)
+string(RANDOM LENGTH 12 ALPHABET abcdef0123456789 session_name)
+set(session "${CMAKE_CURRENT_BINARY_DIR}/${session_name}")
+set(log "${session}/session.ang")
 
 function(check_demo expected_status expected_output command)
+  set(path "${session}")
+  if(command STREQUAL "inspect")
+    set(path "${log}")
+  endif()
   execute_process(
-    COMMAND "${DEMO}" "${command}" "${session}" ${ARGN}
+    COMMAND "${DEMO}" "${command}" "${path}" ${ARGN}
     RESULT_VARIABLE status
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_STRIP_TRAILING_WHITESPACE
   )
+  string(REGEX REPLACE "timestamp_ns=-?[0-9]+" "timestamp_ns=TIME" output "${output}")
   if(NOT "${status}" STREQUAL "${expected_status}" OR NOT "${output}${error}" STREQUAL "${expected_output}")
-    if(NOT command STREQUAL "create" AND NOT command STREQUAL "remove")
-      execute_process(COMMAND "${DEMO}" remove "${session}" ERROR_QUIET)
+    if(NOT command STREQUAL "create")
+      file(REMOVE_RECURSE "${session}")
     endif()
     message(FATAL_ERROR "${command} ${ARGN} returned ${status}, stdout='${output}', stderr='${error}'")
   endif()
 endfunction()
 
-check_demo(0 "" create)
+# A 50-byte header and two 30-byte records exactly fill this log.
+check_demo(0 "" create 110)
 check_demo(1 "angaria_queue_demo: value must be a signed 32-bit integer" send 2147483648)
 check_demo(1 "angaria_queue_demo: queue is empty" receive)
 check_demo(0 "" send 42)
 check_demo(0 "" send -7)
-check_demo(1 "angaria_queue_demo: queue is full" send 9)
+file(SHA256 "${log}" before_rejection)
+check_demo(3 "angaria_queue_demo: queue is full" send 9)
 check_demo(0 "Reading value=42" receive)
+check_demo(4 "angaria_queue_demo: session log is full" send 9)
 check_demo(0 "Reading value=-7" receive)
 check_demo(1 "angaria_queue_demo: queue is empty" receive)
+file(SHA256 "${log}" after_rejection)
+if(NOT before_rejection STREQUAL after_rejection)
+  file(REMOVE_RECURSE "${session}")
+  message(FATAL_ERROR "A rejection or receive changed the session log")
+endif()
 check_demo(0 "" remove)
+check_demo(0 "queue=${session_name} sequence=1 timestamp_ns=TIME type=Reading value=42\nqueue=${session_name} sequence=2 timestamp_ns=TIME type=Reading value=-7" inspect)
+file(REMOVE_RECURSE "${session}")
