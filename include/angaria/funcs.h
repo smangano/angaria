@@ -1,19 +1,20 @@
+#pragma once
+
 #include "angaria/types.h"
+
+#include <algorithm>
 #include <cstring>
 #include <string>
 
 namespace angaria
 {
-  bool setVarChar(VARCHAR_t & dest, const std::string& src)
+  inline bool set_var_char(VARCHAR_t& dest, const std::string& src)
   {
-    bool status = true ;
-    size_t sz = src.size() ; 
-    if (dest.len < sz)
+    const auto size = std::min<std::size_t>(dest._length, src.size());
+    if (size != 0)
     {
-      sz = dest.len ;
-      status = false ;
-    } 
-    memcpy(dest.text, src.c_str(), sz) ;
+      std::memcpy(dest._text, src.data(), size);
+    }
+    return size == src.size();
   }
-
-}
+} // namespace angaria

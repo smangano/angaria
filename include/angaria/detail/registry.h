@@ -1,5 +1,5 @@
-#pragma once 
-namespace angaria 
+#pragma once
+namespace angaria
 {
 
-} 
+}
