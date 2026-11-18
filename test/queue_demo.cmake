@@ -3,20 +3,23 @@ cmake_minimum_required(VERSION 3.20)
 string(RANDOM LENGTH 12 ALPHABET abcdef0123456789 session_name)
 set(session "${CMAKE_CURRENT_BINARY_DIR}/${session_name}")
 set(log "${session}/session.ang")
+set(empty_input "${CMAKE_CURRENT_BINARY_DIR}/empty-${session_name}.txt")
+set(ack_input "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt")
 
 function(check_demo expected_status expected_output command)
   set(path "${session}")
-  set(input "")
+  set(input_file "${empty_input}")
   if(command STREQUAL "ack_receive")
     set(command receive)
-    set(input INPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt")
+    set(input_file "${ack_input}")
   endif()
   if(command STREQUAL "inspect")
     set(path "${log}")
   endif()
   execute_process(
     COMMAND "${DEMO}" "${command}" "${path}" ${ARGN}
-    ${input}
+    INPUT_FILE "${input_file}"
+    TIMEOUT 5
     RESULT_VARIABLE status
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
@@ -28,11 +31,14 @@ function(check_demo expected_status expected_output command)
     if(NOT command STREQUAL "create")
       file(REMOVE_RECURSE "${session}")
     endif()
+    file(REMOVE "${empty_input}" "${ack_input}")
     message(FATAL_ERROR "${command} ${ARGN} returned ${status}, stdout='${output}', stderr='${error}'")
   endif()
 endfunction()
 
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt" "ack\n")
+# Every child receives explicit input, including EOF for an unacknowledged receive.
+file(WRITE "${empty_input}" "")
+file(WRITE "${ack_input}" "ack\n")
 
 # A 50-byte header and two 30-byte records exactly fill this log.
 check_demo(0 "" create 110)
@@ -51,9 +57,10 @@ check_demo(1 "angaria_queue_demo: queue is empty" receive)
 file(SHA256 "${log}" after_rejection)
 if(NOT before_rejection STREQUAL after_rejection)
   file(REMOVE_RECURSE "${session}")
+  file(REMOVE "${empty_input}" "${ack_input}")
   message(FATAL_ERROR "A rejection or receive changed the session log")
 endif()
 check_demo(0 "" remove)
 check_demo(0 "queue=${session_name} sequence=1 timestamp_ns=TIME type=Reading value=42\nqueue=${session_name} sequence=2 timestamp_ns=TIME type=Reading value=-7" inspect)
 file(REMOVE_RECURSE "${session}")
-file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt")
+file(REMOVE "${empty_input}" "${ack_input}")
