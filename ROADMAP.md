@@ -4,11 +4,15 @@ Angaria is a C++ library for inspectable local IPC. The first release targets Li
 
 ## 1. Establish a build and demo
 
+Implemented.
+
 - Add a CMake build and Linux CI. Fix the prototype headers that the demo uses and verify they compile from a fresh checkout.
 - Provide a small producer and consumer with one bounded FIFO and one registered message type. Document the commands to create a session and run both endpoints.
 - Keep v0 to one producer, one consumer, and one in-flight delivery.
 
 ## 2. Define the queue and session file
+
+Implemented.
 
 - Give the live queue a fixed capacity and the append-only session log its own byte cap. Return distinct queue-full and log-full results. A rejected send leaves the queue and log unchanged.
 - A successful send commits a record for inspection and publishes it to the live queue. If the producer dies between those steps, a committed record can be visible in the inspector without ever being delivered. Recovery preserves published entries and leaves committed but unpublished records visible in the inspector.
@@ -18,6 +22,8 @@ Angaria is a C++ library for inspectable local IPC. The first release targets Li
 
 ## 3. Support independent endpoint restart
 
+Implemented.
+
 - Give each role a stable task ID and a separate exclusive Linux file lock scoped to the session. Return a role-busy result to a competing claimant. Use the PID for diagnostics and advance the role's incarnation number on each successful attachment.
 - Keep the lock files stable for the lifetime of the session and prevent child processes from retaining role lock descriptors. A replacement validates the session and recovers its side of the queue before using it.
 - Preserve already-published entries when replacing the producer. Make the consumer recheck queue state on attach and after a bounded wait so a crash between publication and notification cannot strand an entry.
@@ -26,7 +32,11 @@ Angaria is a C++ library for inspectable local IPC. The first release targets Li
 
 ## 4. Release the demonstration
 
+Implemented.
+
 From a fresh checkout, a reader can build the examples, send a typed message, replace either endpoint while the other stays up, and verify that an unacknowledged delivery is retried. After both processes exit, the reader can inspect the session and decode the recorded fields.
+
+The [automated walkthrough](test/restart_demo.py) exercises this sequence through the demo executable. CTest and Linux CI run it as `restart_demo`. The [README](README.md) includes build and walkthrough commands for a fresh checkout.
 
 ## After v0
 

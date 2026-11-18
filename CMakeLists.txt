@@ -16,6 +16,7 @@ target_link_libraries(angaria_queue_demo PRIVATE angaria)
 include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
+  find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
   add_executable(angaria_tests test/test.cpp test/test_field.cpp test/test_session.cpp)
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
@@ -28,4 +29,10 @@ if(BUILD_TESTING)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/queue_demo.cmake"
   )
   set_tests_properties(queue_demo PROPERTIES TIMEOUT 15)
+  add_test(
+    NAME restart_demo
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/restart_demo.py"
+            "$<TARGET_FILE:angaria_queue_demo>"
+  )
+  set_tests_properties(restart_demo PROPERTIES TIMEOUT 30)
 endif()

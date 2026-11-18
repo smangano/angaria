@@ -18,10 +18,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libboost-dev libgtest-dev
+          sudo apt-get install --yes libboost-dev libgtest-dev python3
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --parallel
-      - name: Test
+      - name: Test including endpoint restart walkthrough
         run: ctest --test-dir build --output-on-failure

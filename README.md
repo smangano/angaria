@@ -1,17 +1,32 @@
 # Angaria
 
-Angaria is a C++ inter-process messaging framework in development. The first demo exchanges a typed message through a named, bounded queue. See the [roadmap](ROADMAP.md) and [original design wiki](https://github.com/smangano/angaria/wiki/Angaria).
+Angaria is a C++ inter-process messaging framework in development. The v0 demo exchanges typed messages through a bounded queue, supports independent endpoint restart and explicit acknowledgment, and records messages in an inspectable session file. See the [roadmap](ROADMAP.md) and [original design wiki](https://github.com/smangano/angaria/wiki/Angaria).
 
 ## Build and test
 
-On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, and GoogleTest.
+On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
 ```sh
-sudo apt-get install build-essential cmake libboost-dev libgtest-dev
+sudo apt-get install build-essential cmake libboost-dev libgtest-dev python3
+git clone https://github.com/smangano/angaria.git
+cd angaria
 cmake -S . -B build
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
+
+## Run the restart walkthrough
+
+The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.
+
+```sh
+python3 test/restart_demo.py build/angaria_queue_demo --session build/restart-demo
+./build/angaria_queue_demo inspect build/restart-demo/session.ang
+```
+
+Use a new session directory each time. Omitting `--session` runs the same scenario in a temporary directory and cleans it up afterward. CTest runs it as `restart_demo`, and Linux CI runs it with the rest of the suite from a fresh checkout.
+
+The demo uses one producer, one consumer, one integer message schema, and one delivery in flight. The log provides recovery from process termination on a running system. Power-loss durability requires a separate contract.
 
 ## Run the queue demo
 
