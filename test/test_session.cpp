@@ -1,12 +1,18 @@
 #include "angaria/session.h"
 #include "session_log.h"
+#include "role_lock.h"
 
 #include <gtest/gtest.h>
 
+#include <barrier>
 #include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
+#include <future>
+#include <memory>
+#include <thread>
 #include <sstream>
 
 #include <sys/wait.h>
@@ -15,6 +21,24 @@
 namespace
 {
   namespace fs = std::filesystem;
+
+  std::optional<std::int32_t> consume_reading(const fs::path& session)
+  {
+    angaria::Consumer consumer(session);
+    const auto delivery = consumer.receive_reading();
+    if (!delivery)
+    {
+      return std::nullopt;
+    }
+    consumer.acknowledge(delivery->_sequence);
+    return delivery->_value;
+  }
+
+  [[noreturn]] void crash_now()
+  {
+    ::kill(::getpid(), SIGKILL);
+    ::_exit(2);
+  }
 
   class SessionTest : public testing::Test
   {
@@ -39,6 +63,33 @@ namespace
       }
     }
 
+    void kill_after(const std::function<void()>& action)
+    {
+      const pid_t child = ::fork();
+      ASSERT_NE(child, -1);
+      if (child == 0)
+      {
+        try
+        {
+          action();
+        }
+        catch (...)
+        {
+          ::_exit(1);
+        }
+        ::_exit(2);
+      }
+      int status{};
+      pid_t result;
+      do
+      {
+        result = ::waitpid(child, &status, 0);
+      } while (result == -1 && errno == EINTR);
+      ASSERT_EQ(result, child);
+      ASSERT_TRUE(WIFSIGNALED(status)) << "Child exited with status " << status;
+      ASSERT_EQ(WTERMSIG(status), SIGKILL);
+    }
+
     fs::path _root;
     fs::path _session;
     fs::path _log;
@@ -55,6 +106,7 @@ namespace
       using namespace angaria::detail;
       try
       {
+        angaria::Producer producer(_session);
         SessionLog log(_log, LogMode::Update);
         if (log.append_reading(log.read_header(), 23))
         {
@@ -79,10 +131,10 @@ namespace
     ASSERT_TRUE(WIFSIGNALED(status));
     EXPECT_EQ(WTERMSIG(status), SIGKILL);
 
-    EXPECT_EQ(angaria::receive_reading(_session), 17);
-    EXPECT_FALSE(angaria::receive_reading(_session));
+    EXPECT_EQ(consume_reading(_session), 17);
+    EXPECT_FALSE(consume_reading(_session));
     ASSERT_EQ(angaria::send_reading(_session, 42), angaria::SendResult::Sent);
-    EXPECT_EQ(angaria::receive_reading(_session), 42);
+    EXPECT_EQ(consume_reading(_session), 42);
 
     std::ostringstream output;
     angaria::inspect_session(_log, output);
@@ -108,8 +160,8 @@ namespace
 
     ASSERT_EQ(angaria::send_reading(_session, 6), angaria::SendResult::Sent);
     EXPECT_EQ(fs::file_size(_log), committedSize + angaria::detail::SESSION_RECORD_SIZE);
-    EXPECT_EQ(angaria::receive_reading(_session), -5);
-    EXPECT_EQ(angaria::receive_reading(_session), 6);
+    EXPECT_EQ(consume_reading(_session), -5);
+    EXPECT_EQ(consume_reading(_session), 6);
   }
 
   TEST_F(SessionTest, InspectorUsesStoredSchema)
@@ -148,5 +200,310 @@ namespace
     std::ostringstream output;
     EXPECT_THROW(angaria::inspect_session(_log, output), std::runtime_error);
     EXPECT_TRUE(output.str().empty());
+  }
+  TEST_F(SessionTest, RolesAreExclusiveAndIndependent)
+  {
+    angaria::Producer producer(_session);
+    angaria::Consumer consumer(_session);
+    EXPECT_EQ(producer.identity()._taskId, 1);
+    EXPECT_EQ(consumer.identity()._taskId, 2);
+    EXPECT_EQ(producer.identity()._incarnation, 1u);
+    EXPECT_EQ(consumer.identity()._incarnation, 1u);
+    EXPECT_EQ(producer.identity()._pid, static_cast<std::uint64_t>(::getpid()));
+    EXPECT_THROW(angaria::Producer{_session}, angaria::RoleBusy);
+    EXPECT_THROW(angaria::Consumer{_session}, angaria::RoleBusy);
+    EXPECT_THROW(angaria::remove_queue(_session), angaria::RoleBusy);
+
+    kill_after(
+        [&]
+        {
+          bool producerBusy = false;
+          bool consumerBusy = false;
+          try
+          {
+            angaria::Producer duplicate(_session);
+          }
+          catch (const angaria::RoleBusy&)
+          {
+            producerBusy = true;
+          }
+          try
+          {
+            angaria::Consumer duplicate(_session);
+          }
+          catch (const angaria::RoleBusy&)
+          {
+            consumerBusy = true;
+          }
+          if (!producerBusy || !consumerBusy)
+          {
+            throw std::runtime_error("a child acquired an occupied role");
+          }
+          crash_now();
+        });
+  }
+
+  TEST_F(SessionTest, SimultaneousRoleClaimsHaveOneWinner)
+  {
+    std::barrier gate(2);
+    auto claim = [&]
+    {
+      gate.arrive_and_wait();
+      std::unique_ptr<angaria::Producer> producer;
+      try
+      {
+        producer = std::make_unique<angaria::Producer>(_session);
+      }
+      catch (const angaria::RoleBusy&)
+      {
+      }
+      catch (...)
+      {
+        gate.arrive_and_drop();
+        throw;
+      }
+      gate.arrive_and_wait();
+      return producer != nullptr;
+    };
+    auto first = std::async(std::launch::async, claim);
+    auto second = std::async(std::launch::async, claim);
+    EXPECT_NE(first.get(), second.get());
+  }
+
+  TEST_F(SessionTest, InterruptedRoleStateWritePreservesIncarnation)
+  {
+    {
+      angaria::Producer producer(_session);
+      EXPECT_EQ(producer.identity()._incarnation, 1u);
+    }
+    {
+      std::ofstream temporary(_session / "producer.state.tmp");
+      ASSERT_TRUE(temporary << "incomplete replacement state");
+    }
+    angaria::Producer replacement(_session);
+    EXPECT_EQ(replacement.identity()._incarnation, 2u);
+    EXPECT_FALSE(fs::exists(_session / "producer.state.tmp"));
+  }
+
+  TEST_F(SessionTest, OneDeliveryRemainsPendingUntilAcknowledged)
+  {
+    angaria::Producer producer(_session);
+    angaria::Consumer consumer(_session);
+    ASSERT_EQ(producer.send_reading(10), angaria::SendResult::Sent);
+    ASSERT_EQ(producer.send_reading(20), angaria::SendResult::Sent);
+    const auto first = consumer.receive_reading();
+    ASSERT_TRUE(first);
+    EXPECT_EQ(first->_value, 10);
+    const auto again = consumer.receive_reading();
+    ASSERT_TRUE(again);
+    EXPECT_EQ(again->_sequence, first->_sequence);
+    EXPECT_EQ(again->_timestampNs, first->_timestampNs);
+    EXPECT_EQ(producer.send_reading(30), angaria::SendResult::QueueFull);
+    EXPECT_THROW(consumer.acknowledge(first->_sequence + 1), std::invalid_argument);
+    EXPECT_EQ(producer.send_reading(30), angaria::SendResult::QueueFull);
+    consumer.acknowledge(first->_sequence);
+    EXPECT_THROW(consumer.acknowledge(first->_sequence), std::invalid_argument);
+    ASSERT_EQ(producer.send_reading(30), angaria::SendResult::Sent);
+
+    for (const auto value : {20, 30})
+    {
+      const auto delivery = consumer.receive_reading();
+      ASSERT_TRUE(delivery);
+      EXPECT_EQ(delivery->_value, value);
+      consumer.acknowledge(delivery->_sequence);
+    }
+    EXPECT_FALSE(consumer.receive_reading());
+  }
+
+  TEST_F(SessionTest, ProducerRestartsWhileConsumerStaysAttached)
+  {
+    angaria::Consumer consumer(_session);
+    for (std::uint64_t incarnation = 1; incarnation <= 2; ++incarnation)
+    {
+      angaria::Producer producer(_session);
+      EXPECT_EQ(producer.identity()._incarnation, incarnation);
+      ASSERT_EQ(producer.send_reading(42), angaria::SendResult::Sent);
+    }
+    for (std::uint64_t sequence = 1; sequence <= 2; ++sequence)
+    {
+      const auto delivery = consumer.receive_reading();
+      ASSERT_TRUE(delivery);
+      EXPECT_EQ(delivery->_sequence, sequence);
+      consumer.acknowledge(sequence);
+    }
+    EXPECT_EQ(consumer.identity()._incarnation, 1u);
+  }
+
+  TEST_F(SessionTest, ConsumerRestartsWhileProducerStaysAttached)
+  {
+    angaria::Producer producer(_session);
+    ASSERT_EQ(producer.send_reading(42), angaria::SendResult::Sent);
+    std::int64_t timestamp{};
+    {
+      angaria::Consumer consumer(_session);
+      EXPECT_EQ(consumer.identity()._incarnation, 1u);
+      const auto delivery = consumer.receive_reading();
+      ASSERT_TRUE(delivery);
+      timestamp = delivery->_timestampNs;
+    }
+
+    angaria::Consumer replacement(_session);
+    EXPECT_EQ(replacement.identity()._incarnation, 2u);
+    const auto delivery = replacement.receive_reading();
+    ASSERT_TRUE(delivery);
+    EXPECT_EQ(delivery->_sequence, 1u);
+    EXPECT_EQ(delivery->_timestampNs, timestamp);
+    replacement.acknowledge(delivery->_sequence);
+    EXPECT_FALSE(replacement.receive_reading());
+    EXPECT_EQ(producer.identity()._incarnation, 1u);
+  }
+
+  TEST_F(SessionTest, ConsumerKilledBeforeAcknowledgmentRedelivers)
+  {
+    angaria::Producer producer(_session);
+    ASSERT_EQ(producer.send_reading(42), angaria::SendResult::Sent);
+    kill_after(
+        [&]
+        {
+          angaria::Consumer consumer(_session);
+          const auto delivery = consumer.receive_reading();
+          if (!delivery || delivery->_value != 42)
+          {
+            throw std::runtime_error("missing delivery before consumer death");
+          }
+          crash_now();
+        });
+
+    angaria::Consumer replacement(_session);
+    EXPECT_EQ(replacement.identity()._incarnation, 2u);
+    const auto delivery = replacement.receive_reading();
+    ASSERT_TRUE(delivery);
+    EXPECT_EQ(delivery->_sequence, 1u);
+    replacement.acknowledge(delivery->_sequence);
+    EXPECT_FALSE(replacement.receive_reading());
+  }
+
+  TEST_F(SessionTest, ConsumerKilledAfterAcknowledgmentResumesNextMessage)
+  {
+    angaria::Producer producer(_session);
+    ASSERT_EQ(producer.send_reading(42), angaria::SendResult::Sent);
+    ASSERT_EQ(producer.send_reading(43), angaria::SendResult::Sent);
+    kill_after(
+        [&]
+        {
+          angaria::Consumer consumer(_session);
+          const auto delivery = consumer.receive_reading();
+          if (!delivery || delivery->_sequence != 1)
+          {
+            throw std::runtime_error("missing delivery before acknowledgment");
+          }
+          consumer.acknowledge(delivery->_sequence);
+          crash_now();
+        });
+
+    angaria::Consumer replacement(_session);
+    EXPECT_EQ(replacement.identity()._incarnation, 2u);
+    const auto delivery = replacement.receive_reading();
+    ASSERT_TRUE(delivery);
+    EXPECT_EQ(delivery->_sequence, 2u);
+    EXPECT_EQ(delivery->_value, 43);
+    replacement.acknowledge(delivery->_sequence);
+  }
+
+  TEST_F(SessionTest, ProducerKilledAfterPublicationNeedsNoNotification)
+  {
+    angaria::Consumer consumer(_session);
+    EXPECT_FALSE(consumer.receive_reading());
+    const pid_t child = ::fork();
+    ASSERT_NE(child, -1);
+    if (child == 0)
+    {
+      try
+      {
+        angaria::Producer producer(_session);
+        std::this_thread::sleep_for(std::chrono::milliseconds{30});
+        angaria::detail::SessionLog log(_log, angaria::detail::LogMode::Update);
+        const auto offset = log.append_reading(log.read_header(), 42);
+        if (offset && fs::create_directory(_session / "pending" / std::to_string(*offset)))
+        {
+          ::kill(::getpid(), SIGKILL);
+        }
+      }
+      catch (...)
+      {
+        ::_exit(1);
+      }
+      ::_exit(2);
+    }
+
+    const auto delivery = consumer.receive_reading(std::chrono::seconds{2});
+    int status{};
+    pid_t result;
+    do
+    {
+      result = ::waitpid(child, &status, 0);
+    } while (result == -1 && errno == EINTR);
+    ASSERT_EQ(result, child);
+    ASSERT_TRUE(WIFSIGNALED(status));
+    EXPECT_EQ(WTERMSIG(status), SIGKILL);
+    ASSERT_TRUE(delivery);
+    EXPECT_EQ(delivery->_value, 42);
+    consumer.acknowledge(delivery->_sequence);
+    angaria::Producer replacement(_session);
+    EXPECT_EQ(replacement.identity()._incarnation, 2u);
+    EXPECT_EQ(replacement.send_reading(43), angaria::SendResult::Sent);
+  }
+
+  TEST_F(SessionTest, ForkedChildDoesNotRetainParentRole)
+  {
+    auto producer = std::make_unique<angaria::Producer>(_session);
+    const pid_t child = ::fork();
+    ASSERT_NE(child, -1);
+    if (child == 0)
+    {
+      try
+      {
+        producer->send_reading(42);
+      }
+      catch (const std::logic_error&)
+      {
+        ::raise(SIGSTOP);
+        // The parent detaches while this child still has the inherited object.
+        try
+        {
+          angaria::Producer replacement(_session);
+          ::_exit(replacement.identity()._incarnation == 2 ? 0 : 3);
+        }
+        catch (...)
+        {
+          ::_exit(4);
+        }
+      }
+      ::_exit(5);
+    }
+
+    int status{};
+    ASSERT_EQ(::waitpid(child, &status, WUNTRACED), child);
+    ASSERT_TRUE(WIFSTOPPED(status));
+    producer.reset();
+    ASSERT_EQ(::kill(child, SIGCONT), 0);
+    ASSERT_EQ(::waitpid(child, &status, 0), child);
+    ASSERT_TRUE(WIFEXITED(status));
+    EXPECT_EQ(WEXITSTATUS(status), 0);
+  }
+
+  TEST_F(SessionTest, AttachmentRejectsCorruptionAndReleasesRole)
+  {
+    const auto path = _session / "pending" / "999";
+    fs::create_directory(path);
+    EXPECT_THROW(angaria::Producer{_session}, std::runtime_error);
+    EXPECT_THROW(angaria::Consumer{_session}, std::runtime_error);
+    fs::remove(path);
+    angaria::Producer producer(_session);
+    angaria::Consumer consumer(_session);
+    EXPECT_EQ(producer.identity()._incarnation, 1u);
+    EXPECT_EQ(consumer.identity()._incarnation, 1u);
+    EXPECT_THROW(consumer.receive_reading(std::chrono::milliseconds{-1}), std::invalid_argument);
+    EXPECT_FALSE(consumer.receive_reading(std::chrono::milliseconds{20}));
   }
 } // namespace

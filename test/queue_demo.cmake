@@ -6,11 +6,17 @@ set(log "${session}/session.ang")
 
 function(check_demo expected_status expected_output command)
   set(path "${session}")
+  set(input "")
+  if(command STREQUAL "ack_receive")
+    set(command receive)
+    set(input INPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt")
+  endif()
   if(command STREQUAL "inspect")
     set(path "${log}")
   endif()
   execute_process(
     COMMAND "${DEMO}" "${command}" "${path}" ${ARGN}
+    ${input}
     RESULT_VARIABLE status
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
@@ -26,6 +32,8 @@ function(check_demo expected_status expected_output command)
   endif()
 endfunction()
 
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt" "ack\n")
+
 # A 50-byte header and two 30-byte records exactly fill this log.
 check_demo(0 "" create 110)
 check_demo(1 "angaria_queue_demo: value must be a signed 32-bit integer" send 2147483648)
@@ -34,9 +42,11 @@ check_demo(0 "" send 42)
 check_demo(0 "" send -7)
 file(SHA256 "${log}" before_rejection)
 check_demo(3 "angaria_queue_demo: queue is full" send 9)
-check_demo(0 "Reading value=42" receive)
+check_demo(0 "Reading sequence=1 value=42" receive)
+check_demo(3 "angaria_queue_demo: queue is full" send 9)
+check_demo(0 "Reading sequence=1 value=42" ack_receive)
 check_demo(4 "angaria_queue_demo: session log is full" send 9)
-check_demo(0 "Reading value=-7" receive)
+check_demo(0 "Reading sequence=2 value=-7" ack_receive)
 check_demo(1 "angaria_queue_demo: queue is empty" receive)
 file(SHA256 "${log}" after_rejection)
 if(NOT before_rejection STREQUAL after_rejection)
@@ -46,3 +56,4 @@ endif()
 check_demo(0 "" remove)
 check_demo(0 "queue=${session_name} sequence=1 timestamp_ns=TIME type=Reading value=42\nqueue=${session_name} sequence=2 timestamp_ns=TIME type=Reading value=-7" inspect)
 file(REMOVE_RECURSE "${session}")
+file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/ack-${session_name}.txt")

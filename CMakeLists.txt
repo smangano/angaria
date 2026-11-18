@@ -5,7 +5,7 @@ project(Angaria LANGUAGES CXX)
 find_package(Boost 1.70 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
-add_library(angaria STATIC src/session.cpp src/session_log.cpp)
+add_library(angaria STATIC src/session.cpp src/session_log.cpp src/role_lock.cpp)
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
 target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
@@ -21,7 +21,7 @@ if(BUILD_TESTING)
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
 
   include(GoogleTest)
-  gtest_discover_tests(angaria_tests)
+  gtest_discover_tests(angaria_tests PROPERTIES TIMEOUT 10)
   add_test(
     NAME queue_demo
     COMMAND "${CMAKE_COMMAND}" "-DDEMO=$<TARGET_FILE:angaria_queue_demo>"
