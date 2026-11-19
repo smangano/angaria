@@ -13,6 +13,10 @@ target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
 add_executable(angaria_queue_demo examples/queue_demo.cpp)
 target_link_libraries(angaria_queue_demo PRIVATE angaria)
 
+# Compile the future runtime API example as a declaration contract.
+add_library(angaria_api_contract OBJECT examples/trading_api.cpp)
+target_link_libraries(angaria_api_contract PRIVATE angaria)
+
 include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
@@ -26,7 +30,7 @@ if(BUILD_TESTING)
   )
   FetchContent_MakeAvailable(cpptoml)
 
-  add_executable(angaria_tests test/test.cpp test/test_field.cpp test/test_session.cpp test/test_configuration.cpp)
+  add_executable(angaria_tests test/test.cpp test/test_field.cpp test/test_session.cpp test/test_configuration.cpp test/test_identities.cpp test/test_api_contract.cpp)
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
     angaria_tests PRIVATE

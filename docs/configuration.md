@@ -21,10 +21,13 @@ TOML integers are signed 64-bit values. Validate sign and the destination range 
 | Key | Type | Contract |
 | --- | --- | --- |
 | `session.name` | String | Required session name. |
+| `session.application_version` | String | Optional application version, defaulting to an empty string. |
 | `session.directory` | String | Required directory for session files. A relative path resolves from the TOML file's parent directory. |
 | `session.max_log_bytes` | Integer | Required positive byte limit, including the persisted Registry and message history. |
 | `session.storage` | String | Defaults to `two_plane`. The alternative is `segmented`. |
 | `session.segment_bytes` | Integer | Positive allocation size for `segmented`, defaulting to 1,048,576 bytes. Specifying this key with two-plane storage is an error. |
+
+Session creation identifies a process Task as its creator, as defined by the [public API contract](api.md). That Task consumes a reserved entry and supplies initial registration attribution.
 
 The storage mapping and allocation settings bind when a session is created. Existing-session attachment reads its recorded effective configuration and validates compatibility. When an attachment supplies configuration, its resolved session name, storage settings, and capacity limits must match the recorded values or return a configuration-mismatch result. Configuration changes take effect through a new session or the explicit registration APIs for supported topology additions.
 

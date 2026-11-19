@@ -4,6 +4,7 @@ config_version = 1
 
 [session]
 name = "Trading"
+application_version = "Trading-1"
 directory = "../build/trading-session"
 max_log_bytes = 67108864
 storage = "two_plane"
