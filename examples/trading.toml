@@ -1,0 +1,97 @@
+# Proposed configuration schema for milestone 1.2.
+# Sizes illustrate a bounded deployment and can be tuned for an application.
+config_version = 1
+
+[session]
+name = "Trading"
+directory = "../build/trading-session"
+max_log_bytes = 67108864
+storage = "two_plane"
+
+[limits]
+tasks = 16
+queues = 128
+source_sets = 16
+publishing_sets = 16
+memberships_per_set = 32
+fields = 256
+message_schemas = 128
+symbols = 1024
+string_pool_bytes = 1048576
+
+[defaults.queue]
+ring_capacity = 1024
+delivery = "recover_from_log"
+
+[defaults.source_set]
+selection = "strict"
+wait = "spin"
+
+[defaults.publishing_set]
+acceptance = "all_destinations"
+
+[[tasks]]
+name = "MarketData"
+kind = "process"
+
+[[tasks]]
+name = "StrategyHost"
+kind = "process"
+
+[[tasks]]
+name = "Strategy"
+kind = "thread"
+process = "StrategyHost"
+
+[[tasks]]
+name = "Risk"
+kind = "process"
+
+[[source_sets]]
+name = "StrategyInputs"
+owner = "Strategy"
+
+[[source_sets]]
+name = "RiskInputs"
+owner = "Risk"
+
+[[queues]]
+name = "MarketDataToStrategy"
+producer = "MarketData"
+source_set = "StrategyInputs"
+priority = 100
+delivery = "allow_loss"
+
+[[queues]]
+name = "MarketDataToRisk"
+producer = "MarketData"
+source_set = "RiskInputs"
+priority = 100
+
+[[queues]]
+name = "StrategyToRisk"
+producer = "Strategy"
+source_set = "RiskInputs"
+priority = 200
+
+[[publishing_sets]]
+name = "MarketDataUpdates"
+owner = "MarketData"
+destinations = ["MarketDataToStrategy", "MarketDataToRisk"]
+
+[[fields]]
+name = "PriceTicks"
+id = 0xEE000001
+type = "int64"
+doc = "Price expressed in minimum price increments"
+
+[[fields]]
+name = "Quantity"
+id = 0xEE000002
+type = "uint64"
+
+[[messages]]
+name = "Quote"
+type = 1
+version = 1
+fields = ["PriceTicks", "Quantity"]
