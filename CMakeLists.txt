@@ -17,7 +17,21 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
-  add_executable(angaria_tests test/test.cpp test/test_field.cpp test/test_session.cpp)
+  include(FetchContent)
+  FetchContent_Declare(
+    cpptoml
+    GIT_REPOSITORY https://github.com/skystrife/cpptoml.git
+    GIT_TAG fededad7169e538ca47e11a9ee9251bc361a9a65
+    SOURCE_SUBDIR include
+  )
+  FetchContent_MakeAvailable(cpptoml)
+
+  add_executable(angaria_tests test/test.cpp test/test_field.cpp test/test_session.cpp test/test_configuration.cpp)
+  target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
+  target_compile_definitions(
+    angaria_tests PRIVATE
+    ANGARIA_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/examples/trading.toml"
+  )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
 

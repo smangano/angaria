@@ -14,7 +14,7 @@ The staging branch is `milestone-1`. Each step uses its own branch and a PR targ
 | 1.4 | `milestone-1-4` | Mapped representations, offsets, ID widths, timestamps, schema identity, capacities, and compatibility. | Review a layout and versioning plan suitable for Registry implementation. |
 | 1.5 | `milestone-1-5` | Shared allocation, publication commits, interrupted-write recovery, and progress guarantees. | Validate crash/concurrency protocols and reconcile them with the API and layout. |
 
-Each step carries forward the contracts integrated by the preceding PRs. The following sections define step 1.1. Later steps specify the outstanding details identified at the end.
+Each step carries forward the contracts integrated by the preceding PRs. The following sections define step 1.1. The [configuration and lifecycle contract](../configuration.md) specifies step 1.2, with a [TOML example](../../examples/trading.toml) parsed by the pinned cpptoml revision. Steps 1.3 through 1.5 build on those contracts.
 
 ## Domain objects
 
@@ -55,7 +55,7 @@ Angaria configuration files use TOML, with [cpptoml](https://github.com/skystrif
 
 The converters map Angaria configuration data into its TOML schema and pass through the common TOML loader and validation path. Unsupported or lossy mappings produce explicit conversion errors. This configuration conversion contract is separate from the message serialization formats in milestone 9.
 
-The upstream cpptoml README currently states a TOML v0.5.0 target. Step 1.2 specifies the selected library revision, supported syntax, schema, defaults, and validation diagnostics. Milestone 2 integrates configuration loading, and milestone 10 delivers the converters.
+The [step 1.2 contract](../configuration.md) pins the cpptoml revision and specifies TOML v0.5.0 syntax, schema, defaults, and validation diagnostics. Milestone 2 integrates configuration loading, and milestone 10 delivers the converters.
 
 ## Policy model
 
@@ -77,7 +77,7 @@ Under the configured loss policy, a consumer skips overwritten deliveries and re
 
 Acknowledgment advances progress for the selected destination independently of other destinations. A consumer that completes external work and dies before acknowledging can cause that work to be repeated. Application handlers must tolerate that possibility.
 
-The number of in-flight deliveries, acknowledgment granularity, and the treatment of a delivery already in flight during ring overrun are specified in step 1.2. The prototype's one-delivery API supplies a regression case for this design work.
+The [step 1.2 contract](../configuration.md) specifies one in-flight delivery per Source Queue Set, token-scoped acknowledgment or release, and payload pinning across ring overrun. The prototype's one-delivery API supplies a regression case for this design work.
 
 ## Publishing acceptance
 
