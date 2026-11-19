@@ -33,6 +33,8 @@ The default recovery policy retains records needed for unacknowledged deliveries
 
 ## 1 Core architecture and policy contracts
 
+The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divide this work into five step PRs targeting `milestone-1`.
+
 - Define the public C++ model for Tasks, queues, both Queue Set types, registration, ownership, attachment, acknowledgment, and failure results.
 - Specify policy interfaces for storage mapping, source selection, consumer synchronization, queue delivery, and publishing acceptance.
 - Define mapped layouts, offset-based references, ID widths, timestamps, immutable schema identities, and file-format compatibility. Reconcile prototype representations with the wiki, including its 32-bit field type identifiers.
