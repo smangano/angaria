@@ -56,7 +56,7 @@ Per-entity settings override their corresponding configuration defaults.
 
 | Key | Default | Allowed values |
 | --- | --- | --- |
-| `defaults.queue.ring_capacity` | `1024` | Positive integer. |
+| `defaults.queue.ring_capacity` | `1024` | Positive integer for `two_plane` storage. |
 | `defaults.queue.delivery` | `recover_from_log` | `recover_from_log`, `allow_loss`. |
 | `defaults.source_set.selection` | `strict` | `strict`, `fair`, `weighted_random`. |
 | `defaults.source_set.wait` | `spin` | `spin`, `eventfd`. |
@@ -96,8 +96,10 @@ Each `[[queues]]` entry contains the following keys.
 | `producer` | Required producer Task reference. |
 | `source_set` | Required Source Queue Set reference. |
 | `priority` | Integer, default `1`. Strict selection permits 0 through 255. Fair and weighted-random selection require 1 through 255. |
-| `ring_capacity` | Optional positive override of the queue ring-capacity default. |
+| `ring_capacity` | Optional positive override of the queue ring-capacity default for `two_plane` storage. |
 | `delivery` | Optional override of the queue delivery default. |
+
+Explicit `ring_capacity` settings apply to two-plane storage and are rejected for segmented storage. Segmented allocation uses `session.segment_bytes`.
 
 An active queue has one producer owner and one Source Queue Set membership. The Source Queue Set identifies the consumer owner. The same queue can be referenced by several Publishing Queue Sets belonging to its producer.
 

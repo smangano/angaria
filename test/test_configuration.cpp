@@ -1,4 +1,5 @@
-#include <cpptoml.h>
+#include "angaria/detail/cpptoml.h"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
