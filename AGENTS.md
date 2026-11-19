@@ -9,6 +9,10 @@
 
 Boost and Intel TBB are permitted dependencies when warranted by the implementation.
 
+## Configuration
+
+Configuration files use TOML. Implement TOML support with [cpptoml](https://github.com/skystrife/cpptoml). Provide YAML, JSON, and XML configuration support through converters that emit TOML for the common loader and validation path.
+
 ## Milestone branches and review
 
 - Create the staging branch `milestone-<n>` from `main` for each milestone.

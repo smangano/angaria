@@ -9,7 +9,7 @@ The staging branch is `milestone-1`. Each step uses its own branch and a PR targ
 | Step | Branch | Scope | Completion criterion |
 | --- | --- | --- | --- |
 | 1.1 | `milestone-1-1` | Domain objects, ownership, membership, delivery and acceptance invariants, failure outcomes, and a representative topology. | Review the core contract in this document against the agreed architecture. |
-| 1.2 | `milestone-1-2` | Bounded configuration, registration lifecycle, policy binding and mutability, and acknowledgment scope. | Specify the remaining lifecycle and configuration contracts with explicit defaults. |
+| 1.2 | `milestone-1-2` | TOML configuration schema and compatibility, bounded configuration, registration lifecycle, policy binding and mutability, and acknowledgment scope. | Specify the remaining lifecycle and configuration contracts with explicit defaults. |
 | 1.3 | `milestone-1-3` | Public C++ identities, descriptors, policy/result types, and API examples. | Compile-check an example that expresses the accepted contracts. |
 | 1.4 | `milestone-1-4` | Mapped representations, offsets, ID widths, timestamps, schema identity, capacities, and compatibility. | Review a layout and versioning plan suitable for Registry implementation. |
 | 1.5 | `milestone-1-5` | Shared allocation, publication commits, interrupted-write recovery, and progress guarantees. | Validate crash/concurrency protocols and reconcile them with the API and layout. |
@@ -48,6 +48,14 @@ Angaria targets a small, explicitly bounded network, typically ten or fewer coop
 The effective limits are recorded and validated when participants attach. Within reserved capacity, the registration lifecycle determines when new entities and relationships can be added. Capacity exhaustion has an explicit result.
 
 Each queue has its own sequence of deliveries. A Source Queue Set's selection policy determines interleaving across its member queues. Configuring separate queues for sending threads therefore also creates separate scheduling inputs.
+
+## Configuration format
+
+Angaria configuration files use TOML, with [cpptoml](https://github.com/skystrife/cpptoml) as the TOML implementation. Users of YAML, JSON, or XML receive configuration support through converters that emit TOML.
+
+The converters map Angaria configuration data into its TOML schema and pass through the common TOML loader and validation path. Unsupported or lossy mappings produce explicit conversion errors. This configuration conversion contract is separate from the message serialization formats in milestone 9.
+
+The upstream cpptoml README currently states a TOML v0.5.0 target. Step 1.2 specifies the selected library revision, supported syntax, schema, defaults, and validation diagnostics. Milestone 2 integrates configuration loading, and milestone 10 delivers the converters.
 
 ## Policy model
 
@@ -116,7 +124,7 @@ This example exercises both Queue Set types, a Task that produces and consumes, 
 
 ## Decisions assigned to later steps
 
-- Step 1.2 specifies configuration bounds and defaults, registration and membership lifecycle, policy binding and mutability, adoption/ownership changes, acknowledgment scope, and scheduling parameters.
+- Step 1.2 specifies the TOML schema, cpptoml revision and syntax compatibility, converter mappings, configuration bounds and defaults, registration and membership lifecycle, policy binding and mutability, adoption/ownership changes, acknowledgment scope, and scheduling parameters.
 - Step 1.4 specifies binary representations and compatibility, including the wiki's 32-bit Field type identity, historical schema references, and mapped-memory capacity validation.
 - Step 1.5 specifies shared payload allocation, publication visibility and commit recovery, notification resource coordination, and the scope of lock-free guarantees. Single-producer rings still share payload allocation and fan-out coordination requirements.
 
