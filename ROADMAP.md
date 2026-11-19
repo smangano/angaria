@@ -1,45 +1,144 @@
 # Angaria roadmap
 
-Angaria is a C++ library for inspectable local IPC. The first release targets Linux and demonstrates one producer and one consumer exchanging a typed message through a named queue. After both processes exit, a read-only tool can decode the session file using the schema recorded in that file.
+Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-## 1. Establish a build and demo
+The ten milestones below are planned. Milestone 6 delivers an application using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
-Implemented.
+## Agreed architecture
 
-- Add a CMake build and Linux CI. Fix the prototype headers that the demo uses and verify they compile from a fresh checkout.
-- Provide a small producer and consumer with one bounded FIFO and one registered message type. Document the commands to create a session and run both endpoints.
-- Keep v0 to one producer, one consumer, and one in-flight delivery.
+### Registry and bounded topology
 
-## 2. Define the queue and session file
+The Registry is the shared source of definitions, identities, ownership, topology, and lifecycle metadata. It is persisted with message logs so tools can interpret captured sessions using their historical definitions.
 
-Implemented.
+Each queue has one registered producer Task and belongs to one consumer-owned Source Queue Set. A producer arranges a destination queue in its consumer's Source Queue Set. A Publishing Queue Set references destination queues owned by its producer. A queue can be referenced by several publishing sets belonging to that same producer.
 
-- Give the live queue a fixed capacity and the append-only session log its own byte cap. Return distinct queue-full and log-full results. A rejected send leaves the queue and log unchanged.
-- A successful send commits a record for inspection and publishes it to the live queue. If the producer dies between those steps, a committed record can be visible in the inspector without ever being delivered. Recovery preserves published entries and leaves committed but unpublished records visible in the inspector.
-- Define a versioned file format with explicit byte order, fixed-width encodings, record lengths, and a way to detect a partial final record. Keep each registered schema immutable for the life of the session. Store a schema identifier in each message record.
-- Keep message records immutable after publication. Store delivery progress separately from the message so it can later be tracked per destination.
-- Add an inspector that shows queue name, sequence number, timestamp, message type, and decoded fields. Test inspection after normal shutdown and producer termination. Power-loss durability requires a separate contract.
+The application coordinates sending threads that share a producer endpoint. Queue order follows the producer's serialized sends. A Source Queue Set's selection policy determines how its member queues interleave.
 
-## 3. Support independent endpoint restart
+Tasks, queues, queue sets, memberships, message definitions, fields, and pools have explicit capacity limits. Build settings and configuration provide these bounds. Milestone 1 specifies how settings bind and how attaching processes validate the effective limits. Registration within reserved capacity can support runtime topology changes if the lifecycle contract permits them.
 
-Implemented.
+### Delivery and acceptance policies
 
-- Give each role a stable task ID and a separate exclusive Linux file lock scoped to the session. Return a role-busy result to a competing claimant. Use the PID for diagnostics and advance the role's incarnation number on each successful attachment.
-- Keep the lock files stable for the lifetime of the session and prevent child processes from retaining role lock descriptors. A replacement validates the session and recovers its side of the queue before using it.
-- Preserve already-published entries when replacing the producer. Make the consumer recheck queue state on attach and after a bounded wait so a crash between publication and notification cannot strand an entry.
-- Advance the consumer cursor only on explicit acknowledgment. If the consumer exits before acknowledging a delivery, its replacement receives that delivery again. Applications with external side effects must tolerate duplicates if a crash occurs after the effect and before acknowledgment.
-- Test simultaneous claims for one role, independent producer and consumer restarts, and termination at the log commit, queue publication, notification, and acknowledgment boundaries.
+| Policy | Agreed default | Configurable alternative |
+| --- | --- | --- |
+| Per-queue delivery | Lagging consumers recover unacknowledged deliveries from the retained log in queue order. | Allow delivery loss by skipping overwritten deliveries and reporting the skipped sequence range. |
+| Per-Publishing Queue Set acceptance | Every destination accepts the publication. Rejection changes neither the queues nor the log. | Allow partial acceptance and return accepted destinations, rejected destinations, and rejection reasons. |
 
-## 4. Release the demonstration
+Recovery requires recorded per-queue publication history and acknowledgment progress. Message payloads and schema versions remain immutable, and delivery progress is tracked independently for every destination.
 
-Implemented.
+Publishing records have a persistent identity and a snapshot of their destination membership. Recovery can determine which deliveries were committed, and retries can target rejected destinations without republishing to destinations that already accepted the publication.
 
-From a fresh checkout, a reader can build the examples, send a typed message, replace either endpoint while the other stays up, and verify that an unacknowledged delivery is retried. After both processes exit, the reader can inspect the session and decode the recorded fields.
+Acceptance establishes delivery obligations. Consumers acknowledge independently. A destination configured to allow delivery loss can subsequently skip overwritten deliveries. Committed payloads remain available for inspection under the log's retention rules.
 
-The [automated walkthrough](test/restart_demo.py) exercises this sequence through the demo executable. CTest and Linux CI run it as `restart_demo`. The [README](README.md) includes build and walkthrough commands for a fresh checkout.
+The default recovery policy retains records needed for unacknowledged deliveries. Exhausting the configured log capacity returns a log-full result. Process-crash recovery is part of the planned implementation. Power-loss durability requires a separate contract.
 
-## After v0
+## 1 Core architecture and policy contracts
 
-Use the demo to evaluate explicit replay, priority queue sets, fan-out, schema evolution, additional storage policies, and latency optimizations. Define delivery and acknowledgment per destination before adding fan-out.
+- Define the public C++ model for Tasks, queues, both Queue Set types, registration, ownership, attachment, acknowledgment, and failure results.
+- Specify policy interfaces for storage mapping, source selection, consumer synchronization, queue delivery, and publishing acceptance.
+- Define mapped layouts, offset-based references, ID widths, timestamps, immutable schema identities, and file-format compatibility. Reconcile prototype representations with the wiki, including its 32-bit field type identifiers.
+- Resolve startup versus runtime registration and membership changes, policy binding and mutability, effective capacity validation, and acknowledgment scope.
+- Design shared payload allocation, publication commits, abandoned-write recovery, and the scope of lock-free guarantees. Evaluate these protocols against single-producer queues and all-destination acceptance before fixing the storage layout.
+
+Completion requires a reviewed public API example for a bounded multi-process application and a concrete mapped layout and concurrency plan. Raise tradeoffs if the agreed guarantees conflict during protocol validation.
+
+## 2 Shared persistent Registry
+
+- Implement the live Registry in shared mapped memory and place its persisted representation at the start of message logs.
+- Implement registration and lookup for Tasks, Queues, Source Queue Sets, Publishing Queue Sets, Messages, schema versions, and Fields.
+- Record global metadata, application and Angaria versions, creator identities, names, descriptions, ownership, membership, priorities, capacities, and effective policies.
+- Track Task registration, restart/incarnation information, and topology lifecycle history. Generalize the prototype's role ownership to registered Tasks and Queue Sets.
+- Implement consistent IDs and name indexes, concurrent registration, capacity errors, and recovery from interrupted updates.
+- Preserve the historical definitions needed to interpret captured messages after schema, Task, or topology changes.
+
+Completion requires independent processes to register and discover every entity type, recover from interrupted registration, and inspect the recorded Registry after application shutdown.
+
+## 3 General messages and basic inspection
+
+- Implement generic headers and ordered fields driven by registered message definitions.
+- Cover sequence numbers, message/schema identity, payload type and size, producer identity, timestamps, and user flags. Store dequeue and acknowledgment metadata per destination.
+- Implement explicit binary encoding for booleans, basic bit fields, signed and unsigned integers, floating-point values, fixed character strings, and enumerations.
+- Keep immutable schema versions addressable by recorded messages.
+- Extend the inspector to decode multiple application-defined types using the Registry.
+
+Completion requires applications to exchange several registered message types and an offline inspector to decode them without application-specific code. Older records retain their original meaning after new versions are registered.
+
+## 4 Two plane mapped storage
+
+- Implement the fixed-size rings of message offsets and the append-only memory-mapped payload plane.
+- Support single-producer queue ownership and allocation of shared payload storage.
+- Implement publication and commit recovery, ring wraparound, log-capacity checks, and rejection without state changes.
+- Implement recovery from the log for lagging consumers by default, plus configured delivery loss with gap reporting.
+- Make recorded publication and acknowledgment progress sufficient to reconstruct delivery after ring overwrite or endpoint replacement.
+
+Completion requires contention, wraparound, resource-exhaustion, partial-write, and producer-termination tests, plus an audit of the agreed lock-free progress guarantees. Establish latency and throughput measurements for subsequent policy comparisons.
+
+## 5 Source Queue Sets
+
+- Implement receive operations through consumer-owned Source Queue Sets with per-queue priorities.
+- Implement strict priority with round-robin selection among equal priorities.
+- Implement proportional-budget fairness with specified budget units and reset rules.
+- Implement weighted-random selection with defined weight semantics and reproducible tests.
+- Integrate acknowledgment, configured delivery-loss behavior, Task ownership, and consumer replacement.
+
+Completion requires multiple producer queues feeding a consumer, with verified per-queue ordering, selection behavior, delivery progress, and restart recovery under each selection policy.
+
+## 6 Publishing Queue Sets
+
+- Publish one immutable message to the destination queues referenced by a producer-owned set.
+- Implement all-destination acceptance by default and configurable partial acceptance.
+- Record publication identities, destination snapshots, per-destination acceptance results, and independent delivery progress.
+- Implement recovery around publication commits and retry handling for rejected destinations.
+- Compose publishing sets with the destinations' consumer-owned Source Queue Sets and configured delivery policies.
+
+Completion requires tests for a destination that cannot accept, rejection without queue or log changes, partial acceptance and retry, independent acknowledgment, and publisher termination around commit and publication. A multi-process example must use the Registry and both Queue Set types.
+
+## 7 Consumer synchronization policies
+
+- Implement spinning on Source Queue Sets.
+- Implement Linux eventfd waiting, including notification-resource discovery and sharing between independently launched processes.
+- Handle notification lifetime and generation changes during endpoint attachment and replacement.
+- Define and implement the checks needed around sleeping, publication, notification coalescing, and recovery from missed notifications.
+- Record the supported platform and policy combinations.
+
+Completion requires the same Queue Set scenarios to work with both synchronization policies, including publication while a consumer transitions to sleep and endpoint replacement. Measure idle CPU usage and wakeup latency.
+
+## 8 Segmented mapping
+
+- Implement growing queue storage with configurable segment-allocation sizes.
+- Implement segment discovery, mapping, stable references, and attachment to existing segments.
+- Define allocation locking, capacity and filesystem-exhaustion results, and recovery from interrupted segment creation.
+- Preserve the message, acknowledgment, Source Queue Set, and Publishing Queue Set contracts across storage mappings.
+- Expose segment configuration and storage usage through the Registry and tools.
+
+Completion requires the Queue Set acceptance scenarios to pass through growth, resource exhaustion, and restart with both mapping policies. Measure allocation pauses, memory consumption, and throughput.
+
+## 9 Complete fields pools and serialization
+
+- Complete bit fields through 256 bits, date/time/timestamp representations, duration units, sequence numbers, and GUIDs.
+- Implement fixed homogeneous arrays, heterogeneous tuples, and repeating groups.
+- Implement symbols with the wiki's 64-character limit and a configurable UTF-8 string pool, including reference lifetime, retention, and exhaustion behavior.
+- Complete C++ field operations and optional minimum/maximum, enumeration, regex, and units metadata.
+- Implement CSV, JSON, XML, and text representations, including defined representations for compound values.
+
+Completion requires round-trip encoding, schema-driven inspection, pool-reference lifetime checks, and validation of supported constraints across every field family, including nested structures.
+
+## 10 Tools and release qualification
+
+- Complete Registry, topology, Task lifecycle, queue, delivery, and message inspection.
+- Implement explicit replay with defined ordering, destination, and identity semantics.
+- Complete configuration tooling and programmer, operator, best-practice, and performance documentation.
+- Publish an application example with bounded cooperating processes, both Queue Set types, and selectable policies.
+- Qualify supported policy combinations under concurrency, process termination, and resource exhaustion on x86-64 and ARM64.
+- Publish latency, throughput, CPU, memory, and storage measurements with the tested platform and configuration.
+
+Completion requires a reproducible application walkthrough, documented guarantees and configuration limits, and a release with the supported policy/platform matrix and performance results.
+
+## Existing prototype
+
+The completed v0 demo provides a CMake build, Linux CI, a bounded filesystem queue, one recorded integer schema, role locks, explicit acknowledgment, and process-restart tests. Its file format and runtime describe the current prototype.
+
+The build infrastructure, encoding patterns, inspector fixtures, ownership mechanisms, and failure tests provide reusable foundations for the milestones above. The shared Registry, mapped queue storage, general message API, Queue Sets, and policy implementations are planned work.
+
+The [README](README.md) documents the runnable prototype, and the [session format](docs/session-format.md) describes its existing files. The [restart walkthrough](test/restart_demo.py) exercises its process and acknowledgment behavior.
 
 [Original design wiki](https://github.com/smangano/angaria/wiki/Angaria)
