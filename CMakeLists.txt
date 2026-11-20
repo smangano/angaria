@@ -10,6 +10,8 @@ add_library(angaria STATIC
   src/session_log.cpp
   src/role_lock.cpp
   src/mapped_superblock.cpp
+  src/native_file.cpp
+  src/mapped_region.cpp
 )
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
@@ -44,11 +46,13 @@ if(BUILD_TESTING)
     test/test_api_contract.cpp
     test/test_mapped_format.cpp
     test/test_mapped_superblock.cpp
+    test/test_native_file.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
     angaria_tests PRIVATE
     ANGARIA_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/examples/trading.toml"
+    ANGARIA_TEST_PYTHON="${Python3_EXECUTABLE}"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
@@ -72,4 +76,11 @@ if(BUILD_TESTING)
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/protocol_model.py"
   )
   set_tests_properties(protocol_model PROPERTIES TIMEOUT 10)
+
+  # Keep before-main native initialization checks out of GTest discovery.
+  add_executable(angaria_native_storage_startup test/native_storage_startup.cpp)
+  target_include_directories(angaria_native_storage_startup PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_storage_startup PRIVATE angaria)
+  add_test(NAME native_storage_startup COMMAND "$<TARGET_FILE:angaria_native_storage_startup>")
+  set_tests_properties(native_storage_startup PROPERTIES TIMEOUT 10)
 endif()
