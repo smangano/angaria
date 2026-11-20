@@ -41,7 +41,9 @@ The [concurrency and recovery contract](docs/concurrency.md) specifies the block
 
 Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. The [superblock](docs/mapped-format.md#superblock) is the fixed 4,096-byte session control area at the beginning of `session.ang`. Its codec encodes a provisional superblock prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Those operations follow in the [milestone 2 steps](docs/milestones/milestone-2.md). Related terms are defined in the [glossary](docs/glossary.md).
 
-Step 2.2 adds private [native file and mapping owners](docs/native-storage.md): checked positional I/O, read-only/shared writable mappings, and bounded resize with process-local protection for live views across aliases. A mapping retains its backing file state. Cross-process coordination, native atomic qualification, and journal recovery follow in later steps; these primitives do not yet expose usable format-2 Sessions.
+Step 2.2 adds private [native file and mapping owners](docs/native-storage.md): checked positional I/O, read-only/shared writable mappings, and bounded resize with process-local protection for live views across aliases. A mapping retains its backing file state. These storage primitives do not expose usable format-2 Sessions.
+
+Step 2.3 adds the shared [session controller, mutation guards, Task leases, and native atomic adapter](docs/native-storage.md#shared-controller-and-mutation-gate). Native tests exercise thread/process exclusion, claim lifetimes and process termination, and mapped-memory publication ordering. Journal recovery and public format-2 Session creation/attachment remain steps 2.4 and 2.5.
 
 ## Run the restart walkthrough
 

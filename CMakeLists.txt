@@ -19,6 +19,8 @@ add_library(angaria STATIC
   src/mapped_superblock.cpp
   src/native_file.cpp
   src/mapped_region.cpp
+  src/native_atomic.cpp
+  src/session_controller.cpp
 )
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
@@ -44,6 +46,14 @@ if(BUILD_TESTING)
   )
   FetchContent_MakeAvailable(cpptoml)
 
+  add_executable(angaria_native_atomic_worker test/native_atomic_worker.cpp)
+  target_include_directories(angaria_native_atomic_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_atomic_worker PRIVATE angaria)
+
+  add_executable(angaria_native_controller_worker test/native_controller_worker.cpp)
+  target_include_directories(angaria_native_controller_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_controller_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
@@ -54,15 +64,20 @@ if(BUILD_TESTING)
     test/test_mapped_format.cpp
     test/test_mapped_superblock.cpp
     test/test_native_file.cpp
+    test/test_native_atomic.cpp
+    test/test_session_controller.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
     angaria_tests PRIVATE
     ANGARIA_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/examples/trading.toml"
     ANGARIA_TEST_PYTHON="${Python3_EXECUTABLE}"
+    ANGARIA_NATIVE_ATOMIC_WORKER="$<TARGET_FILE:angaria_native_atomic_worker>"
+    ANGARIA_NATIVE_CONTROLLER_WORKER="$<TARGET_FILE:angaria_native_controller_worker>"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests PROPERTIES TIMEOUT 10)
@@ -90,4 +105,11 @@ if(BUILD_TESTING)
   target_link_libraries(angaria_native_storage_startup PRIVATE angaria)
   add_test(NAME native_storage_startup COMMAND "$<TARGET_FILE:angaria_native_storage_startup>")
   set_tests_properties(native_storage_startup PROPERTIES TIMEOUT 10)
+
+  # Retain owners populated in main until normal static destruction.
+  add_executable(angaria_native_controller_shutdown test/native_controller_shutdown.cpp)
+  target_include_directories(angaria_native_controller_shutdown PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_controller_shutdown PRIVATE angaria)
+  add_test(NAME native_controller_shutdown COMMAND "$<TARGET_FILE:angaria_native_controller_shutdown>")
+  set_tests_properties(native_controller_shutdown PROPERTIES TIMEOUT 10)
 endif()
