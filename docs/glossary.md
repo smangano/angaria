@@ -27,8 +27,22 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 | **Little-endian** | Integer encoding in which the least significant byte is stored first, at the lowest byte offset. |
 | **ABI profile** | An Application Binary Interface profile identifying the native OS/CPU and shared-memory access requirements for live attachment. Portable metadata decoding can inspect a foreign profile; using it live requires a qualified compatible native adapter. |
 | **RAII** | Resource Acquisition Is Initialization: C++ ownership in which an object's lifetime controls a resource, and its destructor releases that resource. File and mapping owners use this to manage native handles. |
+| **File descriptor** | A process-local integer handle used by native calls to refer to an open file. A borrowed descriptor does not transfer ownership to the caller. |
+| **Device/inode identity** | The native device and inode numbers identifying an underlying file. Different pathnames or hard links can identify the same file and must share its process-local mapping bookkeeping. |
+| **Alias** | Another handle or pathname referring to the same underlying device/inode identity. Aliases share mapping bookkeeping, while access permissions and byte limits remain per handle. |
+| **Hard link** | An additional pathname for the same underlying file. A symbolic link instead names another path; the native file API rejects symbolic links in the final pathname component. |
+| **Mapped region** | An owned virtual-memory mapping of a file range. It retains the backing file state; its exposed byte spans borrow the region's lifetime. |
+| **View** | A borrowed byte span referring to mapped storage. It does not own or extend the mapping's lifetime. |
+| **Page** | The host operating system's unit of virtual-memory mapping. Its byte size is queried at runtime and need not equal the superblock's 4,096 bytes. |
+| **Shared mapping** | A file mapping whose updates are visible through other mappings of the same file. Visibility alone does not provide atomic updates, thread synchronization, or power-loss durability. |
+| **Mapping lease** | Process-local bookkeeping protecting a live mapping's exposed range against resize through another handle for the same underlying file. It does not protect against external truncation. |
+| **Positional I/O** | Reading or writing at an explicit file byte offset without advancing a shared file-position cursor. |
+| **Fork** | The operating-system operation that creates a child process with inherited process state. Inherited Angaria owners do not become child-owned resources. |
+| **Exec** | The operating-system operation that replaces the program running in a process. It removes inherited memory mappings and closes descriptors marked close-on-exec. |
 
 `SuperblockBytes` represents the complete serialized 4,096-byte control area. `SuperblockConfiguration` contains only the process-local immutable configuration values returned by the metadata decoder. It excludes mutable roots and journal state. Successful metadata decoding does not establish a recovered, usable Session.
+
+The [native storage contract](native-storage.md) defines file/mapping ownership, range checks, leases, and their process boundaries.
 
 ## Ownership and recovery
 

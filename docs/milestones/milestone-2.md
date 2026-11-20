@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Work is under implementation, beginning with the binary foundation in step 2.1.
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Step 2.1's binary foundation is integrated into `milestone-2`; step 2.2 adds native file and mapping ownership.
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 
@@ -39,6 +39,14 @@ The codec writes explicit little-endian integers and returns process-local value
 Mutable roots, live state, and the reusable operation journal are deliberately outside this metadata decoder's validation. Their bytes may reflect a pending transaction or a previously used Idle journal. Later attachment must acquire the proper gate, recover when required, and validate resulting state before exposing usable Session or Registry handles.
 
 Step 2.1 tests use an independently authored byte fixture, round trips, and invalid cases for format markers, lengths, capacities, section geometry, overflow, reserved fields, and compatibility metadata. They also verify that mutable root/journal bytes do not turn this portable decoder into an incomplete recovery routine. Native file I/O, mappings, atomics, gate ownership, and journal repair follow in steps 2.2 through 2.5.
+
+## Step 2.2 Native file and mapping ownership
+
+The [native storage contract](../native-storage.md) specifies the implemented `NativeFile` and `MappedRegion` primitives. They own native descriptors and mappings through move-only RAII, check file type/length and requested ranges, support read-only/shared writable views, and perform explicit bounded resize. The [glossary](../glossary.md#encoding-and-native-resources) defines descriptors, mapped regions/views, pages, positional I/O, and mapping leases.
+
+Process-local lease state is shared by device/inode identity across independent opens and hard links. It prevents resizing a file below the end of any live exposed mapping, while growth leaves existing view lengths unchanged. A mapping retains its file state after the original file wrapper closes.
+
+This resource layer does not acquire the session mutation gate, synchronize access through raw mapped spans, validate/recover session contents, or prevent arbitrary external truncation. Its initial owners and initialized factory state are process-bound; a child inheriting that state requires exec before factory use. Multithreaded fork requires exec or `_exit` before library use or inherited-owner cleanup. Steps 2.3 and 2.4 add the native controller/ownership qualification and journal integration before public Session behavior is exposed.
 
 ## Registry implementation boundaries
 
