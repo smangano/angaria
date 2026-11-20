@@ -19,7 +19,7 @@ The target checks the future runtime operation declarations. Registry and attach
 | `angaria/registry.h` | Registration, discovery, metadata inspection, activation, and draft ownership changes. |
 | `angaria/runtime.h` | Session, Task, QueueWriter, SourceQueueSet, and PublishingQueueSet handles. |
 
-Descriptors own strings and vectors for registration and inspection. Mapped representations and their compatibility rules are defined in step 1.4. The existing prototype registration overloads remain available during the field API migration.
+Descriptors own strings and vectors for registration and inspection. The [mapped layout contract](mapped-format.md) defines their persisted representations, capacity ranges, and compatibility rules. The existing prototype registration overloads remain available during the field API migration.
 
 ## Identities and tokens
 

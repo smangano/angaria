@@ -1,5 +1,7 @@
 # Session format version 1
 
+This document describes the runnable v0 prototype. The [mapped layout contract](mapped-format.md) specifies the proposed format 2.0 for the Registry and Queue Set milestones; current tools do not create or attach to that format.
+
 A session directory contains `session.ang` and a live queue in `pending/`. Endpoint attachment also creates stable `producer.lock` and `consumer.lock` files and a state file for each role. The queue holds two offsets into the log. The log has a configurable byte cap, including its header, with a default of 1 MiB. Queue capacity and log capacity are independent.
 
 ## Sending and receiving

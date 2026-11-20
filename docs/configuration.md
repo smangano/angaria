@@ -25,7 +25,7 @@ TOML integers are signed 64-bit values. Validate sign and the destination range 
 | `session.directory` | String | Required directory for session files. A relative path resolves from the TOML file's parent directory. |
 | `session.max_log_bytes` | Integer | Required positive byte limit, including the persisted Registry and message history. |
 | `session.storage` | String | Defaults to `two_plane`. The alternative is `segmented`. |
-| `session.segment_bytes` | Integer | Positive allocation size for `segmented`, defaulting to 1,048,576 bytes. Specifying this key with two-plane storage is an error. |
+| `session.segment_bytes` | Integer | Allocation quantum for `segmented`, defaulting to 1,048,576 bytes. Format 2 requires at least 4,160 bytes and a multiple of 64, within the session byte cap. An extent may use multiple quanta for a large record. Specifying this key with two-plane storage is an error. |
 
 Session creation identifies a process Task as its creator, as defined by the [public API contract](api.md). That Task consumes a reserved entry and supplies initial registration attribution.
 
@@ -47,7 +47,7 @@ The following `limits` keys are required nonnegative integers. A zero limit rese
 | `symbols` | Symbol entries. |
 | `string_pool_bytes` | Bytes reserved for the string pool. |
 
-Capacity limits bind at session creation and are recorded in the Registry. Configuration values must fit the build's supported ceilings and the file-format ranges defined in step 1.4. The initial declarations must fit those limits before session creation can succeed.
+Capacity limits bind at session creation and are recorded in the Registry. Configuration values must fit the build's supported ceilings and the [mapped layout's ranges and byte accounting](mapped-format.md). Source and Publishing Queue Set capacities together must fit 65,535 IDs. The initial declarations and activation resources must fit those limits and the session byte cap before creation can succeed. Registry names, documentation, and schema Field lists consume log arena bytes separately from the reserved application string pool.
 
 Adding a queue consumes one queue entry and one membership in its Source Queue Set. Referencing that queue from a Publishing Queue Set consumes a membership in that publishing set. Multiple publishing references count independently. Runtime registration can use remaining capacity. Retained historical identities and schema versions continue to consume their entries.
 
