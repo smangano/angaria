@@ -35,6 +35,8 @@ The [public C++ API contract](docs/api.md) describes the identities, descriptors
 
 The [mapped layout and compatibility contract](docs/mapped-format.md) defines the proposed format 2.0, capacity accounting, and migration rules. Its checked reservation arithmetic is tested; format-2 file I/O and synchronization follow in the implementation milestones.
 
+The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs a bounded crash-recovery reference model; native format-2 runtime qualification follows in the implementation milestones.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

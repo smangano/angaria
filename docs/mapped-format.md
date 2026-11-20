@@ -2,7 +2,7 @@
 
 Step 1.4 specifies the format for the shared Registry and future mapped queues. This is the proposed **format 2.0**, not a format that the current executable creates. The runnable prototype still uses [format 1](session-format.md). The [public API](api.md) contains process-local objects; its C++ object layout is not a file format.
 
-The byte counts and checked capacity arithmetic are compile-checked in [mapped_format.h](../include/angaria/detail/mapped_format.h). Record encoding, mappings, and attachment validation arrive in the implementation milestones. Step 1.5 specifies the transaction, synchronization, and recovery protocols for the state and recovery space reserved here. A record's presence alone never establishes that it committed.
+The byte counts and checked capacity arithmetic are compile-checked in [mapped_format.h](../include/angaria/detail/mapped_format.h). Record encoding, mappings, and attachment validation arrive in the implementation milestones. The [step 1.5 concurrency contract](concurrency.md) assigns the journal, transaction, and recovery protocols, using the reserved space without changing the fixed reservation totals. A record's presence alone never establishes that it committed.
 
 ## Representation rules
 
@@ -45,19 +45,19 @@ Timeouts and elapsed waits use a process-local monotonic clock. UTC clock adjust
 
 For `segmented`, the fixed sections stay in `session.ang`; immutable arena records and growing queue storage use extent files. Each extent has a 4,096-byte header recording magic, format, session identity, logical start, allocated length, and feature/ABI requirements. Its filename encodes its logical start. Extent logical intervals cannot overlap each other or the fixed sections. Translation is `file_offset = logical_offset - extent_logical_start`. The extent header occupies the first 4,096 bytes of that interval and is not a record target.
 
-An extent header contains magic `ANGAREXT` at byte 0, major/minor (`u16` each) at 8/10, header bytes (`u32`) at 12, session identity at 16, logical start (`u64`) at 32, allocated file length (`u64`) at 40, required features (`u64`) at 48, live ABI profile (`u32`) at 56, synchronization version (`u16`) at 60, and storage code (`u16`) at 62. Bytes 64 through 4095 reserve extent publication/recovery data for step 1.5. The allocated length includes this header.
+An extent header contains magic `ANGAREXT` at byte 0, major/minor (`u16` each) at 8/10, header bytes (`u32`) at 12, session identity at 16, logical start (`u64`) at 32, allocated file length (`u64`) at 40, required features (`u64`) at 48, live ABI profile (`u32`) at 56, synchronization version (`u16`) at 60, and storage code (`u16`) at 62. The eight-byte readiness word at 64 is `0` incomplete, `1` Ready, or `2` Committed under the journal protocol; bytes 72 through 4095 remain reserved. The allocated length includes this header.
 
 The configured `segment_bytes` is an allocation quantum, not a maximum message size. It must be a multiple of 64 and large enough for an extent header plus a record (at least 4,160 bytes). An extent can allocate multiple quanta to keep one complete record, including its payload and receipts, contiguous. Mapping an extent at different virtual addresses in different processes does not alter stored references. Milestone 8 implements extent discovery, publication, interrupted creation, and reclamation against these rules.
 
 Logical offsets and individual file lengths must fit `INT64_MAX`, the supported file-offset range. Before translating a reference, validate its owning extent, alignment, target kind, and full byte range using subtraction or checked arithmetic. Never form a pointer or allocate a buffer first. Mapping windows and returned byte spans must also fit the host's `size_t` and address space. No single mapping of the entire configured log is required.
 
-Offsets remain stable while their targets are retained. Initial implementations may retain all committed history until `LogFull`; reclamation is not required to accept another publication. Future reclamation must preserve every live reference, schema, pending recovery obligation, in-flight pin, and retry record it retains. It cannot reuse a logical address for another record. Reclaimed publication history returns `HistoryUnavailable` on lookup or retry.
+Offsets remain stable while their targets are retained. Initial implementations may retain all committed history until `LogFull`; reclamation is not required to accept another publication. Future reclamation must preserve every live reference, schema, pending recovery obligation, in-flight pin, and retry record it retains. It cannot reuse a committed logical address for another record; never-published aborted space can be reused after rollback. Reclaimed publication history returns `HistoryUnavailable` on lookup or retry.
 
 Queue state reserves a retained-history floor sequence and link. Traversal stops at that link and never follows its immutable predecessor into a reclaimed prefix. A floor advances only when no recovery obligation or in-flight pin needs the prefix, and only alongside a recoverable retention checkpoint. Cross-destination and retry references can require retaining entire publications even when one queue has finished them. Milestone 8 implements this protocol; the initial no-reclamation implementation leaves its floors unchanged.
 
 ## Superblock
 
-Offsets below are from the start of `session.ang`. The initial immutable settings are separate from mutable roots. Step 1.5 defines how mutable roots become authoritative and how interrupted updates are resolved.
+Offsets below are from the start of `session.ang`. The initial immutable settings are separate from mutable roots. The [journal protocol](concurrency.md#operation-protocol-and-crash-boundaries) defines their authority and recovery.
 
 | Offset | Bytes | Field |
 | ---: | ---: | --- |
@@ -76,17 +76,19 @@ Offsets below are from the start of `session.ang`. The initial immutable setting
 | 72 | 8 | Current session-definition reference. |
 | 80 | 8 | Committed Registry revision root. |
 | 88 | 8 | Allocation tail logical offset. |
-| 96 | 8 | Registry transaction/recovery root. |
+| 96 | 8 | Last committed append-transaction manifest reference. |
 | 104 | 4 | Section count, `13` for this layout. |
 | 108 | 1 each | Address width (`64`), byte order (`1` = little-endian), atomic word width (`8`), reserved zero. |
 | 112 | 8 | Live session-state flags. |
-| 120 | 8 | Reserved recovery word. |
+| 120 | 8 | Last completed operation generation. |
 | 128 | 32 | Eight `u32` limits: Tasks, Queues, Source sets, Publishing sets, memberships per set, Fields, schema versions, symbols. |
 | 160 | 8 | UTF-8 application string-pool byte capacity. |
 | 168 | 8 | Segment allocation quantum; zero for two-plane storage. |
-| 176 | 80 | Reserved. |
+| 176 | 8 | Current accounted session bytes. |
+| 184 | 72 | Reserved. |
 | 256 | 416 | Thirteen 32-byte section directory entries. |
-| 672 | 3424 | Reserved, including space for step 1.5's root recovery protocol. |
+| 672 | 2048 | Operation journal: 256-byte header and 1792-byte inline command area. |
+| 2720 | 1376 | Reserved. |
 
 Each section entry contains `kind:u16`, `flags:u16`, `stride:u32`, `offset:u64`, `count:u64`, and `byte_length:u64`. A zero-count section has zero offset and byte length. Other sections must agree with their recorded capacity, stride, and checked byte count. Fixed sections occur in the following order and cannot overlap.
 
@@ -119,13 +121,13 @@ Every arena record starts with this 64-byte envelope. All lengths include requir
 | 4 | 4 | Envelope bytes, `64`. |
 | 8 | 8 | Total allocated record bytes. |
 | 16 | 8 | Immutable-region bytes, excluding envelope. |
-| 24 | 8 | Transaction identity / generation word, protocol specified in step 1.5. |
+| 24 | 8 | Operation generation from the journal. |
 | 32 | 8 | Previous retained record of the same revision/attempt chain, or zero. |
 | 40 | 8 | Associated Registry revision, zero if inapplicable. |
-| 48 | 8 | Commit/state word, protocol specified in step 1.5. |
+| 48 | 8 | Atomic readiness: `0` incomplete, `1` Ready, `2` Committed. Ready alone establishes no acceptance. |
 | 56 | 8 | Reserved recovery word. |
 
-Record kinds are `1` Session definition, `2` Task definition, `3` Queue definition, `4` Source definition, `5` Publishing definition, `6` Field definition, `7` Message schema, `8` Ring storage, `9` Publication, `10` Retry acceptance, `11` Registry transaction, and `12` Symbol value. Symbol value bodies and feature negotiation arrive in milestone 9. The transaction body and commit-word encoding are step 1.5 deliverables. Readers cannot infer acceptance from an uncommitted body or a ring slot alone.
+Record kinds are `1` Session definition, `2` Task definition, `3` Queue definition, `4` Source definition, `5` Publishing definition, `6` Field definition, `7` Message schema, `8` Ring storage, `9` Publication, `10` Retry acceptance, `11` Append transaction manifest, and `12` Symbol value. Kind 11 covers Registry, publication, and retry batches with the [transaction body and redo stream](concurrency.md#redo-commands-and-append-manifests). Symbol value bodies and feature negotiation arrive in milestone 9. Readers cannot infer acceptance from an uncommitted body or a ring slot alone.
 
 Entity definitions start with a common 64-byte body: `key:u64`, `created_by:u16`, `entity_state:u8`, five reserved bytes, `created_at:i64`, `definition_revision:u64`, `name:ByteSlice`, and `doc:ByteSlice`. Creation attribution/time stay unchanged across revisions. The metadata API's revision identifies the current committed definition. Non-lifecycle entities use state zero. Kind-specific fields follow that body; inline arrays and UTF-8 bytes follow those fields.
 
@@ -144,13 +146,13 @@ The Session definition has its own 128-byte fixed body: creator Task (`u16`), st
 
 ## Preallocated live state
 
-Live state contains fixed-width data and recovery space. Native lock objects and file descriptors stay outside these records. The fields below identify required data and byte positions; the reserved areas allow step 1.5 to define shadow/checkpoint and interrupted-update handling without allocating during acknowledgment.
+Live state contains fixed-width data and recovery space. Native lock objects and file descriptors stay outside these records. The shared journal handles interrupted updates without allocating during acknowledgment; the remaining row reserves permit later compatible extensions.
 
 | State | Required contents |
 | --- | --- |
-| Task, 256 bytes | First 64 bytes: incarnation, last issued publication sequence, restart count, PID, native thread ID, last attachment UTC time, flags including timestamp presence, and parent incarnation; all eight-byte fields. Remaining bytes reserve claim/recovery state. OS ownership checks remain authoritative; a recorded PID or attached bit alone proves no live claim. |
+| Task, 256 bytes | First 64 bytes: incarnation, last issued publication sequence, restart count, PID, native thread ID, last attachment UTC time, flags including timestamp presence, and parent incarnation; all eight-byte fields. Offset 64 reserves the current claim's retired-publication-sequence floor, 72 stores last detach UTC time, and 80 through 255 remain reserved. OS ownership checks remain authoritative; a recorded PID or attached bit alone proves no live claim. |
 | Queue, 256 bytes | Producer region at 0: last assigned queue sequence, latest delivery-link reference, ring reference, ring capacity, producer incarnation, retained-history floor sequence, retained-history floor link, reserved word; all `u64`. Consumer region at 64: terminal sequence watermark, oldest pending link, last acknowledgment UTC time, flags, then 32 reserved bytes. Bytes 128 through 255 reserve recovery state. The watermark can advance only past a contiguous prefix of acknowledged or explicitly lost deliveries. |
-| Source set, 256 bytes | At 0: issuance counter (`u64`), consumer incarnation (`u64`), selected Queue (`u16`), flags (`u16`), four reserved bytes, selected queue sequence (`u64`), publication reference (`u64`), receipt reference (`u64`), dequeue time (`i64`), delivery-link reference (`u64`). At 64: scheduling round, tie cursor, four RNG words, notification generation, reserved word; all `u64`. Bytes 128 through 255 reserve recovery state. |
+| Source set, 256 bytes | At 0: issuance counter (`u64`), consumer incarnation (`u64`), selected Queue (`u16`), flags (`u16`), four reserved bytes, selected queue sequence (`u64`), publication reference (`u64`), receipt reference (`u64`), dequeue time (`i64`), delivery-link reference (`u64`). At 64: scheduling round, tie cursor, four RNG words, notification generation, and `wait_armed`; all `u64`. Bytes 128 through 255 remain reserved. |
 | Publishing set, 128 bytes | Topology revision, snapshot definition reference, producer incarnation, flags; all `u64`. Remaining bytes reserve recovery state. |
 | Membership, 32 bytes | Queue (`u16`), priority (`u8`), flags (`u8`), four reserved bytes, topology revision (`u64`), remaining fair credits (`u64`), reserved word (`u64`). Rows are grouped by Source allocation slot, then Publishing slot, each with `memberships_per_set` entries. |
 
@@ -189,7 +191,7 @@ Every committed publication reserves a 128-byte receipt slot for **every destina
 
 Acknowledgment, release, and loss progress update these reserved receipts, Queue state, and Source state. They need no new history allocation when the log is full. This reserves historical dequeue/acknowledgment metadata as well as the queue's progress watermark. Receipt history lives as long as its publication is retained.
 
-A successful partial retry appends a Retry acceptance record referencing the original publication and previous attempt, with its attempt UTC time and an array of the same 48-byte destination rows. It references the original payload/schema and preallocated receipt slots. It assigns new queue sequences only to newly accepted destinations. Its fixed body is 64 bytes: original publication reference (`u64`), previous attempt reference (`u64`), attempt time (`i64`), attempted count (`u32`), four reserved bytes, outcomes `ArraySlice`, and 16 reserved bytes. Committed attempt records establish cumulative acceptance; already accepted destinations acquire no new obligation. A retry that accepts nothing appends nothing and returns its attempt's reasons while preserving the previous committed acceptance state.
+A successful partial retry appends a Retry acceptance record referencing the original publication and previous attempt, with its attempt UTC time and an array of the same 48-byte destination rows. It references the original payload/schema and preallocated receipt slots. It assigns new queue sequences only to newly accepted destinations. Its fixed body is 64 bytes: original publication reference (`u64`), previous attempt reference (`u64`), attempt time (`i64`), attempted count (`u32`), four reserved bytes, outcomes `ArraySlice`, actor Task (`u16`), six reserved bytes, and actor incarnation (`u64`). Committed attempt records establish cumulative acceptance; already accepted destinations acquire no new obligation. A retry that accepts nothing appends nothing and returns its attempt's reasons while preserving the previous committed acceptance state.
 
 A known fully rejected new publication allocates no committed record and changes no queue/log state. Required space includes the envelope, fixed body, full snapshot, payload, all receipt slots, and alignment. Step 1.5 defines preflight, reservation, atomic visibility, and rollback so allocation does not weaken that rejection contract. Interrupted calls can still return `OutcomeUnknown` and require recovery lookup.
 
@@ -240,14 +242,14 @@ An attaching reader validates magic/version/features/ABI, all directory lengths 
 | Message type/version | Immutable application schema identity, unrelated to framework versions. |
 | Framework/application strings | Diagnostic metadata; they do not substitute for format or ABI negotiation. |
 
-Initial live profiles target 64-bit little-endian Linux and macOS, with separately qualified x86-64 and ARM64 profiles and naturally aligned 64-bit shared synchronization words. Eventfd requires Linux. Step 1.5 assigns protocol/profile identifiers and validates the actual atomic and lock primitives before claiming progress guarantees. Portable offline decoding does not require the originating CPU, STL ABI, or synchronization profile.
+Initial live profiles target 64-bit little-endian Linux and macOS, with separately qualified x86-64 and ARM64 profiles and naturally aligned 64-bit shared synchronization words. Eventfd requires Linux. The [concurrency contract](concurrency.md#live-profiles-and-atomic-words) assigns protocol/profile identifiers and requires actual native primitive qualification before runtime support is advertised. Portable offline decoding does not require the originating CPU, STL ABI, or synchronization profile.
 
 A live attacher requires a supported format major/minor, supported required record/features, matching ABI/protocol, and sufficient build capacities. A newer minor is not automatically safe for an older writer; it must explicitly advertise compatibility or be rejected. Offline readers may skip recognized optional extensions using recorded sizes, and must never silently reinterpret an unsupported required encoding.
 
 Prototype format 1 remains readable by its existing tools and tests. Format 2 does not attach to, append to, or automatically upgrade it. Migration/replay creates a new session with new identity and explicit schema/Task/topology mappings; it does not preserve ownership locks or delivery tokens. That tooling follows milestone 10. Copying a quiescent format-2 session preserves its identity and history for inspection; its copy must not run as an independent live session with that same identity.
 
-## Step 1.5 handoff
+## Implementation handoff
 
-The remaining concurrency plan must prove atomic Registry revisions, shared allocation, all-destination visibility, partial retry idempotence, counter issuance, in-flight pinning, acknowledgment/release at `LogFull`, interrupted-tail/extent recovery, and notification generations against these records. It must state which paths lock, which can be lock-free, and their supported platforms. Commit words, recovery areas, and transaction bodies remain reserved here until that review; format 2.0 becomes implementable only after the two steps agree.
+The [step 1.5 protocol](concurrency.md) binds these records to serialized mutation, a single journal commit point, repeatable redo/rollback, fixed-state progress at `LogFull`, and notification generations. The executable model checks bounded crash schedules; native implementation and qualification follow in milestones 2 through 8 and 10. The initial API operations are blocking. This layout makes no end-to-end lock-free claim.
 
 [Milestone 1](milestones/milestone-1.md) · [Configuration](configuration.md) · [Public API](api.md)

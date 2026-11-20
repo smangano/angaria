@@ -53,4 +53,9 @@ if(BUILD_TESTING)
             "$<TARGET_FILE:angaria_queue_demo>"
   )
   set_tests_properties(restart_demo PROPERTIES TIMEOUT 30)
+  add_test(
+    NAME protocol_model
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/protocol_model.py"
+  )
+  set_tests_properties(protocol_model PROPERTIES TIMEOUT 10)
 endif()

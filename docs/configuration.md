@@ -158,7 +158,7 @@ Re-reading an in-flight delivery returns the same delivery. Explicit release, en
 
 With `allow_loss`, an issued delivery's payload remains pinned until acknowledgment or release. Ring overwrite does not invalidate an already issued payload. After release or consumer replacement, apply the current overrun/loss rules before selecting the next delivery. An overwritten pending delivery can then be skipped with its sequence range reported.
 
-With `recover_from_log`, retained publication and acknowledgment state reconstructs pending deliveries in queue order. Required unacknowledged records remain retained. The configured log capacity provides the resource bound. Delivery-progress storage must be reserved so acknowledgment and release remain possible when the publication log is full. Steps 1.4 and 1.5 specify that layout and commit protocol.
+With `recover_from_log`, retained publication and acknowledgment state reconstructs pending deliveries in queue order. Required unacknowledged records remain retained. The configured log capacity provides the resource bound. The [mapped layout](mapped-format.md) and [journal protocol](concurrency.md) reserve progress storage so acknowledgment, release, issuance, and replacement attachment remain possible when publication storage is full. Initial runtime mutations use a blocking session gate; there is no end-to-end lock-free guarantee.
 
 ## Validation and converters
 
