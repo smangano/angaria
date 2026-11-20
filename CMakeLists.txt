@@ -105,4 +105,11 @@ if(BUILD_TESTING)
   target_link_libraries(angaria_native_storage_startup PRIVATE angaria)
   add_test(NAME native_storage_startup COMMAND "$<TARGET_FILE:angaria_native_storage_startup>")
   set_tests_properties(native_storage_startup PROPERTIES TIMEOUT 10)
+
+  # Retain owners populated in main until normal static destruction.
+  add_executable(angaria_native_controller_shutdown test/native_controller_shutdown.cpp)
+  target_include_directories(angaria_native_controller_shutdown PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_controller_shutdown PRIVATE angaria)
+  add_test(NAME native_controller_shutdown COMMAND "$<TARGET_FILE:angaria_native_controller_shutdown>")
+  set_tests_properties(native_controller_shutdown PROPERTIES TIMEOUT 10)
 endif()

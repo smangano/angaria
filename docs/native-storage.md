@@ -70,6 +70,8 @@ The lock order remains Task claim, local session mutex, then session file lock. 
 
 Controller lock descriptors are close-on-exec. Registered `fork` handlers close the child's inherited lock descriptors **without** issuing `LOCK_UN`, which would also unlock the parent's shared open description. This both preserves a live parent's exclusion and prevents a surviving child from retaining a dead parent's locks. Inherited controller/lease operations and factories bound to initialized parent state return WrongOwner. These handlers do not remove the multithreaded-fork restriction above. [Native fork-handler scope](https://man7.org/linux/man-pages/man3/pthread_atfork.3.html)
 
+The descriptor registry has process lifetime because registered fork handlers cannot be removed and global owners can release their resources during static destruction. This retains the bookkeeping mutex and callback state until process exit; individual descriptors still close when their owners are destroyed.
+
 ## Native atomic qualification
 
 `qualify_native_profile()` checks compiler/OS/CPU prerequisites: a recognized Linux or macOS x86-64/ARM64 profile, little-endian representation, 64-bit addresses and file offsets, and always-lock-free eight-byte compiler atomics. The result supplies the native `LiveCompatibility` used by the controller. It does not test an arbitrary filesystem or certify another build's environment. Qualification tests must run on the actual target; the four profile identifiers remain separate platform targets.

@@ -9,6 +9,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <variant>
 
@@ -169,6 +170,37 @@ int main(int argc, char** argv)
       report(report_fd, 'A');
       wait_for_release(release_fd);
       return 0;
+    }
+    if (mode == "destroy_guard_wrong_thread")
+    {
+      std::thread wrong_thread([controller, guard = std::move(guard), report_fd, release_fd]() mutable
+      {
+        try
+        {
+          if (!has_error(guard.check_owner(), ErrorCode::WrongOwner) ||
+              !has_error(controller->file(guard), ErrorCode::WrongOwner))
+          {
+            ::_exit(72);
+          }
+          report(report_fd, 'W');
+          wait_for_release(release_fd);
+        }
+        catch (...)
+        {
+          ::_exit(72);
+        }
+        // Install only after the wrong-thread checks and handshake. Exit 73
+        // therefore identifies termination during this explicit destruction,
+        // without producing an intentional crash report or core dump.
+        std::set_terminate([]
+        {
+          ::_exit(73);
+        });
+        guard = mapped::MutationGuard{};
+        ::_exit(74);
+      });
+      wrong_thread.join();
+      throw std::runtime_error("wrong-thread guard destruction unexpectedly returned");
     }
     if (mode == "fork_reject")
     {

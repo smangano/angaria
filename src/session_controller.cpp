@@ -85,8 +85,10 @@ namespace angaria::detail::mapped
 
     DescriptorRegistry& descriptors()
     {
-      static DescriptorRegistry registry;
-      return registry;
+      // Fork handlers cannot be unregistered. Keep their registry alive through
+      // static destruction, including owners populated after initialization.
+      static auto* const registry = new DescriptorRegistry;
+      return *registry;
     }
 
     CoordinationDescriptor::~CoordinationDescriptor()

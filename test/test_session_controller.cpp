@@ -460,6 +460,50 @@ namespace
     require_value(reopened.check_owner());
   }
 
+  TEST_F(SessionControllerTest, BorrowedGuardOperationsRejectOtherThreadsWithoutReleasingOwnership)
+  {
+    auto controller = open_controller();
+    auto guard = require_value(controller->acquire_mutation());
+    std::optional<OperationResult> owner_check;
+    std::optional<Result<mapped::NativeFile*>> file_access;
+    std::thread observer([&]
+    {
+      owner_check.emplace(guard.check_owner());
+      file_access.emplace(controller->file(guard));
+    });
+    observer.join();
+    ASSERT_TRUE(owner_check);
+    ASSERT_TRUE(file_access);
+    expect_error(*owner_check, ErrorCode::WrongOwner);
+    expect_error(*file_access, ErrorCode::WrongOwner);
+    require_value(guard.check_owner());
+    EXPECT_GT(require_value(require_value(controller->file(guard))->size()), 0u);
+    Worker blocked(_directory, "try_gate");
+    EXPECT_EQ(blocked.receive(), 'B');
+    EXPECT_EQ(blocked.finish(), 0);
+    guard = mapped::MutationGuard{};
+    Worker released(_directory, "try_gate");
+    EXPECT_EQ(released.receive(), 'A');
+    EXPECT_EQ(released.finish(), 0);
+  }
+
+  TEST_F(SessionControllerTest, DestroyingLiveGuardOnAnotherThreadTerminatesTheOwningProcess)
+  {
+    auto controller = open_controller();
+    create_claims(controller, {1});
+    Worker owner(_directory, "destroy_guard_wrong_thread");
+    EXPECT_EQ(owner.receive(), 'W');
+    EXPECT_TRUE(require_value(controller->probe_task_claim(static_cast<TaskId>(1))));
+    expect_error(controller->try_acquire_mutation(), ErrorCode::OwnershipBusy);
+    // The worker installs this exit code only immediately before destroying
+    // its live guard on the wrong thread, after verifying both WrongOwner paths.
+    EXPECT_EQ(owner.finish(), 73);
+    auto claim = require_value(controller->try_claim_task(static_cast<TaskId>(1)));
+    auto guard = require_value(controller->try_acquire_mutation());
+    require_value(claim->check_owner());
+    require_value(guard.check_owner());
+  }
+
   TEST_F(SessionControllerTest, IndependentProcessGateAttemptsAndBlockingAcquisitionRespectOwnership)
   {
     auto controller = open_controller();
