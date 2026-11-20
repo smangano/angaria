@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(Angaria LANGUAGES CXX)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" ANGARIA_VERSION)
+string(STRIP "${ANGARIA_VERSION}" ANGARIA_VERSION)
+if(NOT ANGARIA_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+  message(FATAL_ERROR "VERSION must use major.minor.build format")
+endif()
+project(Angaria VERSION "${ANGARIA_VERSION}" LANGUAGES CXX)
+configure_file(VERSION VERSION COPYONLY)
+message(STATUS "Angaria version ${PROJECT_VERSION}")
 
 find_package(Boost 1.70 CONFIG REQUIRED)
 find_package(Threads REQUIRED)

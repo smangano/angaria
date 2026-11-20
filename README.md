@@ -2,6 +2,8 @@
 
 Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestone 1 is complete, and [milestone 2](docs/milestones/milestone-2.md) is under implementation.
 
+The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
+
 The current v0 prototype exchanges an integer message through a bounded filesystem queue, supports independent endpoint restart and explicit acknowledgment, and records messages in an inspectable session file. The commands below run that prototype.
 
 ## Build and test
