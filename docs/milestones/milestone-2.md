@@ -10,8 +10,8 @@ The staging branch `milestone-2` starts from the merged `main`. Each focused ste
 
 | Step | Branch | Scope | Completion criterion |
 | --- | --- | --- | --- |
-| 2.1 | `milestone-2-1` | Checked fixed-section planning, format-2 superblock encoding/decoding, and metadata compatibility checks. | Golden-byte and malformed-input tests validate the 4,096-byte prefix and section directory without native struct serialization. Decoding remains separate from live session validation. |
-| 2.2 | `milestone-2-2` | Native file and mapping RAII, checked ranges, file-size validation, and controlled resize. | File/mapping lifetimes and failure paths work on supported hosts; truncated files and invalid mapping ranges fail before access. |
+| 2.1 | `milestone-2-1` | Checked fixed-section planning, format-2 [superblock](../mapped-format.md#superblock) encoding/decoding, and metadata compatibility checks. | Golden-byte and malformed-input tests validate the 4,096-byte superblock prefix and section directory without native struct serialization. Decoding remains separate from live session validation. |
+| 2.2 | `milestone-2-2` | Native file and mapping [RAII](../glossary.md#encoding-and-native-resources), checked ranges, file-size validation, and controlled resize. | File/mapping lifetimes and failure paths work on supported hosts; truncated files and invalid mapping ranges fail before access. |
 | 2.3 | `milestone-2-3` | Shared session controller, mutation gate, per-Task claim primitives, and native atomic/profile qualification. | Independent processes and threads obey claim/gate exclusion; unsupported profiles fail before mutation. Supported hosts pass native ordering, descriptor-lifetime, and process-termination checks. |
 | 2.4 | `milestone-2-4` | Reserved operation journal, append manifests, redo/rollback, and native fault injection. | Interrupt actual stores and I/O at prepare, commit, apply, and recovery boundaries. Recovery is repeatable, preserves committed work, and discards only uncommitted work. |
 | 2.5 | `milestone-2-5` | Session bootstrap/create/attach, creator Task, effective options, global metadata, and fixed-state claim/incarnation/issuance operations. | A created session records its creator and settings; an independent process can attach compatibly. Claim replacement and issuance persist without append allocation, including at `LogFull`. |
@@ -28,9 +28,9 @@ Each PR implements its listed behavior and adds checks appropriate to that chang
 
 The [fixed-layout planner](../../include/angaria/detail/mapped_format.h) calculates all thirteen sections, their checked byte counts and offsets, and the arena start from effective `CapacityLimits`. The existing reservation helpers use that same plan so byte accounting has one source of truth.
 
-The internal [superblock codec](../../src/mapped_superblock.h) implements three operations:
+The **superblock** is the 4,096-byte session control area at the beginning of `session.ang`; its [definition and layout](../mapped-format.md#superblock) specify its contents. A **codec** converts between process-local values and encoded bytes. The internal [superblock codec](../../src/mapped_superblock.h) implements three operations:
 
-- `encode_initial_superblock()` produces a provisional 4,096-byte prefix containing the immutable configuration and planned section directory. It does not allocate the remaining sections or create/publish a session file.
+- `encode_initial_superblock()` produces a provisional 4,096-byte superblock prefix containing the immutable configuration and planned section directory, with initial control/journal values. It does not allocate the remaining sections or create/publish a session file.
 - `decode_superblock()` reads immutable configuration and validates the directory against its capacity-derived layout. It accepts exactly format 2.0 and rejects truncated, malformed, or inconsistent metadata before forming references into other storage.
 - `check_live_compatibility()` compares decoded metadata with caller-supplied ABI/protocol, required-feature, storage-support, and optional capacity-ceiling capabilities. It does not qualify the caller's native adapter.
 

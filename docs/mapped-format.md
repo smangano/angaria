@@ -4,6 +4,8 @@ Step 1.4 specifies the format for the shared Registry and future mapped queues. 
 
 The byte counts and checked capacity arithmetic are compile-checked in [mapped_format.h](../include/angaria/detail/mapped_format.h). Record encoding, mappings, and attachment validation arrive in the implementation milestones. The [step 1.5 concurrency contract](concurrency.md) assigns the journal, transaction, and recovery protocols, using the reserved space without changing the fixed reservation totals. A record's presence alone never establishes that it committed.
 
+The [terminology glossary](glossary.md) defines the storage, encoding, and recovery terms used here.
+
 ## Representation rules
 
 - Bytes have eight bits. Unsigned integers have the stated width; signed integers use two's complement. Multibyte values are little-endian.
@@ -41,7 +43,7 @@ Timeouts and elapsed waits use a process-local monotonic clock. UTC clock adjust
 
 ## Session files and logical offsets
 
-`session.ang` contains a 4,096-byte superblock and all fixed sections. For `two_plane`, its variable arena follows those sections in the same file, so logical offsets are file offsets. Queue rings also occupy arena space. A reference never points into a directory name or a native virtual address.
+`session.ang` begins with the [superblock](#superblock), a fixed 4,096-byte session control area, followed by the fixed sections described by its directory. For `two_plane`, its variable arena follows those sections in the same file, so logical offsets are file offsets. Queue rings also occupy arena space. A reference never points into a directory name or a native virtual address.
 
 For `segmented`, the fixed sections stay in `session.ang`; immutable arena records and growing queue storage use extent files. Each extent has a 4,096-byte header recording magic, format, session identity, logical start, allocated length, and feature/ABI requirements. Its filename encodes its logical start. Extent logical intervals cannot overlap each other or the fixed sections. Translation is `file_offset = logical_offset - extent_logical_start`. The extent header occupies the first 4,096 bytes of that interval and is not a record target.
 
@@ -56,6 +58,10 @@ Offsets remain stable while their targets are retained. Initial implementations 
 Queue state reserves a retained-history floor sequence and link. Traversal stops at that link and never follows its immutable predecessor into a reclaimed prefix. A floor advances only when no recovery obligation or in-flight pin needs the prefix, and only alongside a recoverable retention checkpoint. Cross-destination and retry references can require retaining entire publications even when one queue has finished them. Milestone 8 implements this protocol; the initial no-reclamation implementation leaves its floors unchanged.
 
 ## Superblock
+
+In Angaria, the **superblock** is the fixed 4,096-byte session control area at byte offset zero of `session.ang`. It is the starting point for identifying the session, interpreting its format, and locating its other storage sections. It contains session identity, format and compatibility information, storage/capacity settings, the fixed-section directory, mutable roots/control values, and the reserved operation journal.
+
+The directory always contains thirteen entries describing the fixed sections. Nonempty sections allocate storage after the superblock; zero-capacity sections allocate no bytes and have offset zero. Section contents, the Registry's variable-sized definition records, and message payloads are stored outside the superblock. The superblock is therefore the session's control area, not the entire Registry or the entire fixed reservation. Its immutable configuration metadata and mutable recovery/control fields have different validation and access rules.
 
 Offsets below are from the start of `session.ang`. The initial immutable settings are separate from mutable roots. The [journal protocol](concurrency.md#operation-protocol-and-crash-boundaries) defines their authority and recovery.
 

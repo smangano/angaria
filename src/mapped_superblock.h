@@ -14,9 +14,13 @@ namespace angaria::detail::mapped
   inline constexpr std::uint16_t synchronization_version = 1;
   inline constexpr std::uint64_t journal_feature = 1;
 
+  // The superblock is the 4096-byte session control area at offset zero of
+  // session.ang: metadata, section directory, mutable roots, and operation journal.
+  // See docs/mapped-format.md#superblock and docs/glossary.md.
   using SuperblockBytes = std::array<std::byte, superblock_bytes>;
 
-  // Process-local configuration values, not a native on-disk struct.
+  // Process-local immutable configuration values only; mutable roots and journal
+  // state are excluded. This type is not a native on-disk struct.
   struct SuperblockConfiguration
   {
     SessionId _session{};

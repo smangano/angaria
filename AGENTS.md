@@ -9,6 +9,11 @@
 
 Boost and Intel TBB are permitted dependencies when warranted by the implementation.
 
+## Documentation
+
+- Define specialized and project-specific terms at first use, or link to their canonical definition.
+- Keep shared terminology in `docs/glossary.md` consistent with the format/API contracts and code comments.
+
 ## Configuration
 
 Configuration files use TOML. Implement TOML support with [cpptoml](https://github.com/skystrife/cpptoml). Provide YAML, JSON, and XML configuration support through converters that emit TOML for the common loader and validation path.

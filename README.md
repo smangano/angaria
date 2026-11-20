@@ -37,7 +37,7 @@ The [mapped layout and compatibility contract](docs/mapped-format.md) defines th
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs a bounded crash-recovery reference model; native format-2 runtime qualification follows in the implementation milestones.
 
-Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. It encodes a provisional prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Those operations follow in the [milestone 2 steps](docs/milestones/milestone-2.md).
+Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. The [superblock](docs/mapped-format.md#superblock) is the fixed 4,096-byte session control area at the beginning of `session.ang`. Its codec encodes a provisional superblock prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Those operations follow in the [milestone 2 steps](docs/milestones/milestone-2.md). Related terms are defined in the [glossary](docs/glossary.md).
 
 ## Run the restart walkthrough
 
