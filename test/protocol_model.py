@@ -107,7 +107,7 @@ class Model:
         self.require_clean()
         if intent is None:
             return
-        if intent.base_tail != len(self.arena):
+        if intent.base_tail != len(self.arena) or intent.base_state != self.state:
             raise KnownRejection("stale plan")
         # This body is ignored if the writer dies before PREPARED is published.
         self.journal = copy.deepcopy(intent)
@@ -419,6 +419,31 @@ class ProtocolModelTest(unittest.TestCase):
         with self.assertRaisesRegex(KnownRejection, "LogFull"):
             full.publish(full.next_id())
         self.assertEqual(full.__dict__, before)
+
+    def test_stale_plans_reject_same_tail_state_changes_without_writes(self):
+        for append_plan, recover_first in itertools.product((False, True), repeat=2):
+            with self.subTest(append_plan=append_plan, recover_first=recover_first):
+                model = self.with_id() if append_plan else Model()
+                issued_before = model.state["producer"]["issued"]
+                stale = (model.publish(model.next_id()) if append_plan else model.issue_id())
+                first = model.issue_id()
+                if recover_first:
+                    execution = model.execute(first)
+                    while next(execution) != "committed":
+                        pass
+                    list(model.recover())
+                else:
+                    model.finish(first)
+
+                self.assertEqual(len(model.arena), stale.base_tail)
+                self.assertEqual(model.state["producer"]["issued"], issued_before + 1)
+                before = copy.deepcopy(model.__dict__)
+                with self.assertRaisesRegex(KnownRejection, "stale plan"):
+                    model.finish(stale)
+                self.assertEqual(model.__dict__, before)
+
+                model.finish(model.issue_id())
+                self.assertEqual(model.state["producer"]["issued"], issued_before + 2)
 
     def test_partial_retry_preserves_original_acceptance_without_duplicates(self):
         base = self.with_id()
