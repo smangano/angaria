@@ -17,6 +17,26 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+## Configuration contract
+
+The [configuration and lifecycle contract](docs/configuration.md) defines the proposed TOML schema for the Registry implementation. The [trading example](examples/trading.toml) exercises process and thread Tasks, both Queue Set types, and the delivery policies.
+
+CTest parses this example with pinned cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`. CMake fetches those headers when testing is enabled. A local checkout of that revision can be supplied for an offline build.
+
+```sh
+cmake -S . -B build -DFETCHCONTENT_SOURCE_DIR_CPPTOML=/absolute/path/to/cpptoml
+```
+
+Milestone 2 integrates configuration loading and semantic validation with the Registry.
+
+## Public API contract
+
+The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
+
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines the proposed format 2.0, capacity accounting, and migration rules. Its checked reservation arithmetic is tested; format-2 file I/O and synchronization follow in the implementation milestones.
+
+The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs a bounded crash-recovery reference model; native format-2 runtime qualification follows in the implementation milestones.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

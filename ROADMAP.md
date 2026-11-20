@@ -16,6 +16,12 @@ The application coordinates sending threads that share a producer endpoint. Queu
 
 Tasks, queues, queue sets, memberships, message definitions, fields, and pools have explicit capacity limits. Build settings and configuration provide these bounds. Milestone 1 specifies how settings bind and how attaching processes validate the effective limits. Registration within reserved capacity can support runtime topology changes if the lifecycle contract permits them.
 
+### Configuration format
+
+Configuration files use TOML, implemented with [cpptoml](https://github.com/skystrife/cpptoml). Converters provide YAML, JSON, and XML configuration support by emitting TOML against Angaria's configuration schema. Converted configurations use the same loader and validation path.
+
+Milestone 1 specifies the schema and supported syntax for the selected cpptoml version. Milestone 2 integrates loading and validation, and milestone 10 supplies converter tooling.
+
 ### Delivery and acceptance policies
 
 | Policy | Agreed default | Configurable alternative |
@@ -33,10 +39,12 @@ The default recovery policy retains records needed for unacknowledged deliveries
 
 ## 1 Core architecture and policy contracts
 
+The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divide this work into five step PRs targeting `milestone-1`.
+
 - Define the public C++ model for Tasks, queues, both Queue Set types, registration, ownership, attachment, acknowledgment, and failure results.
 - Specify policy interfaces for storage mapping, source selection, consumer synchronization, queue delivery, and publishing acceptance.
 - Define mapped layouts, offset-based references, ID widths, timestamps, immutable schema identities, and file-format compatibility. Reconcile prototype representations with the wiki, including its 32-bit field type identifiers.
-- Resolve startup versus runtime registration and membership changes, policy binding and mutability, effective capacity validation, and acknowledgment scope.
+- Resolve startup versus runtime registration and membership changes, policy binding and mutability, effective capacity validation, and acknowledgment scope. Specify the TOML configuration schema, cpptoml syntax compatibility, validation outcomes, and converter contract.
 - Design shared payload allocation, publication commits, abandoned-write recovery, and the scope of lock-free guarantees. Evaluate these protocols against single-producer queues and all-destination acceptance before fixing the storage layout.
 
 Completion requires a reviewed public API example for a bounded multi-process application and a concrete mapped layout and concurrency plan. Raise tradeoffs if the agreed guarantees conflict during protocol validation.
@@ -45,6 +53,7 @@ Completion requires a reviewed public API example for a bounded multi-process ap
 
 - Implement the live Registry in shared mapped memory and place its persisted representation at the start of message logs.
 - Implement registration and lookup for Tasks, Queues, Source Queue Sets, Publishing Queue Sets, Messages, schema versions, and Fields.
+- Load TOML configuration through cpptoml and validate capacities, topology, and policy settings before applying Registry updates.
 - Record global metadata, application and Angaria versions, creator identities, names, descriptions, ownership, membership, priorities, capacities, and effective policies.
 - Track Task registration, restart/incarnation information, and topology lifecycle history. Generalize the prototype's role ownership to registered Tasks and Queue Sets.
 - Implement consistent IDs and name indexes, concurrent registration, capacity errors, and recovery from interrupted updates.
@@ -70,7 +79,7 @@ Completion requires applications to exchange several registered message types an
 - Implement recovery from the log for lagging consumers by default, plus configured delivery loss with gap reporting.
 - Make recorded publication and acknowledgment progress sufficient to reconstruct delivery after ring overwrite or endpoint replacement.
 
-Completion requires contention, wraparound, resource-exhaustion, partial-write, and producer-termination tests, plus an audit of the agreed lock-free progress guarantees. Establish latency and throughput measurements for subsequent policy comparisons.
+Completion requires contention, wraparound, resource-exhaustion, partial-write, and producer-termination tests, plus an audit of the [stated progress guarantees](docs/concurrency.md#supported-failure-and-progress-scope). The initial protocol serializes mutation; measure allocation/commit contention alongside latency and throughput for subsequent policy comparisons.
 
 ## 5 Source Queue Sets
 
@@ -126,7 +135,8 @@ Completion requires round-trip encoding, schema-driven inspection, pool-referenc
 
 - Complete Registry, topology, Task lifecycle, queue, delivery, and message inspection.
 - Implement explicit replay with defined ordering, destination, and identity semantics.
-- Complete configuration tooling and programmer, operator, best-practice, and performance documentation.
+- Provide YAML, JSON, and XML configuration converters that emit schema-valid TOML, including tests for equivalent configurations and explicit errors for unsupported or lossy mappings.
+- Complete TOML configuration tooling and programmer, operator, best-practice, and performance documentation.
 - Publish an application example with bounded cooperating processes, both Queue Set types, and selectable policies.
 - Qualify supported policy combinations under concurrency, process termination, and resource exhaustion on x86-64 and ARM64.
 - Publish latency, throughput, CPU, memory, and storage measurements with the tested platform and configuration.
