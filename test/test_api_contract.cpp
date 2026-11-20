@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace
@@ -18,6 +19,9 @@ namespace
   static_assert(!std::is_copy_constructible_v<PublishingQueueSet>);
   static_assert(!std::is_copy_constructible_v<QueueWriter>);
   static_assert(std::is_same_v<decltype(MessageView::_payload), std::span<const std::byte>>);
+  static_assert(!std::is_aggregate_v<CapacityLimits>);
+  static_assert(std::is_same_v<decltype(std::declval<CapacityLimits&>().tasks(1)), CapacityLimits&>);
+  static_assert(std::is_same_v<decltype(CapacityLimits{}.tasks(1)), CapacityLimits>);
 
   TEST(ApiContract, DescriptorsExposeTheAgreedDefaults)
   {
@@ -35,6 +39,35 @@ namespace
     EXPECT_FALSE(source._randomSeed);
     EXPECT_EQ(defaults._acceptance, AcceptancePolicy::AllDestinations);
     EXPECT_FALSE(publisher._acceptance);
+  }
+
+  TEST(ApiContract, CapacityOverridesPreserveDefaultsAndOwnTheirValues)
+  {
+    constexpr auto configured = CapacityLimits{}.tasks(8).queues(64).source_sets(4);
+    static_assert(configured._tasks == 8);
+    static_assert(configured._queues == 64);
+    static_assert(configured._sourceSets == 4);
+
+    const SessionOptions defaults;
+    EXPECT_EQ(configured._publishingSets, defaults._limits._publishingSets);
+    EXPECT_EQ(configured._fields, defaults._limits._fields);
+    EXPECT_EQ(configured._stringPoolBytes, defaults._limits._stringPoolBytes);
+
+    auto limits = configured;
+    auto& updated = limits.tasks(2).queues(12);
+    EXPECT_EQ(&updated, &limits);
+    EXPECT_EQ(limits._tasks, 2u);
+    EXPECT_EQ(limits._queues, 12u);
+    EXPECT_EQ(configured._tasks, 8u);
+
+    const auto& owned = CapacityLimits{}.tasks(3).queues(7);
+    EXPECT_EQ(owned._tasks, 3u);
+    EXPECT_EQ(owned._queues, 7u);
+
+    const auto disabled = CapacityLimits{}.symbols(0).string_pool_bytes(0);
+    EXPECT_EQ(disabled._symbols, 0u);
+    EXPECT_EQ(disabled._stringPoolBytes, 0u);
+    EXPECT_EQ(disabled._tasks, defaults._limits._tasks);
   }
 
   TEST(ApiContract, PartialPublicationPreservesPerDestinationReasons)

@@ -39,6 +39,20 @@ The creator consumes one reserved Task entry. File-based creation uses its exist
 
 `Session::options()` exposes the effective settings and limits. Session metadata includes creator, creation time, framework/application versions, and creator user. Registry metadata exposes entity creator, registration time, and revision. Task runtime inspection supplies PID/thread diagnostics, incarnation, restart count, last attachment, and attachment state.
 
+## Capacity defaults and named setters
+
+`CapacityLimits{}` starts with the bounded [C++ default profile](configuration.md#capacity-limits). `SessionOptions::_limits` uses that profile. Override individual capacities through named setters:
+
+```cpp
+auto limits = CapacityLimits{}.tasks(16).queues(128).source_sets(16);
+```
+
+Unspecified capacities retain their defaults. Setters modify an existing object and support chaining; chaining on a temporary returns a value that can be stored safely. Positional capacity lists are not supported. Setter names follow the project's `snake_case` convention.
+
+`CapacityLimits::empty()` explicitly sets every capacity to zero. Individual facilities can also be disabled with a zero-valued setter. All settings still pass through normal validation; an empty profile cannot create a session until it has room for its creator Task and required resources.
+
+These defaults apply to new programmatic sessions. TOML capacity keys remain required. Existing-session attachment uses the recorded effective limits and validates any supplied configuration against them.
+
 ## Descriptors and policy inheritance
 
 Optional policy overrides in entity descriptors inherit the recorded session defaults. Session defaults initially select recovery from log, all-destination acceptance, strict selection, and spinning. Queue ring capacity inherits the session default of 1024 for two-plane storage.

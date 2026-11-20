@@ -69,15 +69,131 @@ namespace angaria
   // These descriptors own process-local values. Mapped representations have a separate layout.
   struct CapacityLimits
   {
-    std::uint32_t _tasks{};
-    std::uint32_t _queues{};
-    std::uint32_t _sourceSets{};
-    std::uint32_t _publishingSets{};
-    std::uint32_t _membershipsPerSet{};
-    std::uint32_t _fields{};
-    std::uint32_t _messageSchemas{};
-    std::uint32_t _symbols{};
-    std::uint64_t _stringPoolBytes{};
+    constexpr CapacityLimits() noexcept = default;
+
+    std::uint32_t _tasks{16};
+    std::uint32_t _queues{128};
+    std::uint32_t _sourceSets{16};
+    std::uint32_t _publishingSets{16};
+    std::uint32_t _membershipsPerSet{32};
+    std::uint32_t _fields{256};
+    std::uint32_t _messageSchemas{128};
+    std::uint32_t _symbols{1024};
+    std::uint64_t _stringPoolBytes{1048576};
+
+    // Lvalues update in place; temporary chains return owning values.
+    constexpr CapacityLimits& tasks(std::uint32_t count) & noexcept
+    {
+      _tasks = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits tasks(std::uint32_t count) && noexcept
+    {
+      return tasks(count);
+    }
+
+    constexpr CapacityLimits& queues(std::uint32_t count) & noexcept
+    {
+      _queues = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits queues(std::uint32_t count) && noexcept
+    {
+      return queues(count);
+    }
+
+    constexpr CapacityLimits& source_sets(std::uint32_t count) & noexcept
+    {
+      _sourceSets = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits source_sets(std::uint32_t count) && noexcept
+    {
+      return source_sets(count);
+    }
+
+    constexpr CapacityLimits& publishing_sets(std::uint32_t count) & noexcept
+    {
+      _publishingSets = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits publishing_sets(std::uint32_t count) && noexcept
+    {
+      return publishing_sets(count);
+    }
+
+    constexpr CapacityLimits& memberships_per_set(std::uint32_t count) & noexcept
+    {
+      _membershipsPerSet = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits memberships_per_set(std::uint32_t count) && noexcept
+    {
+      return memberships_per_set(count);
+    }
+
+    constexpr CapacityLimits& fields(std::uint32_t count) & noexcept
+    {
+      _fields = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits fields(std::uint32_t count) && noexcept
+    {
+      return fields(count);
+    }
+
+    constexpr CapacityLimits& message_schemas(std::uint32_t count) & noexcept
+    {
+      _messageSchemas = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits message_schemas(std::uint32_t count) && noexcept
+    {
+      return message_schemas(count);
+    }
+
+    constexpr CapacityLimits& symbols(std::uint32_t count) & noexcept
+    {
+      _symbols = count;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits symbols(std::uint32_t count) && noexcept
+    {
+      return symbols(count);
+    }
+
+    constexpr CapacityLimits& string_pool_bytes(std::uint64_t bytes) & noexcept
+    {
+      _stringPoolBytes = bytes;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr CapacityLimits string_pool_bytes(std::uint64_t bytes) && noexcept
+    {
+      return string_pool_bytes(bytes);
+    }
+
+    [[nodiscard]] static constexpr CapacityLimits empty() noexcept
+    {
+      return CapacityLimits{}
+          .tasks(0)
+          .queues(0)
+          .source_sets(0)
+          .publishing_sets(0)
+          .memberships_per_set(0)
+          .fields(0)
+          .message_schemas(0)
+          .symbols(0)
+          .string_pool_bytes(0);
+    }
   };
 
   struct PolicyDefaults

@@ -11,14 +11,15 @@ namespace
   namespace mapped = angaria::detail::mapped;
 
   constexpr auto max_unsigned = std::numeric_limits<std::uint64_t>::max();
-  static_assert(mapped::fixed_layout_bytes(CapacityLimits{}) == mapped::superblock_bytes);
+  static_assert(mapped::fixed_layout_bytes(CapacityLimits::empty()) == mapped::superblock_bytes);
+  static_assert(mapped::fixed_layout_bytes(CapacityLimits{}) == 1197056);
   static_assert(mapped::ring_storage_bytes(1024) == 32832);
   static_assert(mapped::checked_align(65, 64) == 128);
   static_assert(!mapped::contains_range(max_unsigned, max_unsigned - 1, 3));
 
   TEST(MappedFormat, TradingTopologyHasAnExplicitFixedReservation)
   {
-    const CapacityLimits limits{16, 128, 16, 16, 32, 256, 128, 1024, 1048576};
+    const auto limits = CapacityLimits{}.tasks(16).queues(128).source_sets(16);
     const auto fixed = mapped::fixed_layout_bytes(limits);
 
     ASSERT_TRUE(fixed);
@@ -31,28 +32,26 @@ namespace
 
   TEST(MappedFormat, QueueSetKindsShareOneIdentityNamespace)
   {
-    CapacityLimits limits{};
-    limits._sourceSets = 32768;
-    limits._publishingSets = 32767;
+    auto limits = CapacityLimits::empty().source_sets(32768).publishing_sets(32767);
     EXPECT_TRUE(mapped::fixed_layout_bytes(limits));
 
     ++limits._publishingSets;
     EXPECT_FALSE(mapped::fixed_layout_bytes(limits));
-    limits._sourceSets = std::numeric_limits<std::uint32_t>::max();
-    limits._publishingSets = std::numeric_limits<std::uint32_t>::max();
+    limits.source_sets(std::numeric_limits<std::uint32_t>::max())
+        .publishing_sets(std::numeric_limits<std::uint32_t>::max());
     EXPECT_FALSE(mapped::valid_capacities(limits));
   }
 
   TEST(MappedFormat, EntityCapacitiesRespectIdentifierWidths)
   {
-    CapacityLimits limits{};
-    limits._tasks = 65535;
-    limits._queues = 65535;
-    limits._membershipsPerSet = 65535;
-    limits._fields = 0x01000000;
     // Schema versions and symbols have independent 32-bit table cardinalities.
-    limits._messageSchemas = 65536;
-    limits._symbols = 65536;
+    const auto limits = CapacityLimits::empty()
+                            .tasks(65535)
+                            .queues(65535)
+                            .memberships_per_set(65535)
+                            .fields(0x01000000)
+                            .message_schemas(65536)
+                            .symbols(65536);
     EXPECT_TRUE(mapped::fixed_layout_bytes(limits));
 
     auto invalid = limits;
@@ -71,17 +70,16 @@ namespace
 
   TEST(MappedFormat, EmptyFacilitiesAndOddSizedPoolsKeepTheArenaAligned)
   {
-    CapacityLimits limits{};
+    auto limits = CapacityLimits::empty();
     EXPECT_EQ(mapped::fixed_layout_bytes(limits), 4096u);
 
-    limits._symbols = 1;
-    limits._stringPoolBytes = 1;
+    limits.symbols(1).string_pool_bytes(1);
     EXPECT_EQ(mapped::fixed_layout_bytes(limits), 4224u);
-    limits._symbols = 0;
+    limits.symbols(0);
     EXPECT_EQ(mapped::fixed_layout_bytes(limits), 4160u);
 
     // Capacity reservation is independent of the currently declared topology.
-    limits._membershipsPerSet = 32;
+    limits.memberships_per_set(32);
     EXPECT_TRUE(mapped::fixed_layout_bytes(limits));
   }
 
@@ -114,10 +112,9 @@ namespace
     EXPECT_TRUE(mapped::valid_log_limit(mapped::max_log_bytes));
     EXPECT_FALSE(mapped::valid_log_limit(mapped::max_log_bytes + 1));
 
-    CapacityLimits limits{};
-    limits._stringPoolBytes = max_unsigned;
+    auto limits = CapacityLimits::empty().string_pool_bytes(max_unsigned);
     EXPECT_FALSE(mapped::fixed_layout_bytes(limits));
-    limits._stringPoolBytes = mapped::max_log_bytes - mapped::superblock_bytes;
+    limits.string_pool_bytes(mapped::max_log_bytes - mapped::superblock_bytes);
     EXPECT_FALSE(mapped::fixed_layout_bytes(limits));
     limits._stringPoolBytes -= 63;
     EXPECT_EQ(mapped::fixed_layout_bytes(limits), mapped::max_log_bytes - 63);

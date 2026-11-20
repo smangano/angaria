@@ -33,19 +33,21 @@ The storage mapping and allocation settings bind when a session is created. Exis
 
 ## Capacity limits
 
-The following `limits` keys are required nonnegative integers. A zero limit reserves no entries or bytes for that facility.
+The following TOML `limits` keys are required nonnegative integers. A zero limit reserves no entries or bytes for that facility. The C++ defaults apply to `CapacityLimits{}` and `SessionOptions::_limits`; TOML files still specify every key explicitly.
 
-| Key | Reserved capacity |
-| --- | --- |
-| `tasks` | Logical Tasks, including both process and thread Tasks. |
-| `queues` | Named Queues. |
-| `source_sets` | Source Queue Sets. |
-| `publishing_sets` | Publishing Queue Sets. |
-| `memberships_per_set` | Member queues in each Source or Publishing Queue Set. |
-| `fields` | Registered Field definitions. |
-| `message_schemas` | Registered message-schema versions. Each version consumes one entry. |
-| `symbols` | Symbol entries. |
-| `string_pool_bytes` | Bytes reserved for the string pool. |
+| Key | C++ default | Reserved capacity |
+| --- | ---: | --- |
+| `tasks` | 16 | Logical Tasks, including both process and thread Tasks. |
+| `queues` | 128 | Named Queues. |
+| `source_sets` | 16 | Source Queue Sets. |
+| `publishing_sets` | 16 | Publishing Queue Sets. |
+| `memberships_per_set` | 32 | Member queues in each Source or Publishing Queue Set. |
+| `fields` | 256 | Registered Field definitions. |
+| `message_schemas` | 128 | Registered message-schema versions. Each version consumes one entry. |
+| `symbols` | 1,024 | Symbol entries. |
+| `string_pool_bytes` | 1,048,576 | Bytes reserved for the string pool. |
+
+The [C++ API](api.md#capacity-defaults-and-named-setters) provides named fluent setters for overrides and `CapacityLimits::empty()` for an explicit all-zero profile. Defaults apply at new-session construction; recorded effective limits remain authoritative when attaching to an existing session.
 
 Capacity limits bind at session creation and are recorded in the Registry. Configuration values must fit the build's supported ceilings and the [mapped layout's ranges and byte accounting](mapped-format.md). Source and Publishing Queue Set capacities together must fit 65,535 IDs. The initial declarations and activation resources must fit those limits and the session byte cap before creation can succeed. Registry names, documentation, and schema Field lists consume log arena bytes separately from the reserved application string pool.
 

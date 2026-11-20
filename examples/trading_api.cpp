@@ -131,15 +131,7 @@ namespace angaria::examples
     options._applicationVersion = "Trading-1";
     options._directory = directory;
     options._maxLogBytes = 67108864;
-    options._limits._tasks = 16;
-    options._limits._queues = 128;
-    options._limits._sourceSets = 16;
-    options._limits._publishingSets = 16;
-    options._limits._membershipsPerSet = 32;
-    options._limits._fields = 256;
-    options._limits._messageSchemas = 128;
-    options._limits._symbols = 1024;
-    options._limits._stringPoolBytes = 1048576;
+    options._limits = CapacityLimits{}.tasks(16).queues(128).source_sets(16);
 
     TaskDescriptor creator;
     creator._name = "MarketData";
