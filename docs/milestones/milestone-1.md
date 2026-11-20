@@ -14,7 +14,7 @@ The staging branch is `milestone-1`. Each step uses its own branch and a PR targ
 | 1.4 | `milestone-1-4` | Mapped representations, offsets, ID widths, timestamps, schema identity, capacities, and compatibility. | Review a layout and versioning plan suitable for Registry implementation. |
 | 1.5 | `milestone-1-5` | Shared allocation, publication commits, interrupted-write recovery, and progress guarantees. | Validate crash/concurrency protocols and reconcile them with the API and layout. |
 
-Each step carries forward the contracts integrated by the preceding PRs. The following sections define step 1.1. The [configuration and lifecycle contract](../configuration.md) specifies step 1.2, with a [TOML example](../../examples/trading.toml) parsed by the pinned cpptoml revision. The [public C++ API contract](../api.md) and [compile-checked example](../../examples/trading_api.cpp) define step 1.3. Steps 1.4 and 1.5 build on those contracts.
+Each step carries forward the contracts integrated by the preceding PRs. The following sections define step 1.1. The [configuration and lifecycle contract](../configuration.md) specifies step 1.2, with a [TOML example](../../examples/trading.toml) parsed by the pinned cpptoml revision. The [public C++ API contract](../api.md) and [compile-checked example](../../examples/trading_api.cpp) define step 1.3. The [mapped layout and compatibility contract](../mapped-format.md) specifies step 1.4. Step 1.5 completes the concurrency and recovery protocols against those layouts.
 
 ## Domain objects
 

@@ -1,10 +1,13 @@
 #include "angaria/detail/cpptoml.h"
+#include "angaria/descriptors.h"
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -43,6 +46,32 @@ namespace
     ASSERT_EQ(queues->get().size(), 3u);
     EXPECT_EQ(queues->get()[0]->get_as<std::string>("delivery").value_or(""), "allow_loss");
     EXPECT_EQ(queues->get()[2]->get_as<std::int64_t>("priority").value_or(0), 200);
+  }
+
+  TEST_F(ConfigurationExampleTest, DefaultCapacityProfileMatchesTradingExample)
+  {
+    const angaria::CapacityLimits defaults;
+    const std::array<std::pair<const char*, std::uint64_t>, 9> limits{{
+        {"tasks", defaults._tasks},
+        {"queues", defaults._queues},
+        {"source_sets", defaults._sourceSets},
+        {"publishing_sets", defaults._publishingSets},
+        {"memberships_per_set", defaults._membershipsPerSet},
+        {"fields", defaults._fields},
+        {"message_schemas", defaults._messageSchemas},
+        {"symbols", defaults._symbols},
+        {"string_pool_bytes", defaults._stringPoolBytes},
+    }};
+
+    for (const auto& [name, expected] : limits)
+    {
+      const auto path = std::string{"limits."} + name;
+      SCOPED_TRACE(path);
+      const auto value = _configuration->get_qualified_as<std::int64_t>(path);
+      ASSERT_TRUE(value);
+      ASSERT_GE(*value, 0);
+      EXPECT_EQ(static_cast<std::uint64_t>(*value), expected);
+    }
   }
 
   TEST_F(ConfigurationExampleTest, PreservesWideFieldIdsAndOrderedReferences)
