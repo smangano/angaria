@@ -34,7 +34,7 @@ namespace angaria::detail::mapped
     std::uint64_t _segmentBytes{};
   };
 
-  // The native adapter supplies its qualified profile in a later implementation step.
+  // The native adapter supplies its checked host profile via qualify_native_profile().
   struct LiveCompatibility
   {
     std::uint32_t _liveAbiProfile{};

@@ -1,10 +1,10 @@
 # Native file and mapping support
 
-Step 2.2 implements the private [native storage API](../src/native_file.h) used by the future format-2 backend. `NativeFile` owns a native file descriptor, and `MappedRegion` owns a shared memory mapping. Both use move-only [RAII](glossary.md#encoding-and-native-resources): moving transfers ownership, and destruction releases the owned resource without throwing.
+Steps 2.2 and 2.3 implement the private native resources used by the future format-2 backend. In the [file/mapping API](../src/native_file.h), `NativeFile` owns a native file descriptor, and `MappedRegion` owns a shared memory mapping. Both use move-only [RAII](glossary.md#encoding-and-native-resources): moving transfers ownership, and destruction releases the owned resource without throwing. The [controller](../src/session_controller.h) adds shared process-local ownership, the mutation gate, and Task lifetime claims; the [atomic adapter](../src/native_atomic.h) supplies native word access and ordering.
 
 A **file descriptor** is the process-local integer handle returned by the operating system when a file opens. A **mapped region** makes a file byte range accessible through virtual memory. Its returned **view** is a borrowed C++ byte span, not an owner. The [glossary](glossary.md#encoding-and-native-resources) defines the related terms, including inode identity, host pages, positional I/O, and mapping leases.
 
-These primitives do not create a usable Session, acquire the session mutation gate, interpret the superblock, or recover a journal. Step 2.3 adds native ownership/synchronization qualification, and step 2.4 adds journal transactions and recovery. Resize and write operations here are ordinary native I/O rather than committed Angaria publications.
+The file/mapping owners alone do not acquire the session mutation gate or interpret session contents. The controller validates immutable superblock metadata and native compatibility, but does not recover the journal or create a usable public Session. Step 2.4 adds journal transactions and recovery. Resize and write operations here are ordinary native I/O rather than committed Angaria publications.
 
 ## Files and access
 
@@ -48,22 +48,51 @@ Lease protection is process-local. Another process or code bypassing this API ca
 
 Files and mappings belong to the process that created their owners. Operations check that process identity before acquiring any inherited mutex. Inherited handles return WrongOwner. The process-local inode registry initializes on first use, including before `main`; once initialized, its factory calls also return WrongOwner in a fork child until the child execs a new program. A child whose parent never initialized native storage has no inherited registry to reject. A successful exec starts fresh storage state and removes inherited mappings.
 
-This initial private layer does not implement general fork safety. After a multithreaded fork, the child must exec or call `_exit` before using this layer or cleaning up inherited C++ owners. Its inherited mutex or allocator state may have belonged to a thread that no longer exists. Mapping cleanup avoids locking the copied per-inode mutex in a child, but that does not make arbitrary post-fork C++ cleanup safe. Step 2.3 integrates the ownership/controller policy before usable public Session attachment is introduced.
+This private layer does not implement general fork safety. After a multithreaded fork, the child must exec or call `_exit` before using this layer or cleaning up inherited C++ owners. The same cleanup restriction applies when a quiescent fork inherits an active mutation guard: its copied locked mutex cannot become child-owned. Inherited mutex or allocator state may have belonged to a thread that no longer exists. Mapping cleanup avoids locking the copied per-inode mutex in a child, but that does not make arbitrary post-fork C++ cleanup safe. Usable public Session attachment follows journal recovery and bootstrap in steps 2.4 and 2.5.
+
+## Shared controller and mutation gate
+
+`SessionController::open_existing(directory)` opens an existing `session.ang`, `mutation.lock`, and `claims` directory. It decodes immutable [superblock](mapped-format.md#superblock) metadata, checks that the file contains its complete fixed-section prefix within the recorded byte ceiling, and compares its required features, storage mapping, synchronization version, and ABI profile with the native adapter. It does not create missing coordination resources or repair session contents. Exclusive creation of the session directory and its initial resources belongs to step 2.5.
+
+Controllers are shared within a process by session identity and underlying file identity. Directory aliases resolve to the same controller. A live session copy or a conflicting set of coordination resources is rejected instead of silently introducing an independent mutation gate for the same session. Coordination files must remain stable; they are never unlinked or replaced by these primitives.
+
+A **mutation guard** owns one acquisition of the [mutation gate](glossary.md#ownership-and-recovery). `acquire_mutation()` takes the controller's local mutex before exclusive `flock` on `mutation.lock`; `try_acquire_mutation()` attempts both without waiting for gate ownership and returns OwnershipBusy on contention. Nested acquisition on the owning thread also returns OwnershipBusy. The local mutex excludes threads even though they share a file-lock descriptor. Native ordering fences surround the protected work. Normal guard destruction releases the file lock before the local mutex, including when an exception unwinds the operation.
+
+The guard retains its controller and is move-only. It is **thread-affine**: acquisition, use, moves, and destruction must stay on the acquiring thread. Destroying a live guard on another thread, or an unrecoverable native unlock failure, calls `std::terminate` rather than continuing with invalid lock ownership. `file(guard)` supplies a borrowed file owner for later journal operations; the guard must belong to that controller and remain alive for the entire use. The resource API does not make arbitrary callbacks, mapped-span access, or unlocked file use safe.
+
+## Task lifetime claims
+
+`create_task_claim_file(guard, task)` creates or validates a stable `claims/task-<id>.lock` under the mutation gate. It is a resource primitive; it does not register a Task or persist an incarnation. `try_claim_task(task, parent)` opens that existing file through a distinct open description and attempts an exclusive nonblocking lock. A process-local claim table also rejects duplicate ownership. A different Task has an independent lifetime claim.
+
+The returned shared `TaskLease` retains its controller. Its last owner releases the claim, so later Task handles, endpoints, and actor-bound Registry views can share its lifetime. A supplied parent lease is retained as well and must belong to the same controller and a different Task. Validating registered Task kinds and parent relationships, installing incarnations, and cleaning up predecessor state follow in the Session/Registry steps.
+
+The lock order remains Task claim, local session mutex, then session file lock. `probe_task_claim(task)` returns whether a claim is busy; its native lock attempt never waits, including during recovery under a mutation guard. A free probe is only an observation, not a reservation. Claim attempts and probes return OwnershipBusy if their local claim bookkeeping is contended. Claim files remain present after their owners close. Nonblocking ownership attempts do not promise bounded filesystem I/O, allocation, or execution latency.
+
+Controller lock descriptors are close-on-exec. Registered `fork` handlers close the child's inherited lock descriptors **without** issuing `LOCK_UN`, which would also unlock the parent's shared open description. This both preserves a live parent's exclusion and prevents a surviving child from retaining a dead parent's locks. Inherited controller/lease operations and factories bound to initialized parent state return WrongOwner. These handlers do not remove the multithreaded-fork restriction above. [Native fork-handler scope](https://man7.org/linux/man-pages/man3/pthread_atfork.3.html)
+
+## Native atomic qualification
+
+`qualify_native_profile()` checks compiler/OS/CPU prerequisites: a recognized Linux or macOS x86-64/ARM64 profile, little-endian representation, 64-bit addresses and file offsets, and always-lock-free eight-byte compiler atomics. The result supplies the native `LiveCompatibility` used by the controller. It does not test an arbitrary filesystem or certify another build's environment. Qualification tests must run on the actual target; the four profile identifiers remain separate platform targets.
+
+An **atomic word** is an indivisibly accessed, naturally aligned eight-byte value. `AtomicWord::bind(bytes, offset)` validates the complete range and eight-byte address alignment before returning a borrowed accessor. The caller retains the mapping and uses atomic access exclusively for that word. `load_acquire()` and `store_release()` provide the ordering required by record readiness. `publish_control()` uses a sequentially consistent store followed by a full compiler/hardware fence, ordering both the preceding body and subsequent state or resource effects. `native_gate_fence()` provides the gate-boundary ordering. See the [native ordering contract](concurrency.md#live-profiles-and-atomic-words) and [GCC atomic builtins](https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html).
+
+These are explicit native ABI operations over coherent mapped storage, not portable serialization of C++ objects. Unsupported prerequisites and incompatible recorded profiles fail before session mutation. Successful atomic access does not flush storage or provide power-loss durability.
 
 ## Failures and validation scope
 
 | Result | Meaning here |
 | --- | --- |
-| `InvalidArgument` | Empty/null-containing path, unknown access mode, unsupported byte limit, zero-length mapping, or unrepresentable range. |
-| `InvalidState` | Empty/moved-from owner or a write, writable mapping, or resize attempted through read-only access. |
-| `WrongOwner` | The native owner or factory belongs to another process after fork. |
-| `Conflict` | Exclusive creation found an existing path. |
+| `InvalidArgument` | Invalid path, access mode, byte limit, range/alignment, Task ID, or supplied parent lease. |
+| `InvalidState` | Empty/moved-from owner or guard, or a write, writable mapping, or resize attempted through read-only access. |
+| `WrongOwner` | Inherited process ownership, a guard used on another thread, or a guard belonging to another controller. |
+| `Conflict` | Exclusive creation found an existing path, or a live session identity/coordination namespace conflicts with another controller. |
 | `CapacityExceeded` | Requested resize exceeds the handle's or native format's byte limit. |
-| `OwnershipBusy` | The resize would invalidate a live leased range. |
-| `IoError` | Native I/O/mapping failure, invalid file type/identity/size, unexpected EOF, or a requested range beyond the current file. |
+| `OwnershipBusy` | Resize would invalidate a mapping, a gate/Task is already owned, or local claim bookkeeping is contended. |
+| `UnsupportedPolicy` | Recorded segmented storage has no live implementation yet. |
+| `IoError` | Native I/O failure, invalid/replaced resources or metadata, unsupported native compatibility, unexpected EOF, or a range beyond the file. |
 
 Errors include a diagnostic path and message. Destruction releases descriptors and mappings without throwing. It does not delete the underlying file, perform journal rollback, or provide a synchronous durability flush.
 
-The [native storage tests](../test/test_native_file.cpp) cover ownership transfer, file validation, read-only behavior, range boundaries, shared mappings, resize protection through aliases, fork/exec policy, and descriptor cleanup. A [startup regression](../test/native_storage_startup.cpp) also exercises file and mapping creation before `main`. These checks exercise the native storage primitives. Atomic/profile qualification, crash-recoverable logical transactions, and usable format-2 Session behavior remain the later steps' acceptance criteria.
+The [file/mapping tests](../test/test_native_file.cpp) cover ownership transfer, file validation, read-only behavior, range boundaries, shared mappings, resize protection through aliases, fork/exec policy, and descriptor cleanup. A [startup regression](../test/native_storage_startup.cpp) also exercises file and mapping creation before `main`. The [controller tests](../test/test_session_controller.cpp) and [atomic tests](../test/test_native_atomic.cpp) exercise native exclusion and ordering with threads and independent processes. Crash-recoverable logical transactions and usable format-2 Session behavior remain the later steps' acceptance criteria.
 
 [Milestone 2](milestones/milestone-2.md) · [Mapped format](mapped-format.md) · [Concurrency](concurrency.md)

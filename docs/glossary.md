@@ -35,6 +35,9 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 | **View** | A borrowed byte span referring to mapped storage. It does not own or extend the mapping's lifetime. |
 | **Page** | The host operating system's unit of virtual-memory mapping. Its byte size is queried at runtime and need not equal the superblock's 4,096 bytes. |
 | **Shared mapping** | A file mapping whose updates are visible through other mappings of the same file. Visibility alone does not provide atomic updates, thread synchronization, or power-loss durability. |
+| **Atomic word** | A naturally aligned eight-byte value accessed indivisibly through the qualified native adapter. All accesses to such a live word use atomic accessors; publication ordering and storage durability are separate properties. |
+| **Ordering fence** | A compiler/hardware barrier ordering memory operations around a synchronization boundary. It does not flush file contents for power-loss durability. |
+| **Open file description** | The kernel state behind an opened file descriptor. Duplicated or fork-inherited descriptors share that state and its `flock` lock; separate opens have independent descriptions. |
 | **Mapping lease** | Process-local bookkeeping protecting a live mapping's exposed range against resize through another handle for the same underlying file. It does not protect against external truncation. |
 | **Positional I/O** | Reading or writing at an explicit file byte offset without advancing a shared file-position cursor. |
 | **Fork** | The operating-system operation that creates a child process with inherited process state. Inherited Angaria owners do not become child-owned resources. |
@@ -52,6 +55,10 @@ The [native storage contract](native-storage.md) defines file/mapping ownership,
 | **Bootstrap** | Initializing a new session's storage, creator Task, metadata, and starting state before making the session available for use. |
 | **Incarnation** | The generation of a Task attachment. Reattachment advances it so identities and tokens from an older claim remain distinguishable. |
 | **Mutation gate** | The combination of a process-local mutex and an interprocess file lock that serializes mutable session access in the initial protocol. |
+| **Mutation guard** | A move-only, thread-affine owner of one mutation-gate acquisition. It retains its controller and releases the file lock before the local mutex when destroyed. |
+| **Thread-affine** | Requiring acquisition, use, moves, and destruction on the same thread. This applies to mutation guards because they own a thread's mutex lock. |
+| **Session controller** | Process-local shared ownership of a session file, coordination resources, mutation mutex, and Task claim bookkeeping. Opening this private resource layer does not establish recovered public Session state. |
+| **Task lease** | The internal shared lifetime owner of a Task's native claim lock and optional parent lease. A lease alone does not establish a persisted Task incarnation. |
 | **Operation journal** | The reusable 2,048-byte area inside the superblock describing the current operation's intent, commit state, and inline recovery commands or append-manifest reference. |
 | **Manifest** | An append-transaction record identifying the operation's new records and redo commands. It lives in the arena, separately from the reusable journal. |
 | **Redo** | Reapplying a committed operation's intended changes so interrupted work completes. The commands are repeatable without duplicating logical effects such as delivery or sequence issuance. |

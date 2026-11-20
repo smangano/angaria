@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Step 2.1's binary foundation is integrated into `milestone-2`; step 2.2 adds native file and mapping ownership.
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 and 2.2 are integrated into `milestone-2`; step 2.3 adds native coordination and atomic access. Its framework version is `0.2.2` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 
@@ -47,6 +47,14 @@ The [native storage contract](../native-storage.md) specifies the implemented `N
 Process-local lease state is shared by device/inode identity across independent opens and hard links. It prevents resizing a file below the end of any live exposed mapping, while growth leaves existing view lengths unchanged. A mapping retains its file state after the original file wrapper closes.
 
 This resource layer does not acquire the session mutation gate, synchronize access through raw mapped spans, validate/recover session contents, or prevent arbitrary external truncation. Its initial owners and initialized factory state are process-bound; a child inheriting that state requires exec before factory use. Multithreaded fork requires exec or `_exit` before library use or inherited-owner cleanup. Steps 2.3 and 2.4 add the native controller/ownership qualification and journal integration before public Session behavior is exposed.
+
+## Step 2.3 Native coordination and atomic access
+
+The private [session controller](../../src/session_controller.h) coalesces process-local handles by session/file identity, owns the local mutex and stable coordination descriptors, and issues move-only mutation guards and shared Task leases. The [native storage contract](../native-storage.md#shared-controller-and-mutation-gate) defines their lifetimes, alias checks, lock order, nonblocking probes, and fork/exec boundary. Lock descriptors inherited through `fork` are closed in the child without unlocking the parent's shared open description.
+
+The [atomic adapter](../../src/native_atomic.h) checks native profile prerequisites, validates aligned eight-byte ranges, and supplies acquire/release word access, control publication with a following full fence, and gate-boundary fences. Independent-process tests exercise publication of ordinary body bytes before a control word and a following file-growth effect, and termination during repeated eight-byte stores. These bounded checks qualify observed native behavior on the tested host; they do not prove all hardware schedules, certify remote filesystems, or promise power-loss durability.
+
+The controller opens existing coordination resources and validates immutable superblock compatibility before mutation. It does not recover a journal, install a persisted Task incarnation, validate Registry Task-parent relationships, or expose a usable public Session. Step 2.4 implements transactions/recovery; step 2.5 integrates the controller into Session bootstrap and attachment.
 
 ## Registry implementation boundaries
 

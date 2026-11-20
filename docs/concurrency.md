@@ -2,7 +2,7 @@
 
 Step 1.5 completes the protocol plan for [format 2.0](mapped-format.md). It preserves the [public API](api.md) and [configuration contracts](configuration.md). The initial runtime uses **blocking, serialized mutation**, with one crash-released session gate and separate Task lifetime claims. Single-producer ownership simplifies queue order; it does not make shared allocation, fan-out, receive, or acknowledgment lock-free.
 
-This is an implementation contract, not a claim that format-2 runtime code already exists. The [executable reference model](../test/protocol_model.py) checks logical crash boundaries and replay invariants. Real mapped-memory, filesystem, process-termination, and performance qualification remain acceptance criteria of milestones 2 through 8 and 10.
+This is an implementation contract. Step 2.3 implements private [native gate/claim ownership and atomic access](native-storage.md#shared-controller-and-mutation-gate), with thread/process qualification tests; it does not yet expose usable format-2 Session operations or journal recovery. The [executable reference model](../test/protocol_model.py) checks logical crash boundaries and replay invariants. Native journal/operation crash qualification and performance qualification remain acceptance criteria of the subsequent steps and milestones.
 
 The [terminology glossary](glossary.md) defines the storage and recovery terms used here.
 
