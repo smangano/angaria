@@ -1,10 +1,10 @@
-# Native file and mapping support
+# Native storage resources and transactions
 
-Steps 2.2 and 2.3 implement the private native resources used by the future format-2 backend. In the [file/mapping API](../src/native_file.h), `NativeFile` owns a native file descriptor, and `MappedRegion` owns a shared memory mapping. Both use move-only [RAII](glossary.md#encoding-and-native-resources): moving transfers ownership, and destruction releases the owned resource without throwing. The [controller](../src/session_controller.h) adds shared process-local ownership, the mutation gate, and Task lifetime claims; the [atomic adapter](../src/native_atomic.h) supplies native word access and ordering.
+Steps 2.2 through 2.4 implement the private native resources and transactions used by the future format-2 backend. In the [file/mapping API](../src/native_file.h), `NativeFile` owns a native file descriptor, and `MappedRegion` owns a shared memory mapping. Both use move-only [RAII](glossary.md#encoding-and-native-resources): moving transfers ownership, and destruction releases the owned resource without throwing. The [controller](../src/session_controller.h) adds shared process-local ownership, the mutation gate, and Task lifetime claims; the [atomic adapter](../src/native_atomic.h) supplies native word access and ordering. The [mutation journal](../src/mutation_journal.h) uses those resources for recoverable operations.
 
 A **file descriptor** is the process-local integer handle returned by the operating system when a file opens. A **mapped region** makes a file byte range accessible through virtual memory. Its returned **view** is a borrowed C++ byte span, not an owner. The [glossary](glossary.md#encoding-and-native-resources) defines the related terms, including inode identity, host pages, positional I/O, and mapping leases.
 
-The file/mapping owners alone do not acquire the session mutation gate or interpret session contents. The controller validates immutable superblock metadata and native compatibility, but does not recover the journal or create a usable public Session. Step 2.4 adds journal transactions and recovery. Resize and write operations here are ordinary native I/O rather than committed Angaria publications.
+The file/mapping owners alone do not acquire the session mutation gate or interpret session contents. The controller validates immutable superblock metadata and native compatibility, but does not itself recover the journal or create a usable public Session. The separate journal implements transactions and recovery under a mutation guard. Direct resize and write primitives remain ordinary native I/O; callers do not gain committed Angaria publications by bypassing the journal.
 
 ## Files and access
 
@@ -36,7 +36,7 @@ A **mapping lease** records the end of a live mapping's exposed byte range. Ever
 
 Range validation, creation of a mapping and its lease, and resizing all use the same per-inode mutex. `resize(new_size)` permits growth, exact-size no-ops, and shrinking that leaves every live exposed range intact. Shrinking below the greatest leased end returns OwnershipBusy before `ftruncate`. Closing or replacing a mapping releases its lease. Growing the file does not enlarge existing spans; map a new range to access added storage.
 
-Later journal rollback must release any mapping created for an uncommitted append whose exposed range extends beyond the length being restored. Existing prefix mappings wholly below that boundary can remain alive during the shrink.
+Journal rollback must release any mapping created for an uncommitted append whose exposed range extends beyond the length being restored. The journal's transient append mapping is released on return or unwind before rollback attempts a shrink. Existing prefix mappings wholly below that boundary can remain alive during the shrink. Another retained mapping beyond the restore boundary can prevent rollback; an unresolved operation then requires further recovery.
 
 The native resize primitive sets the exact file length and discards a removed suffix. Newly extended file bytes read as zero. This is file-length management, not proof of physical disk reservation or power-loss durability. [Native truncate semantics](https://man7.org/linux/man-pages/man2/truncate.2.html)
 
@@ -48,7 +48,7 @@ Lease protection is process-local. Another process or code bypassing this API ca
 
 Files and mappings belong to the process that created their owners. Operations check that process identity before acquiring any inherited mutex. Inherited handles return WrongOwner. The process-local inode registry initializes on first use, including before `main`; once initialized, its factory calls also return WrongOwner in a fork child until the child execs a new program. A child whose parent never initialized native storage has no inherited registry to reject. A successful exec starts fresh storage state and removes inherited mappings.
 
-This private layer does not implement general fork safety. After a multithreaded fork, the child must exec or call `_exit` before using this layer or cleaning up inherited C++ owners. The same cleanup restriction applies when a quiescent fork inherits an active mutation guard: its copied locked mutex cannot become child-owned. Inherited mutex or allocator state may have belonged to a thread that no longer exists. Mapping cleanup avoids locking the copied per-inode mutex in a child, but that does not make arbitrary post-fork C++ cleanup safe. Usable public Session attachment follows journal recovery and bootstrap in steps 2.4 and 2.5.
+This private layer does not implement general fork safety. After a multithreaded fork, the child must exec or call `_exit` before using this layer or cleaning up inherited C++ owners. The same cleanup restriction applies when a quiescent fork inherits an active mutation guard: its copied locked mutex cannot become child-owned. Inherited mutex or allocator state may have belonged to a thread that no longer exists. Mapping cleanup avoids locking the copied per-inode mutex in a child, but that does not make arbitrary post-fork C++ cleanup safe. Step 2.5 integrates recovery and bootstrap into usable public Session attachment.
 
 ## Shared controller and mutation gate
 
@@ -58,7 +58,7 @@ Controllers are shared within a process by session identity and underlying file 
 
 A **mutation guard** owns one acquisition of the [mutation gate](glossary.md#ownership-and-recovery). `acquire_mutation()` takes the controller's local mutex before exclusive `flock` on `mutation.lock`; `try_acquire_mutation()` attempts both without waiting for gate ownership and returns OwnershipBusy on contention. Nested acquisition on the owning thread also returns OwnershipBusy. The local mutex excludes threads even though they share a file-lock descriptor. Native ordering fences surround the protected work. Normal guard destruction releases the file lock before the local mutex, including when an exception unwinds the operation.
 
-The guard retains its controller and is move-only. It is **thread-affine**: acquisition, use, moves, and destruction must stay on the acquiring thread. Destroying a live guard on another thread, or an unrecoverable native unlock failure, calls `std::terminate` rather than continuing with invalid lock ownership. `file(guard)` supplies a borrowed file owner for later journal operations; the guard must belong to that controller and remain alive for the entire use. The resource API does not make arbitrary callbacks, mapped-span access, or unlocked file use safe.
+The guard retains its controller and is move-only. It is **thread-affine**: acquisition, use, moves, and destruction must stay on the acquiring thread. Destroying a live guard on another thread, or an unrecoverable native unlock failure, calls `std::terminate` rather than continuing with invalid lock ownership. `file(guard)` supplies a borrowed file owner for journal operations; the guard must belong to that controller and remain alive for the entire use. The resource API does not make arbitrary callbacks, mapped-span access, or unlocked file use safe.
 
 ## Task lifetime claims
 
@@ -80,21 +80,54 @@ An **atomic word** is an indivisibly accessed, naturally aligned eight-byte valu
 
 These are explicit native ABI operations over coherent mapped storage, not portable serialization of C++ objects. Unsupported prerequisites and incompatible recorded profiles fail before session mutation. Successful atomic access does not flush storage or provide power-loss durability.
 
+## Journal transactions and recovery
+
+`MutationJournal` implements the reserved [operation journal](glossary.md#ownership-and-recovery) for two-plane storage. Its [portable codecs](../src/journal_format.h) encode the 256-byte journal header, redo commands, [record envelopes](mapped-format.md#arena-records-and-definitions), and append manifests with explicit little-endian fields. Live journal control and record readiness words use the native atomic adapter; codecs operate on local copies, never serialize native C++ structures, and do not read live control words nonatomically.
+
+| Operation | Behavior |
+| --- | --- |
+| `MutationJournal::open(controller, guard)` | Retains the controller and maps the superblock. It requires that controller's active guard; opening alone does not recover or expose a public Session. |
+| `recover(guard)` | Resolves an interrupted intent under the same gate. Idle ignores the old body, Prepared rolls back an unaccepted append or discards a validated inline intent, and Committed/Applied replays accepted work. |
+| `snapshot(guard)` | Recovers first, then validates committed record framing/chains and captures generation, allocation tail, accounted bytes, Registry revision, manifest root, and physical file length. |
+| `execute(guard, plan)` | Recovers the predecessor, rejects stale/invalid plans before a new intent write, prepares/materializes/commits the operation, and installs its absolute redo and final roots. |
+
+A [transaction plan](glossary.md#ownership-and-recovery) contains a captured base snapshot, actor identity, absolute redo values, and any proposed records. Comparing the entire snapshot, including the completed **operation generation**, prevents a fixed-state update from leaving another plan apparently current merely because its tail and Registry revision stayed unchanged. A stale plan returns Conflict. Semantic/capacity rejection during preflight writes no new journal or canonical state; recovery of a predecessor may already have repaired that earlier operation before preflight begins.
+
+FixedState keeps its complete nonempty command stream in the journal's reserved 1,792-byte inline area. It does not grow the file or change Registry revision, so a supported fixed-state update can run when append space is exhausted. An oversized inline stream returns CapacityExceeded rather than spilling into the arena. Filesystem, mapping, and counter failures can still prevent an update.
+
+Append materializes an [append batch](glossary.md#ownership-and-recovery) of new records followed by a kind-11 manifest. Each record allocation is rounded to 64 bytes. The manifest lists every other record in order, stores the redo stream and actor/revision metadata, and links to the previous committed manifest. All records, the manifest, and padding count toward the recorded byte ceiling; insufficient space returns LogFull before preparing the intent. No committed logical address is reused.
+
+The engine validates the entire command stream against its [redo target allowlist](glossary.md#ownership-and-recovery) before commit and again before replay. Generic WriteRange can replace only declared mutable words in selected superblock roots, supported fixed-state/index rows, ring slots, and publication receipt suffixes. It cannot modify immutable payload/definition bytes, reserved fields, the journal, or the allocation/accounting, Registry-revision, manifest, and completed-generation roots owned by the engine's final assignments. These assignments and redo stores use indivisible eight-byte absolute values, so recovery can repeat them without incrementing a counter twice.
+
+Prepared rollback checks the persisted base generation, allocation tail, accounting, and Registry revision, the previous manifest derived from retained history, and the expected physical file range. FixedState also validates its complete inline command stream before discarding it. An Append's new records can still be incomplete, so rollback restores the original length without interpreting that unaccepted tail. The native journal does not persist a snapshot of every prior mutable table word; its base checks cannot detect arbitrary changes to all such words. Crash safety relies on cooperating writers holding the gate and making no canonical updates before Committed.
+
+Committed or Applied recovery accepts new records already Ready or Committed and roots already holding either their base or proposed values. It validates the complete batch/manifest/commands before redo, repeats the common final assignments, then publishes Applied and Idle with the required following-effect fences. It never truncates accepted work. Invalid framing, unsupported persisted redo, or unexpected checked roots returns IoError while retaining journal evidence. Repeated recovery can itself be interrupted and retried.
+
+If an I/O failure occurs after preparation, `execute()` attempts repair while retaining the gate. A proven precommit rollback returns the original failure; proven completion of an accepted operation returns its transaction result. If repair cannot establish either final state, it returns OutcomeUnknown and preserves the pending journal. An accepted operation must not become a known rejection merely because its caller lost the result. Public publication-outcome lookup is a later domain operation and is not supplied by this private journal API.
+
+The initial implementation scans retained committed records to validate framing, batch generations, predecessor chains, manifest lists, and Registry revisions. This supports the no-reclamation baseline; it does not claim indexed or constant-time recovery/preflight performance. Task/schema existence, live actor claims, and definition/reference contents require the later Session/Registry/domain validators. The journal's checks are byte framing and allowed mutation checks, not complete semantic validation or general corruption detection.
+
+ResetBudgets, LoseRange, and ReleaseClaim have structural codecs, but their scheduling, delivery-loss, and receipt/claim-cleanup effects await their owning domain implementations. This engine returns UnsupportedPolicy before preparing those new commands and IoError if unsupported persisted commands require replay. Symbol-value records, SymbolIndex/StringPool updates, and segmented storage are also unsupported. There is no public format-2 Session or publication API yet.
+
+`JournalFaultInjector` is a private test seam at [fault checkpoints](glossary.md#ownership-and-recovery): journal-body words, control transitions, file growth, record words/readiness, redo, final assignments, and rollback. Tests pause independent exec workers at actual boundaries and use SIGKILL, then interrupt and repeat recovery. They also inject I/O errors to check rollback, accepted completion, and OutcomeUnknown. Production Session callers do not supply these injectors; they are not external application callbacks executed under the gate. The tests exercise coherent local files on a running host, not power-loss durability or every possible hardware schedule.
+
 ## Failures and validation scope
 
 | Result | Meaning here |
 | --- | --- |
-| `InvalidArgument` | Invalid path, access mode, byte limit, range/alignment, Task ID, or supplied parent lease. |
+| `InvalidArgument` | Invalid path, access mode, byte limit, range/alignment, Task ID, parent lease, or transaction plan. |
 | `InvalidState` | Empty/moved-from owner or guard, or a write, writable mapping, or resize attempted through read-only access. |
 | `WrongOwner` | Inherited process ownership, a guard used on another thread, or a guard belonging to another controller. |
-| `Conflict` | Exclusive creation found an existing path, or a live session identity/coordination namespace conflicts with another controller. |
-| `CapacityExceeded` | Requested resize exceeds the handle's or native format's byte limit. |
+| `Conflict` | Existing exclusive-create path, conflicting live identity/namespace, or a stale transaction plan. |
+| `CapacityExceeded` | Requested resize exceeds its byte limit, an operation counter is exhausted, or FixedState commands exceed the inline journal. |
 | `OwnershipBusy` | Resize would invalidate a mapping, a gate/Task is already owned, or local claim bookkeeping is contended. |
-| `UnsupportedPolicy` | Recorded segmented storage has no live implementation yet. |
+| `UnsupportedPolicy` | A requested storage, record, or command operation has no live implementation yet. |
+| `LogFull` | A complete proposed append, including its manifest and padding, exceeds the session byte ceiling. |
 | `IoError` | Native I/O failure, invalid/replaced resources or metadata, unsupported native compatibility, unexpected EOF, or a range beyond the file. |
+| `OutcomeUnknown` | An interrupted journal operation could not be proven rolled back or fully accepted/completed. |
 
 Errors include a diagnostic path and message. Destruction releases descriptors and mappings without throwing. It does not delete the underlying file, perform journal rollback, or provide a synchronous durability flush.
 
-The [file/mapping tests](../test/test_native_file.cpp) cover ownership transfer, file validation, read-only behavior, range boundaries, shared mappings, resize protection through aliases, fork/exec policy, and descriptor cleanup. A [startup regression](../test/native_storage_startup.cpp) also exercises file and mapping creation before `main`. The [controller tests](../test/test_session_controller.cpp) and [atomic tests](../test/test_native_atomic.cpp) exercise native exclusion and ordering with threads and independent processes. Crash-recoverable logical transactions and usable format-2 Session behavior remain the later steps' acceptance criteria.
+The [file/mapping tests](../test/test_native_file.cpp) cover ownership transfer, file validation, read-only behavior, range boundaries, shared mappings, resize protection through aliases, fork/exec policy, and descriptor cleanup. A [startup regression](../test/native_storage_startup.cpp) also exercises file and mapping creation before `main`. The [controller tests](../test/test_session_controller.cpp) and [atomic tests](../test/test_native_atomic.cpp) exercise native exclusion and ordering with threads and independent processes. The [journal codec tests](../test/test_journal_format.cpp) use independent byte fixtures and malformed cases, and the [target-validation tests](../test/test_journal_validation.cpp) check mutable/reserved boundaries. The [native journal tests](../test/test_mutation_journal.cpp) and [process worker](../test/native_journal_worker.cpp) exercise real interruption and repeated recovery. Usable public format-2 Session and Registry behavior remain the following steps' acceptance criteria.
 
 [Milestone 2](milestones/milestone-2.md) · [Mapped format](mapped-format.md) · [Concurrency](concurrency.md)

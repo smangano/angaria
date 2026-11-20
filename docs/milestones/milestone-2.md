@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 and 2.2 are integrated into `milestone-2`; step 2.3 adds native coordination and atomic access. Its framework version is `0.2.2` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.3 are integrated into `milestone-2`; step 2.4 adds native journal transactions and recovery. Its framework version is `0.2.3` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 
@@ -54,7 +54,17 @@ The private [session controller](../../src/session_controller.h) coalesces proce
 
 The [atomic adapter](../../src/native_atomic.h) checks native profile prerequisites, validates aligned eight-byte ranges, and supplies acquire/release word access, control publication with a following full fence, and gate-boundary fences. Independent-process tests exercise publication of ordinary body bytes before a control word and a following file-growth effect, and termination during repeated eight-byte stores. These bounded checks qualify observed native behavior on the tested host; they do not prove all hardware schedules, certify remote filesystems, or promise power-loss durability.
 
-The controller opens existing coordination resources and validates immutable superblock compatibility before mutation. It does not recover a journal, install a persisted Task incarnation, validate Registry Task-parent relationships, or expose a usable public Session. Step 2.4 implements transactions/recovery; step 2.5 integrates the controller into Session bootstrap and attachment.
+The controller opens existing coordination resources and validates immutable superblock compatibility before mutation. It does not itself recover a journal, install a persisted Task incarnation, validate Registry Task-parent relationships, or expose a usable public Session. The separate step 2.4 journal implements transactions/recovery; step 2.5 integrates both into Session bootstrap and attachment.
+
+## Step 2.4 Native journal transactions and recovery
+
+The portable [journal codecs](../../src/journal_format.h) encode and validate the reserved header, all redo command frames, arena envelopes, and append manifests. The private [mutation journal](../../src/mutation_journal.h) executes inline FixedState updates and manifest-backed Append batches in two-plane storage under an existing mutation guard. Its [native contract](../native-storage.md#journal-transactions-and-recovery) defines snapshots, stale-plan rejection, byte accounting, acceptance, and repeated recovery after process termination.
+
+The engine validates complete redo streams against declared mutable word ranges before commit and before replay. It owns the final allocation/accounting, Registry-revision, manifest, and completed-generation root assignments. An append includes every record and its manifest in the byte-limit check; fixed-state updates use only the reserved journal and can proceed at `LogFull`. The initial implementation scans retained committed history to check framing and manifest chains, without reclamation or a performance claim.
+
+The [portable tests](../../test/test_journal_format.cpp) use independent byte fixtures and malformed inputs. The [native tests](../../test/test_mutation_journal.cpp), with an [independent process worker](../../test/native_journal_worker.cpp), exercise actual write/file-growth boundaries, repeated recovery, partial redo/final assignments, and I/O failure handling. These checks cover process termination on a running coherent local filesystem, not power-loss durability or every possible hardware schedule.
+
+This increment implements byte framing, allocation/recovery, and allowed write targets. Registered Task/schema identities, live actor claims, and definition/reference contents require the later Session/Registry/domain validators. ResetBudgets, LoseRange, and ReleaseClaim have structural codecs but return UnsupportedPolicy before preparing a new intent, and IoError if unsupported persisted redo must be replayed. Their semantic execution follows the owning scheduling/delivery/claim implementations. Symbol-value records, SymbolIndex/StringPool updates, and segmented storage remain unsupported. There is no usable public Session or publication-outcome lookup yet.
 
 ## Registry implementation boundaries
 

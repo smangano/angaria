@@ -60,8 +60,13 @@ The [native storage contract](native-storage.md) defines file/mapping ownership,
 | **Session controller** | Process-local shared ownership of a session file, coordination resources, mutation mutex, and Task claim bookkeeping. Opening this private resource layer does not establish recovered public Session state. |
 | **Task lease** | The internal shared lifetime owner of a Task's native claim lock and optional parent lease. A lease alone does not establish a persisted Task incarnation. |
 | **Operation journal** | The reusable 2,048-byte area inside the superblock describing the current operation's intent, commit state, and inline recovery commands or append-manifest reference. |
+| **Operation generation** | The journal counter distinguishing accepted operations, including fixed-state updates that do not append records. A plan proposes the last completed generation plus one; an unaccepted rolled-back intent does not advance the stored counter. |
 | **Manifest** | An append-transaction record identifying the operation's new records and redo commands. It lives in the arena, separately from the reusable journal. |
+| **Append batch** | One contiguous group of new arena records followed by its manifest. The initial allocator rounds each record to 64 bytes, and one journal commit establishes acceptance for the whole batch. |
+| **Transaction plan** | A process-local proposal containing new records, absolute redo commands, and the snapshot on which they were based. The native journal rejects a stale snapshot before writing a new intent. |
 | **Redo** | Reapplying a committed operation's intended changes so interrupted work completes. The commands are repeatable without duplicating logical effects such as delivery or sequence issuance. |
+| **Redo target allowlist** | The byte-level rules permitting changes only to declared mutable words. It excludes immutable metadata/payload, reserved bytes, the journal, and final roots owned by the journal engine; it does not validate application or Registry semantics. |
+| **Fault checkpoint** | A private test boundary after an actual store or file operation where a worker can pause for termination or simulate an I/O failure. It is not an application callback. |
 | **Commit point** | The journal's transition to Committed, which establishes the operation's logical acceptance. Recovery can finish its remaining effects afterward. This does not itself promise power-loss durability. |
 | **Delivery pin** | The retention protection for a currently issued delivery and its borrowed payload. It lasts until acknowledgment, release, Source handle closure, or claim termination, and survives ring overwrite. |
 
