@@ -5,7 +5,12 @@ project(Angaria LANGUAGES CXX)
 find_package(Boost 1.70 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
-add_library(angaria STATIC src/session.cpp src/session_log.cpp src/role_lock.cpp)
+add_library(angaria STATIC
+  src/session.cpp
+  src/session_log.cpp
+  src/role_lock.cpp
+  src/mapped_superblock.cpp
+)
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
 target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
@@ -30,7 +35,16 @@ if(BUILD_TESTING)
   )
   FetchContent_MakeAvailable(cpptoml)
 
-  add_executable(angaria_tests test/test.cpp test/test_field.cpp test/test_session.cpp test/test_configuration.cpp test/test_identities.cpp test/test_api_contract.cpp test/test_mapped_format.cpp)
+  add_executable(angaria_tests
+    test/test.cpp
+    test/test_field.cpp
+    test/test_session.cpp
+    test/test_configuration.cpp
+    test/test_identities.cpp
+    test/test_api_contract.cpp
+    test/test_mapped_format.cpp
+    test/test_mapped_superblock.cpp
+  )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
     angaria_tests PRIVATE

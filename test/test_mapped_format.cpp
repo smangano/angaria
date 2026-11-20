@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 
@@ -16,6 +18,69 @@ namespace
   static_assert(mapped::ring_storage_bytes(1024) == 32832);
   static_assert(mapped::checked_align(65, 64) == 128);
   static_assert(!mapped::contains_range(max_unsigned, max_unsigned - 1, 3));
+
+  TEST(MappedFormat, AsymmetricCapacitiesProduceTheSpecifiedSectionDirectory)
+  {
+    const auto limits = CapacityLimits::empty()
+                            .tasks(2)
+                            .queues(3)
+                            .source_sets(1)
+                            .publishing_sets(2)
+                            .memberships_per_set(4)
+                            .message_schemas(5)
+                            .symbols(1)
+                            .string_pool_bytes(67);
+    const auto layout = mapped::make_fixed_layout(limits);
+    ASSERT_TRUE(layout);
+
+    // Independently calculated from format 2.0's table order, widths, and 64-byte alignment.
+    const std::array<std::uint64_t, 13> offsets{
+        4096, 4224, 4416, 4480, 0, 4608, 4928, 5440, 6208, 6464, 6720, 7104, 7168,
+    };
+    const std::array<std::uint64_t, 13> counts{2, 3, 1, 2, 0, 5, 2, 3, 1, 2, 12, 1, 67};
+    const std::array<std::uint32_t, 13> strides{
+        64, 64, 64, 64, 64, 64, 256, 256, 256, 128, 32, 32, 1,
+    };
+    const std::array<std::uint64_t, 13> lengths{
+        128, 192, 64, 128, 0, 320, 512, 768, 256, 256, 384, 32, 67,
+    };
+    ASSERT_EQ(layout->_sections.size(), offsets.size());
+    for (std::size_t i = 0; i < offsets.size(); ++i)
+    {
+      SCOPED_TRACE(i);
+      const auto& section = layout->_sections[i];
+      EXPECT_EQ(static_cast<std::uint16_t>(section._kind), i + 1);
+      EXPECT_EQ(section._flags, 0u);
+      EXPECT_EQ(section._offset, offsets[i]);
+      EXPECT_EQ(section._count, counts[i]);
+      EXPECT_EQ(section._stride, strides[i]);
+      EXPECT_EQ(section._byteLength, lengths[i]);
+    }
+    EXPECT_EQ(layout->_arenaBegin, 7296u);
+    EXPECT_EQ(mapped::fixed_layout_bytes(limits), layout->_arenaBegin);
+  }
+
+  TEST(MappedFormat, EmptyDirectoryRetainsKindsAndStridesWithoutReservingBytes)
+  {
+    constexpr auto layout = mapped::make_fixed_layout(CapacityLimits::empty());
+    static_assert(layout.has_value());
+    static_assert(layout->_arenaBegin == 4096);
+    const std::array<std::uint32_t, 13> strides{
+        64, 64, 64, 64, 64, 64, 256, 256, 256, 128, 32, 32, 1,
+    };
+    ASSERT_EQ(layout->_sections.size(), strides.size());
+    for (std::size_t i = 0; i < strides.size(); ++i)
+    {
+      SCOPED_TRACE(i);
+      const auto& section = layout->_sections[i];
+      EXPECT_EQ(static_cast<std::uint16_t>(section._kind), i + 1);
+      EXPECT_EQ(section._stride, strides[i]);
+      EXPECT_EQ(section._flags, 0u);
+      EXPECT_EQ(section._offset, 0u);
+      EXPECT_EQ(section._count, 0u);
+      EXPECT_EQ(section._byteLength, 0u);
+    }
+  }
 
   TEST(MappedFormat, TradingTopologyHasAnExplicitFixedReservation)
   {

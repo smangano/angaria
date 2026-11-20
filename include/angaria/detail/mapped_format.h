@@ -4,6 +4,7 @@
 
 #include <array>
 #include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -34,6 +35,41 @@ namespace angaria::detail::mapped
   inline constexpr std::uint32_t max_entity_id = 65535;
   inline constexpr std::uint32_t max_fields = 0x01000000;
   inline constexpr std::uint64_t max_log_bytes = std::numeric_limits<std::int64_t>::max();
+  inline constexpr std::size_t section_count = 13;
+
+  enum class SectionKind : std::uint16_t
+  {
+    TaskIndex = 1,
+    QueueIndex = 2,
+    SourceIndex = 3,
+    PublishingIndex = 4,
+    FieldIndex = 5,
+    SchemaIndex = 6,
+    TaskState = 7,
+    QueueState = 8,
+    SourceState = 9,
+    PublishingState = 10,
+    MembershipState = 11,
+    SymbolIndex = 12,
+    StringPool = 13
+  };
+
+  // Process-local layout values. Encoders write fields individually, never these objects.
+  struct SectionLayout
+  {
+    SectionKind _kind{};
+    std::uint16_t _flags{};
+    std::uint32_t _stride{};
+    std::uint64_t _offset{};
+    std::uint64_t _count{};
+    std::uint64_t _byteLength{};
+  };
+
+  struct FixedLayout
+  {
+    std::array<SectionLayout, section_count> _sections{};
+    std::uint64_t _arenaBegin{};
+  };
 
   constexpr std::optional<std::uint64_t> checked_add(std::uint64_t left, std::uint64_t right)
   {
@@ -87,9 +123,9 @@ namespace angaria::detail::mapped
            limits._membershipsPerSet <= max_entity_id && limits._fields <= max_fields;
   }
 
-  // The returned arena base reserves all fixed tables and the application UTF-8 pool.
+  // All fixed tables and the application UTF-8 pool precede the returned arena base.
   // Descriptor strings/field lists, rings, and retained history use the variable arena.
-  constexpr std::optional<std::uint64_t> fixed_layout_bytes(const CapacityLimits& limits)
+  constexpr std::optional<FixedLayout> make_fixed_layout(const CapacityLimits& limits)
   {
     if (!valid_capacities(limits))
     {
@@ -103,31 +139,32 @@ namespace angaria::detail::mapped
       return std::nullopt;
     }
 
-    const std::array<std::array<std::uint64_t, 2>, 13> sections{{
-        {limits._tasks, index_entry_bytes},
-        {limits._queues, index_entry_bytes},
-        {limits._sourceSets, index_entry_bytes},
-        {limits._publishingSets, index_entry_bytes},
-        {limits._fields, index_entry_bytes},
-        {limits._messageSchemas, index_entry_bytes},
-        {limits._tasks, task_state_bytes},
-        {limits._queues, queue_state_bytes},
-        {limits._sourceSets, source_state_bytes},
-        {limits._publishingSets, publishing_state_bytes},
-        {*membership_count, membership_bytes},
-        {limits._symbols, symbol_entry_bytes},
-        {limits._stringPoolBytes, 1},
+    FixedLayout layout{};
+    layout._sections = {{
+        {._kind = SectionKind::TaskIndex, ._stride = index_entry_bytes, ._count = limits._tasks},
+        {._kind = SectionKind::QueueIndex, ._stride = index_entry_bytes, ._count = limits._queues},
+        {._kind = SectionKind::SourceIndex, ._stride = index_entry_bytes, ._count = limits._sourceSets},
+        {._kind = SectionKind::PublishingIndex, ._stride = index_entry_bytes, ._count = limits._publishingSets},
+        {._kind = SectionKind::FieldIndex, ._stride = index_entry_bytes, ._count = limits._fields},
+        {._kind = SectionKind::SchemaIndex, ._stride = index_entry_bytes, ._count = limits._messageSchemas},
+        {._kind = SectionKind::TaskState, ._stride = task_state_bytes, ._count = limits._tasks},
+        {._kind = SectionKind::QueueState, ._stride = queue_state_bytes, ._count = limits._queues},
+        {._kind = SectionKind::SourceState, ._stride = source_state_bytes, ._count = limits._sourceSets},
+        {._kind = SectionKind::PublishingState, ._stride = publishing_state_bytes, ._count = limits._publishingSets},
+        {._kind = SectionKind::MembershipState, ._stride = membership_bytes, ._count = *membership_count},
+        {._kind = SectionKind::SymbolIndex, ._stride = symbol_entry_bytes, ._count = limits._symbols},
+        {._kind = SectionKind::StringPool, ._stride = 1, ._count = limits._stringPoolBytes},
     }};
 
     std::uint64_t end = superblock_bytes;
-    for (const auto& section : sections)
+    for (auto& section : layout._sections)
     {
-      if (section[0] == 0)
+      if (section._count == 0)
       {
         continue;
       }
       const auto start = checked_align(end, section_alignment);
-      const auto bytes = checked_multiply(section[0], section[1]);
+      const auto bytes = checked_multiply(section._count, section._stride);
       if (!start || !bytes)
       {
         return std::nullopt;
@@ -137,6 +174,8 @@ namespace angaria::detail::mapped
       {
         return std::nullopt;
       }
+      section._offset = *start;
+      section._byteLength = *bytes;
       end = *next;
     }
 
@@ -145,7 +184,18 @@ namespace angaria::detail::mapped
     {
       return std::nullopt;
     }
-    return arena;
+    layout._arenaBegin = *arena;
+    return layout;
+  }
+
+  constexpr std::optional<std::uint64_t> fixed_layout_bytes(const CapacityLimits& limits)
+  {
+    const auto layout = make_fixed_layout(limits);
+    if (!layout)
+    {
+      return std::nullopt;
+    }
+    return layout->_arenaBegin;
   }
 
   // Ring storage is charged when a queue activates, using that queue's resolved capacity.
