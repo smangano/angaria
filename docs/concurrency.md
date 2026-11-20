@@ -4,6 +4,8 @@ Step 1.5 completes the protocol plan for [format 2.0](mapped-format.md). It pres
 
 This is an implementation contract, not a claim that format-2 runtime code already exists. The [executable reference model](../test/protocol_model.py) checks logical crash boundaries and replay invariants. Real mapped-memory, filesystem, process-termination, and performance qualification remain acceptance criteria of milestones 2 through 8 and 10.
 
+The [terminology glossary](glossary.md) defines the storage and recovery terms used here.
+
 ## Supported failure and progress scope
 
 The protocol covers termination of a process on a running system using coherent shared mappings on a local filesystem. A committed operation survives that process's exit and can be completed by another participant. It does not promise power-loss durability: release/acquire ordering is not `fsync`, and this protocol adds no synchronous disk-flush guarantee. Corruption, unsupported profiles, or an unrecoverable I/O failure fail closed with `IoError`; no operation proceeds using partially recovered roots.
@@ -46,7 +48,7 @@ Control publication additionally requires a **full compiler/hardware ordering ba
 
 ## Reserved journal layout
 
-The superblock uses bytes **672 through 2719** for one 2,048-byte operation journal: a 256-byte header followed by at most 1,792 inline command bytes. The remainder stays reserved. The superblock's word at 120 becomes `last_completed_operation`; its word at 96 becomes the last committed append-transaction manifest reference; its word at 176 becomes current accounted session bytes. Fixed journal storage was already included in the 4,096-byte superblock, so the step 1.4 reservation totals do not change.
+The [superblock](mapped-format.md#superblock), the 4,096-byte session control area at the start of `session.ang`, uses bytes **672 through 2719** for one 2,048-byte operation journal: a 256-byte header followed by at most 1,792 inline command bytes. The remainder stays reserved. The superblock's word at 120 becomes `last_completed_operation`; its word at 96 becomes the last committed append-transaction manifest reference; its word at 176 becomes current accounted session bytes. Fixed journal storage was already included in the superblock, so the step 1.4 reservation totals do not change.
 
 | Offset within journal | Bytes | Field |
 | ---: | ---: | --- |

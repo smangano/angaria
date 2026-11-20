@@ -2,7 +2,7 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below are planned. Milestone 6 delivers an application using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and milestone 2 is under implementation. Milestone 6 delivers an application using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Agreed architecture
 
@@ -39,7 +39,7 @@ The default recovery policy retains records needed for unacknowledged deliveries
 
 ## 1 Core architecture and policy contracts
 
-The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divide this work into five step PRs targeting `milestone-1`.
+Completed through [PR #7](https://github.com/smangano/angaria/pull/7). The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divided this work into five reviewed step PRs targeting `milestone-1`.
 
 - Define the public C++ model for Tasks, queues, both Queue Set types, registration, ownership, attachment, acknowledgment, and failure results.
 - Specify policy interfaces for storage mapping, source selection, consumer synchronization, queue delivery, and publishing acceptance.
@@ -50,6 +50,8 @@ The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md)
 Completion requires a reviewed public API example for a bounded multi-process application and a concrete mapped layout and concurrency plan. Raise tradeoffs if the agreed guarantees conflict during protocol validation.
 
 ## 2 Shared persistent Registry
+
+Under implementation. The [milestone 2 review plan](docs/milestones/milestone-2.md) divides the work into eleven focused step PRs targeting `milestone-2`, beginning with the format-2 binary foundation in step 2.1.
 
 - Implement the live Registry in shared mapped memory and place its persisted representation at the start of message logs.
 - Implement registration and lookup for Tasks, Queues, Source Queue Sets, Publishing Queue Sets, Messages, schema versions, and Fields.

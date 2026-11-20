@@ -1,6 +1,6 @@
 # Angaria
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten planned milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria).
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestone 1 is complete, and [milestone 2](docs/milestones/milestone-2.md) is under implementation.
 
 The current v0 prototype exchanges an integer message through a bounded filesystem queue, supports independent endpoint restart and explicit acknowledgment, and records messages in an inspectable session file. The commands below run that prototype.
 
@@ -36,6 +36,8 @@ The [public C++ API contract](docs/api.md) describes the identities, descriptors
 The [mapped layout and compatibility contract](docs/mapped-format.md) defines the proposed format 2.0, capacity accounting, and migration rules. Its checked reservation arithmetic is tested; format-2 file I/O and synchronization follow in the implementation milestones.
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs a bounded crash-recovery reference model; native format-2 runtime qualification follows in the implementation milestones.
+
+Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. The [superblock](docs/mapped-format.md#superblock) is the fixed 4,096-byte session control area at the beginning of `session.ang`. Its codec encodes a provisional superblock prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Those operations follow in the [milestone 2 steps](docs/milestones/milestone-2.md). Related terms are defined in the [glossary](docs/glossary.md).
 
 ## Run the restart walkthrough
 
