@@ -1,0 +1,185 @@
+# Allocation, commits, and process recovery
+
+Step 1.5 completes the protocol plan for [format 2.0](mapped-format.md). It preserves the [public API](api.md) and [configuration contracts](configuration.md). The initial runtime uses **blocking, serialized mutation**, with one crash-released session gate and separate Task lifetime claims. Single-producer ownership simplifies queue order; it does not make shared allocation, fan-out, receive, or acknowledgment lock-free.
+
+This is an implementation contract, not a claim that format-2 runtime code already exists. The [executable reference model](../test/protocol_model.py) checks logical crash boundaries and replay invariants. Real mapped-memory, filesystem, process-termination, and performance qualification remain acceptance criteria of milestones 2 through 8 and 10.
+
+## Supported failure and progress scope
+
+The protocol covers termination of a process on a running system using coherent shared mappings on a local filesystem. A committed operation survives that process's exit and can be completed by another participant. It does not promise power-loss durability: release/acquire ordering is not `fsync`, and this protocol adds no synchronous disk-flush guarantee. Corruption, unsupported profiles, or an unrecoverable I/O failure fail closed with `IoError`; no operation proceeds using partially recovered roots.
+
+| Path | Initial guarantee |
+| --- | --- |
+| Task claim | Nonblocking ownership acquisition; a competing live claim returns `OwnershipBusy`. |
+| Registration, activation, allocation, publication, retry | Serialized by the session gate. Bounded configuration limits resource use, not lock-wait or I/O latency. |
+| Receive, delivery issuance, acknowledgment, release, claim cleanup | Use the same gate and reserved journal/state. They require no append allocation. |
+| Spinning | Repeated availability checks; it does not turn the mutating receive operation into a lock-free operation. |
+| Borrowed immutable payload reads | Require no operation lock after delivery has established its pin. The handle retains the mapping. |
+| Terminated gate owner | Kernel ownership is released; the next gate owner finishes or aborts its journal before exposing state. |
+| Paused live gate owner | Can stall other operations. There is no lock-free, wait-free, starvation-free, or hard real-time guarantee. |
+
+The global gate is a deliberate correctness baseline for the small bounded topology. Any future partitioned allocator or concurrent publication protocol must retain these observable outcomes and qualify separately. Latency and throughput measurements in milestone 4 will make its contention cost reviewable.
+
+## Ownership and lock order
+
+Each session has a stable `mutation.lock` file, created during exclusive session creation; attachment opens the existing file and never replaces a missing one. Each registered Task uses a stable `claims/task-<id>.lock` file, independent of its producer/consumer roles. Once created, lock files are never unlinked or replaced during the session. They hold no message history and consume coordination resources outside `max_log_bytes`.
+
+A process maintains one shared session controller per underlying session identity and file inode, even when the application opens several Session handles or paths to it. Its process-local mutex serializes threads using the controller's mutation-lock descriptor. The controller then takes exclusive `flock` on `mutation.lock`. All mutable reads, including inspection of indexes, receipts, counters, and scheduling state, use this gate. Immutable data can be read without it only after validating and retaining its lifetime.
+
+The local mutex is necessary because duplicate descriptors share an open-file-description lock. The library must not substitute `flock` on a shared descriptor for thread exclusion. Task claim attempts use distinct open descriptions and nonblocking exclusive locks; the local claim table also rejects duplicate attachment within a process. [Linux flock semantics](https://man7.org/linux/man-pages/man2/flock.2.html), [Apple flock semantics](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html)
+
+The order is Task lifetime claim, process-local session mutex, then session file lock. A lifetime claim is held by the Task and all its retained endpoints/actor-bound Registry views. A thread Task also retains its parent process claim. Recovery may probe another Task's claim file while holding the gate **only nonblockingly**; it never waits for a claim inside the gate. A new attacher holding that claim can clean up its predecessor under the gate before installing its new incarnation.
+
+Descriptors have close-on-exec set. The prototype's fork-child closure and inherited-handle rejection rules carry forward: a child cannot use inherited Task/Session controllers, and must attach afresh after exec when fork occurred during active multithreaded operations. Closing inherited descriptors must not explicitly unlock the parent's shared open description. Normal exceptions release guards; abandoning a thread while it owns an operation guard is outside the process-termination guarantee.
+
+The application continues to serialize operations on a common Source set and sends touching a common queue, including overlapping publishing sets. The library gate preserves integrity across cooperating callers; it does not define the application's intended order for unsynchronized calls.
+
+## Live profiles and atomic words
+
+Synchronization protocol version is `1`. The required feature mask reserves bit 0 for this journal protocol. Live ABI profiles are `0x00010001` Linux x86-64, `0x00010002` Linux ARM64, `0x00020001` macOS x86-64, and `0x00020002` macOS ARM64. These are qualification targets, not assertions that every compiler/filesystem combination has passed runtime tests.
+
+A qualifying build must provide coherent shared mappings and indivisible, naturally aligned eight-byte loads/stores with release/acquire ordering across processes. It must verify its compiler/OS mapping primitives, little-endian representation, 64-bit address/file offsets, and alignment. A compiler atomic fallback using a process-private lock is insufficient. A platform adapter can use qualified GCC/Clang atomic primitives; this is an explicit native ABI requirement rather than an ISO C++ promise about arbitrary mapped bytes. [GCC atomic operations and fallbacks](https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html)
+
+The journal control word, record readiness words, and any exposed atomic hint use only the adapter's atomic accessors; readers never mix plain and atomic access to those words. Ordinary composite mutable data is copied under the gate. There is no unlocked seqlock copy of strings, index rows, or receipt structs. The adapter also supplies the compiler/hardware ordering needed at gate release/acquisition so completed non-atomic state writes precede a later gate owner's reads. Qualification includes process-crash store tests on each supported profile.
+
+Control publication additionally requires a **full compiler/hardware ordering barrier after the control store**, before following resource/state writes or journal reuse. Prepared must become observable before any append side effect; Committed before any canonical redo effect; Idle before the next operation overwrites the reusable body. This applies to normal, rollback, and recovery transitions and must be qualified before filesystem syscalls as well as mapped-memory stores. A release store's ordering of preceding bytes alone is insufficient for those following-effect boundaries. A qualified adapter can use a sequentially consistent control store plus the profile's full publication fence. These barriers order coherent memory; they do not flush storage for power loss.
+
+## Reserved journal layout
+
+The superblock uses bytes **672 through 2719** for one 2,048-byte operation journal: a 256-byte header followed by at most 1,792 inline command bytes. The remainder stays reserved. The superblock's word at 120 becomes `last_completed_operation`; its word at 96 becomes the last committed append-transaction manifest reference; its word at 176 becomes current accounted session bytes. Fixed journal storage was already included in the 4,096-byte superblock, so the step 1.4 reservation totals do not change.
+
+| Offset within journal | Bytes | Field |
+| ---: | ---: | --- |
+| 0 | 8 | Atomic control: `0` Idle, `1` Prepared, `2` Committed, `3` Applied. Other values are corruption. |
+| 8 | 8 | Operation generation, proposed `last_completed_operation + 1`. |
+| 16 | 2 | Operation kind: `1` Append, `2` FixedState. |
+| 18 | 2 | Command encoding, `1`. |
+| 20 | 4 | Flags, initially zero. |
+| 24 | 8 each | Base allocation tail, proposed allocation tail. |
+| 40 | 8 each | Base accounted bytes, proposed accounted bytes. |
+| 56 | 8 | Manifest reference, zero for FixedState. |
+| 64 | 4 | Inline command byte count. |
+| 68 | 4 | Reserved. |
+| 72 | 2 | Acting Task; zero only for unattached session recovery/inspection bookkeeping. |
+| 74 | 6 | Reserved. |
+| 80 | 8 | Actor incarnation, zero with actor zero. |
+| 88 | 8 | Reserved. |
+| 96 | 8 | Affected file/extent logical start, zero for `session.ang`. |
+| 104 | 8 each | Original physical file length, proposed physical file length. |
+| 120 | 8 | Newly allocated extent length, zero when no new extent is created. |
+| 128 | 4 | Number of new arena records, including manifest. |
+| 132 | 4 | Reserved. |
+| 136 | 8 each | Base Registry revision, proposed Registry revision. |
+| 152 | 8 | First new arena record offset, zero for FixedState. |
+| 160 | 96 | Reserved. |
+| 256 | Up to 1792 | FixedState command stream. Append uses the manifest's command stream instead. |
+
+One operation can extend an existing arena file or introduce at most one new extent large enough for its complete batch. A new extent's logical start and length are known before Prepared. This makes an interrupted extent creation identifiable without trusting a partially written extent header. No committed logical address is reused. Aborted, never-published space can be reused after rollback.
+
+Arena envelope word 24 stores this operation generation. Envelope word 48 is `0` incomplete, `1` Ready, or `2` Committed. Ready is release-stored only after the complete record is written. A Ready record is provisional until its operation commits; a ring entry or that word alone cannot establish delivery. Once an operation has completed, its committed record word supplies permanent evidence independent of the reusable journal.
+
+## Redo commands and append manifests
+
+Commands are portable little-endian bytes. Each starts with `opcode:u16`, zero flags (`u16`), payload byte count (`u32`), and target logical offset (`u64`), followed by its payload and zero padding to eight bytes. Targets, counts, record kinds, and every range are validated before commit and again during recovery. Counts and command lengths must fit their stated `u32` fields; large WriteRanges are split into legal aligned ranges before preflight completes. Commands cannot modify immutable payload/schema bytes, coordination files, or the journal itself. WriteRange targets are eight-byte aligned with a positive multiple-of-eight payload; mutable state is installed as indivisible eight-byte adapter stores, including packed narrow fields. This prevents a process crash from leaving a torn state discriminator used by a compact command.
+
+| Opcode | Command | Idempotent effect |
+| ---: | --- | --- |
+| 1 | WriteRange | Replace the named mutable range with the payload's absolute bytes. Used for roots, index/state rows, receipt fields, ring slots, and allowed envelope commit words. It never increments the current value. |
+| 2 | ResetBudgets | Target a Source state row. Payload is Source ID (`u16`), six reserved bytes, committed Source definition reference (`u64`), and new scheduling round (`u64`). Set each member credit to its recorded priority; a following WriteRange installs the selected member's absolute remaining credit/cursor/RNG state. |
+| 3 | LoseRange | Target a Queue state row. Payload is first/last queue sequence (`u64` each), loss UTC time (`i64`), Source ID (`u16`), and six reserved bytes. Install Lost and the captured loss time for every pending **or already lost** receipt in the range, preserving acknowledged receipts. A following WriteRange sets the final watermark. No current in-flight pin may lie in the range. |
+| 4 | ReleaseClaim | Target a Task state row. Payload is ending incarnation (`u64`) and release UTC time (`i64`). Restore matching issued receipts to pending, clear that claim's Source pins, and mark it detached. Cleanup of child thread claims matches the ending parent incarnation. Counters and acknowledgment state are preserved. |
+
+Commands execute in recorded order. Reset, range loss, and claim cleanup can revisit bounded Registry/history data, avoiding a command buffer proportional to every affected receipt or membership. Each scan uses retained committed definitions and absolute values, and changes no allocation state. Repeating the whole stream after a crash must have the same result as completing it once. FixedState commands always fit the inline bound; an implementation cannot silently spill acknowledgment, release, or replacement into the append arena.
+
+Compact commands must not discover their targets from mutable pointers they already cleared. ReleaseClaim scans retained receipt rows using their preserved consumer Task/incarnation tags, restores issued receipts before clearing Source slots, and finds Source ownership through immutable definitions. Replaying an already pending receipt is harmless; acknowledged/lost receipts remain terminal. Child parent-incarnation tags remain intact during cleanup. Source-slot clearing is an absolute assignment independent of partially cleared slot fields. LoseRange also reinstalls metadata for already Lost rows, so a crash after setting the state but before its timestamp does not skip the remaining repair. No later operation can run between these replay passes.
+
+Append transactions use record kind `11`, encoding `1`. Its 64-byte fixed body contains operation subtype (`u16`: Registry `1`, Publication `2`, Retry `3`), actor Task (`u16`), flags (`u32`), actor incarnation (`u64`), base/new Registry revisions (`u64` each), an ArraySlice of new record references (`u64` elements, excluding the manifest itself), and a ByteSlice containing redo commands. Its envelope predecessor points to the previous committed append manifest. Every declared record must belong to this operation and fit its prepared allocation plan.
+
+Registry transactions can have variable-sized command streams because their definitions, index changes, memberships, and activation resources are preflighted together. Publication/retry manifests contain the absolute Queue roots, ring slots, and receipt changes for their accepted destinations. The manifest, reference arrays, commands, padding, and any extent slack all consume `max_log_bytes`. Payload/snapshot size alone is not the required allocation.
+
+The initial allocator rounds every new record allocation to 64 bytes, a permitted strengthening of the format's eight-byte minimum. A batch is sequentially parseable from its first record through its proposed tail, with the manifest last. Its manifest is Ready before the operation can commit. The immutable payload is written once; retry records reference it. An extent's word at offset 64 uses the same incomplete/Ready/Committed readiness codes and is committed with its batch. Extent removal/growth/reclamation implementation follows milestone 8.
+
+## Operation protocol and crash boundaries
+
+Every operation first obtains the gate and resolves the preceding journal. It then validates its live actor, current definitions/ownership, schema, destination snapshot, caller output capacity, counters, and complete resource plan. Known semantic/capacity rejection returns **before any journal, arena, queue, receipt, or allocation write for this operation**. Recovery of an earlier interrupted operation can change state before this preflight; that belongs to the earlier operation.
+
+1. Construct the immutable records and absolute redo commands in local memory. Resolve all generated values, times, sequences, and selector results once. Check operation-generation overflow. For Append, compute the entire file/extent allocation and its byte-budget charge.
+2. While control is Idle, fill the journal body. No external resource or logical state is changed yet. Publish Prepared only after the complete body is available, including the control adapter's following-effect barrier.
+3. For Append, allocate/grow the planned file/extent and materialize every record and manifest. Release-store each Ready word after its body. For FixedState, the entire command stream is already in the reserved journal. Current canonical roots, ring slots, and receipts remain unchanged.
+4. Revalidate readiness and publish **Committed**, including the following-effect barrier before redo. This is the sole acceptance/Registry/fixed-operation linearization point. Its release ordering covers all earlier prepared bytes. No operation can now return known rejection.
+5. Apply the complete command stream under the gate. Set each new record/extent Committed, install canonical allocation/accounting roots, update the manifest root for Append, and set `last_completed_operation` to the prepared generation. These are absolute assignments, replayable after any intermediate crash.
+6. Publish Applied, then Idle through the same control adapter. Complete Idle's barrier before releasing the gate, returning, or reusing the journal body. Delivery notifications follow commit and do not affect acceptance.
+
+| Observed state after acquiring the gate | Recovery |
+| --- | --- |
+| Idle | Ignore any partially replaced journal body. No operation may have changed resources while still Idle. |
+| Prepared | Canonical logical roots must still match the base plan. For Append, restore the original physical length for an existing extended file, or remove the new provisional extent identified by the plan. For FixedState, discard the inline intent without truncating/removing any file. Unexpected canonical changes fail closed. Only after rollback succeeds, clear to Idle. |
+| Committed or Applied | Validate prepared records/commands, accepting new records already Ready **or Committed**; replay the entire stream and common epilogue, then Applied and Idle. Never truncate this accepted batch. |
+| Invalid control, ranges, records, or commands | Fail closed with `IoError`; retain evidence for diagnosis. |
+
+Recovery itself can be interrupted. Prepared rollback remains Prepared until completed, so repeated truncation/removal is harmless; absence of its provisional file is success. Committed redo remains committed until all assignments finish, so repeating it cannot duplicate a queue sequence, acknowledgment, or Registry revision. Unknown or malformed data never means permission to discard an accepted record.
+
+Recovery validates against the immutable prepared plan, not an assumption that current roots still equal their old values. A partially applied root can already have its proposed value, and `last_completed_operation` can already equal the journal generation. Absolute replay must accept those cases. A read-only inspector of a quiescent capture can ignore a Prepared tail or overlay committed redo in private memory; it does not need the originating live ABI or write repairs to the captured file. Inspecting a live session first takes the gate or requests a consistent captured snapshot.
+
+If an I/O failure occurs after Prepared, the caller attempts recovery under the gate. Proven precommit rollback can report an ordinary I/O failure with no new delivery obligations. If the caller cannot establish the final state, it reports `OutcomeUnknown`; postcommit failures never become `Rejected`. The recovery lookup resolves the publication's recorded outcome after the journal has been settled. No `fsync` ordering or power-loss inference is implied by these crash boundaries.
+
+## Registration, identity issuance, and duplicate publication
+
+Registry mutations append new definitions and one manifest. Their redo installs all affected index/membership/state roots and one new Registry revision. No observer sees half of a registration or ownership/topology change. Empty/idempotent registrations allocate nothing. Existing definitions remain immutable and inspectable. Initial creation reserves its creator Task and resources, creates an exclusive new session directory, and publishes a usable session only after bootstrap completes; it never overwrites an existing session or exposes a partially initialized handle.
+
+Task attachment holds the OS claim first, then performs a FixedState transaction. It cleans its predecessor's pins, increments incarnation and restart information, installs native diagnostics, and resets producer-local issuance for the new claim. The previous claim's OS lock and current process identity determine liveness; replaying its stored attached bit cannot resurrect a dead owner. Parent-process replacement also detaches thread claims bound to the previous parent incarnation. Source reopen within a live claim preserves its issuance counter; new claim/incarnation values fence old tokens.
+
+`next_publication_id()` is a separate FixedState operation that persists the next producer sequence before returning it. It consumes no history bytes. IDs can have gaps after interrupted issuance. Fresh send/publish requires the current session/Task/incarnation and a positive sequence no greater than that claim's issued sequence. Old-incarnation identities are permitted only for retained lookup/retry by the same logical Task.
+
+An identical repeat send/publish of an already committed current-claim ID returns its original cumulative outcome, without adding an obligation. Endpoint identity, schema, payload format, flags, and encoded payload must match; otherwise return Conflict without altering the original publication. Changes to the endpoint's current destination membership do not change the recorded snapshot of that ID. An undersized output buffer remains a lookup error and cannot mean the original publication was rejected.
+
+After journal recovery, the initial no-reclamation implementation can prove a valid ID absent from all committed history has no accepted publication and report Rejected with an empty outcome view; a fully rejected attempt has no historical snapshot. It can be attempted again under the current topology during the same claim. A future reclamation checkpoint must distinguish provable absence from retired history. Task state word at offset 64 reserves the current incarnation's retired-publication-sequence floor: fresh publication at/below that floor is forbidden even when its old record is gone. Old incarnations already forbid fresh publication. Missing retired history returns `HistoryUnavailable`, never proof of rejection. Milestone 8 must preserve these fences before deleting records.
+
+## Publication, retry, and policy composition
+
+Under the gate, take the Publishing set's committed destination snapshot and topology revision; direct send uses its Queue definition revision and one destination. An offline consumer is legal. An overwriteable ring being full is also legal: recovery queues retain their backlog in the log and loss queues later report overwritten ranges. Neither condition is a destination rejection or an invented pending-delivery bound.
+
+For all-destination acceptance, every destination must pass ownership, activation, counter, policy, and resource validation before preparing anything. All accepted queue sequences, previous links, receipt slots, and ring entries belong to one journal commit. Before it, none of the deliveries exists; after it, all obligations exist even if cached roots need repair. Consumers cannot infer acceptance by seeing only one repaired ring slot.
+
+For partial acceptance, record the entire snapshot with accepted/rejected results. Some destination-specific failures, such as queue-sequence exhaustion, can differ; shared log exhaustion rejects the entire new attempt. Zero acceptance returns before writing. Every snapshot destination gets its preallocated receipt slot, initially unused for rejected destinations. This supports later retry without allocating another receipt or changing the original payload.
+
+Retry validates a retained partially accepted publication, unique requested destinations, original membership, and the caller's Task ownership. It uses the original immutable bytes. Already accepted destinations are skipped. Newly accepted destinations receive one queue sequence/link and their original unused receipt transitions to pending at the new commit. The Retry body's reserved final 16 bytes record actor Task (`u16`), six zero bytes, and actor incarnation (`u64`), allowing a replacement producer to finish an older incarnation's publication. Each retry report is cumulative. If it accepts nothing, it writes nothing and reports the attempt reasons while the stored publication stays partial. Repeating a completed subset adds no delivery; retrying an already fully accepted publication returns its recorded outcome.
+
+## Receive, acknowledgment, release, and allowed loss
+
+Receive enters the gate, recovers, validates Source ownership and its one in-flight slot, and selects among committed eligible queue deliveries. Existing in-flight receive returns the same token without new selection, credits, or issuance. New issuance captures the next counter, exact consumer claim/Queue/sequence, selector state, and dequeue time in one FixedState transaction. This establishes the pin before a borrowed payload is returned. Fair-round resets use ResetBudgets followed by absolute selected-member state; replay cannot debit credits or draw random values twice.
+
+Acknowledgment compares every token component with the current slot before preparing its FixedState operation. It sets that receipt acknowledged with its UTC time, advances only that destination's contiguous terminal prefix, and clears the Source slot. Release/Source close returns the receipt to pending and clears the pin without advancing delivery progress. Recorded last-issuance/dequeue metadata remains historical; an acknowledgment timestamp is present only for acknowledgment. Stale tokens write nothing. Handle closure and claim cleanup require no log allocation.
+
+For allowed loss, a pinned delivery survives every ring overwrite. Only after release, acknowledgment, or dead-claim cleanup removes the pin can a later receive skip an overwritten pending prefix. The gap is a committed LoseRange plus absolute watermark update, with no issued delivery in its range. A crash after gap commit but before returning can prevent the caller from seeing that gap event; it cannot resurrect skipped deliveries. Gap reporting has the same interrupted-call uncertainty as other operations. Recovery queues never run LoseRange for ring wraparound. Segmented storage has no implicit overwrite/eviction under this initial contract.
+
+Publication-log exhaustion does not prevent FixedState operations, including replacement attachment, ID/receipt issuance, acknowledgment, release, scheduling reset, gap progress, or dead-owner cleanup. Inline compact commands are required for the potentially many membership/receipt changes. Filesystem/mapping failure or exhausted identity counters can still fail an operation; the byte-cap guarantee is not a promise of unlimited system resources or unlimited counters.
+
+## Waiting and notification resources
+
+Wait deadlines use a monotonic clock. Negative timeout arguments are invalid; zero requests one immediate nonblocking availability attempt; positive timeouts establish a checked finite deadline. Finite waits try the local mutex/file gate without an unbounded blocking acquisition and check the deadline between attempts. Recovery and a started mutation must finish consistently, so timeout is not a hard execution-time guarantee. Once the gate is obtained and recovery completes, an existing in-flight delivery returns its current token without waiting. Otherwise an expired **positive-timeout** deadline returns Timeout without issuing a new delivery. A zero-time poll can still issue an already available delivery on its one attempt. No gate is held during a sleep, broker exchange, user payload processing, or external application callback.
+
+Spinning repeatedly attempts committed availability and rechecks after attachment/replacement. It needs no notification descriptor. Linux eventfd is an optional milestone-7 implementation with this resource protocol:
+
+1. Opening an eventfd Source allocates a nonblocking close-on-exec eventfd, commits a new notification generation in its reserved Source state, and serves a per-Source descriptor broker. The broker uses a Linux abstract Unix socket name derived from session ID, Source ID, and generation, avoiding session-directory path-length limits. Validate peer credentials and the requested session/Source/current generation before passing the descriptor with `SCM_RIGHTS`.
+2. Producers discover this generation from Registry/Source state and cache the duplicated eventfd keyed by session, Source, consumer incarnation, and notification generation. FD integer values are process-local and are never persisted as handles. Source replacement/close retires its generation and broker; stale cached descriptors cannot represent the replacement's queue state.
+3. A consumer drains accumulated eventfd notifications outside the gate, then checks committed availability under the gate. If empty it sets Source state word at offset 120 to `wait_armed = 1`, rechecks availability while protected, releases the gate, and polls. Issuing/closing clears that word. Producers snapshot armed current destinations under the commit gate, then notify after releasing it. Wakes are hints, not delivery counts.
+4. Poll waits end at the earlier of the user's deadline and a **10 ms watchdog recheck**, including when the user's deadline is far in the future. Each watchdog rechecks committed state and the current generation; broker/descriptor failure falls back to these checks. A producer dying between commit and notification therefore cannot cause permanent missed delivery. A live paused gate owner can still stall logical progress.
+5. Nonblocking eventfd saturation means a wake is already pending. Notification failure is diagnostic and never reverses or rejects committed acceptance. Broker startup/registration failure cleans up the Source slot using reserved state; a receive does not begin sleeping before its resource setup and queue recheck complete.
+
+Eventfd is a kernel counter reached through descriptors; Unix ancillary descriptor passing supplies the shared kernel object to independent processes. Its lifecycle, nonblocking behavior, and coalescing are specified by [eventfd](https://man7.org/linux/man-pages/man2/eventfd.2.html) and [Unix-domain descriptor passing](https://man7.org/linux/man-pages/man7/unix.7.html). Milestone 7 must test lost-wake windows, stale generations, descriptor exhaustion, and producer/consumer replacement against this plan. macOS supports the spin baseline; this contract adds no eventfd emulation there.
+
+## Validation and implementation handoff
+
+Run the bounded protocol model through CTest or directly:
+
+```sh
+python3 test/protocol_model.py
+ctest --test-dir build --output-on-failure
+```
+
+The model enumerates crashes at prepare, record materialization, commit, individual redo assignments, Applied, and Idle, then interrupts recovery and repeats it. It checks all-or-none fan-out, cumulative partial retry and deduplication, unchanged known rejection, stale tokens, pinned overrun/loss, serialized operations, full-log fixed-state progress, and the lost-notification watchdog. It is a logical model with explicit assumptions, not a native mapped implementation or a proof over every possible program state.
+
+Milestone 2 implements gate/claim ownership, the journal, Registry transactions, fixed-state attachment and issuance, and native crash-injection/compatibility tests. Milestones 3 through 6 implement publication/receipt/ring/selector paths using the same authority and add process-kill tests at actual store/I/O boundaries. Milestone 7 qualifies descriptor distribution and waits. Milestone 8 qualifies extent growth and reclamation checkpoints, including publication retirement fences. Milestone 10 qualifies supported profile/policy combinations and publishes measurements. Performance changes can narrow coordination only after preserving these invariants.
+
+[Milestone 1](milestones/milestone-1.md) · [Mapped format](mapped-format.md) · [Public API](api.md)

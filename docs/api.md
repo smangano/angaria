@@ -77,6 +77,8 @@ A Task may open writers for its queues, Source Queue Sets it owns, and Publishin
 
 The application serializes sends touching a common queue and operations on a common Source Queue Set. A thread Task attaches on its current thread while its parent process claim is held by that process. The thread Task and its endpoints retain the parent claim until they close. A process Task supports the application's coordinated sending threads.
 
+The [concurrency contract](concurrency.md) uses per-Task lifetime claims and a crash-released session mutation gate. Initial send, receive, Registry, and delivery-progress operations are blocking. Claim replacement, issuance, acknowledgment, and release use reserved state and require no new log allocation. Immutable payload reads after receive retain their mapping/pin without holding the operation gate.
+
 ## Messages and receive events
 
 `MessageView` carries an exact schema identity, payload format, immutable byte span, and user flags. Publication borrows input bytes for the duration of the call. A committed message retains its encoded data independently of the caller's input buffer.
@@ -102,9 +104,11 @@ Before committing a new publication, an undersized output buffer returns `Output
 
 A Task obtains an identity before attempting publication so it can query that identity after an interrupted call. Identity issuance and payload publication are separate operations. Step 1.5 defines their allocation and commit protocol.
 
+Identity issuance persists through the reserved fixed-state journal. Fresh sends require a current-claim issued ID. Repeating an identical already committed current-claim send returns its original cumulative outcome; conflicting input returns Conflict without altering that publication. The recorded endpoint and original snapshot remain authoritative after topology changes. Recovery settles the journal before lookup; provable absence without reclaimed history reports Rejected with an empty outcome view. Missing retired history returns `HistoryUnavailable` and cannot establish rejection.
+
 Recovery lookup and retry permit an earlier incarnation's publication identity for the same logical producer Task and session. Ownership checks prevent using another producer's publication identity.
 
-`PublishingQueueSet::retry()` resumes a recorded partially accepted publication. It reads the retained original schema, payload format, flags, payload, and destination snapshot using the publication identity. Requested destinations must be unique members of the original snapshot. Already accepted destinations keep their original outcome and receive no additional publication.
+`PublishingQueueSet::retry()` resumes a recorded partially accepted publication. It reads the retained original schema, payload format, flags, payload, and destination snapshot using the publication identity. Requested destinations must be unique members of the original snapshot. Already accepted destinations keep their original outcome and receive no additional publication. Repeating a subset after the publication becomes fully accepted returns that recorded outcome without adding obligations.
 
 If required history has been reclaimed under the retention rules, retry or lookup returns `HistoryUnavailable` and establishes no additional delivery. Required unacknowledged delivery history retains its recovery guarantee.
 

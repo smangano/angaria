@@ -79,7 +79,7 @@ Completion requires applications to exchange several registered message types an
 - Implement recovery from the log for lagging consumers by default, plus configured delivery loss with gap reporting.
 - Make recorded publication and acknowledgment progress sufficient to reconstruct delivery after ring overwrite or endpoint replacement.
 
-Completion requires contention, wraparound, resource-exhaustion, partial-write, and producer-termination tests, plus an audit of the agreed lock-free progress guarantees. Establish latency and throughput measurements for subsequent policy comparisons.
+Completion requires contention, wraparound, resource-exhaustion, partial-write, and producer-termination tests, plus an audit of the [stated progress guarantees](docs/concurrency.md#supported-failure-and-progress-scope). The initial protocol serializes mutation; measure allocation/commit contention alongside latency and throughput for subsequent policy comparisons.
 
 ## 5 Source Queue Sets
 
