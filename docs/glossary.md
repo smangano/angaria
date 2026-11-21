@@ -54,6 +54,8 @@ The [native storage contract](native-storage.md) defines file/mapping ownership,
 | **Task claim** | An exclusive attachment to a logical Task, retained by its Task handle and dependent endpoints or actor-bound Registry views. OS ownership and a recorded incarnation distinguish a live owner from an earlier attachment. |
 | **Bootstrap** | Initializing a new session's storage, creator Task, metadata, and starting state before making the session available for use. |
 | **Incarnation** | The generation of a Task attachment. Reattachment advances it so identities and tokens from an older claim remain distinguishable. |
+| **Session bootstrap** | Creation of the initial Session definition, creator Task registration, and creator claim before the initialized session directory becomes visible at the requested path. The Session flags word records completion. |
+| **Staging directory** | An exclusively created temporary sibling of the requested session directory. Creation initializes it completely, then atomically renames it to the requested path without replacing an existing target. An unpublished directory left by a killed creator is not an attached Session. |
 | **Mutation gate** | The combination of a process-local mutex and an interprocess file lock that serializes mutable session access in the initial protocol. |
 | **Mutation guard** | A move-only, thread-affine owner of one mutation-gate acquisition. It retains its controller and releases the file lock before the local mutex when destroyed. |
 | **Thread-affine** | Requiring acquisition, use, moves, and destruction on the same thread. This applies to mutation guards because they own a thread's mutex lock. |

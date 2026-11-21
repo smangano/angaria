@@ -1,3 +1,7 @@
+// Portable byte-format examples for the private operation journal (see docs/concurrency.md).
+// These tests teach the persisted representation and rejection rules; applications
+// use Session/Task APIs rather than constructing journal commands themselves.
+
 #include "journal_format.h"
 
 #include <gtest/gtest.h>
@@ -131,6 +135,8 @@ namespace
     return bytes;
   }
 
+  // An independently written byte fixture catches shared encoder/decoder mistakes.
+  // The displaced input also demonstrates that decoding bytes needs no native struct alignment.
   TEST(JournalFormat, FixedHeaderMatchesIndependentGoldenBytesAndUnalignedDecode)
   {
     const auto expected = fixed_fixture();
@@ -141,6 +147,8 @@ namespace
     EXPECT_EQ(require_value(mapped::decode_journal_header(std::span{unaligned}.subspan(1))), fixed_header());
   }
 
+  // A damaged or newer unsupported header must fail before recovery interprets it.
+  // Corrupt one field at a time so each reserved-byte and stable-code boundary stays visible.
   TEST(JournalFormat, HeaderRejectsTruncationFlagsReservedAndUnknownCodes)
   {
     const auto fixture = fixed_fixture();
@@ -161,6 +169,8 @@ namespace
     }
   }
 
+  // FixedState changes reserved words without allocating history or advancing Registry revision.
+  // A header mixing in append effects would break that full-log progress guarantee.
   TEST(JournalFormat, FixedStateCannotDescribeAppendSideEffects)
   {
     for (const auto offset : {32u, 48u, 56u, 96u, 112u, 120u, 128u, 144u, 152u})
@@ -183,6 +193,8 @@ namespace
     expect_error(mapped::encode_journal_header(invalid), ErrorCode::InvalidArgument);
   }
 
+  // An Append identifies its complete new allocation and final manifest before commit.
+  // The manifest must belong to that bounded batch; inline commands belong to FixedState instead.
   TEST(JournalFormat, AppendHeaderRequiresBoundedBatchAndManifest)
   {
     auto header = fixed_header();
@@ -210,6 +222,8 @@ namespace
     expect_error(mapped::encode_journal_header(invalid), ErrorCode::InvalidArgument);
   }
 
+  // WriteRange stores an absolute target and replacement bytes, allowing replay to repeat it.
+  // The known bytes document its frame independently of a successful encode/decode round trip.
   TEST(JournalFormat, WriteCommandMatchesIndependentGoldenBytes)
   {
     const std::array commands{write_command()};
@@ -220,6 +234,8 @@ namespace
     EXPECT_TRUE(require_value(mapped::decode_commands({})).empty());
   }
 
+  // A command cannot authorize an unaligned, overflowing, or incomplete write.
+  // Decoding persisted corruption reports IoError; rejecting a newly supplied command reports InvalidArgument.
   TEST(JournalFormat, CommandsRejectMalformedHeadersRangesAndLengths)
   {
     const auto fixture = command_fixture();
@@ -242,6 +258,8 @@ namespace
     expect_error(mapped::encode_commands(std::array{command}), ErrorCode::InvalidArgument);
   }
 
+  // Compact commands encode domain intent in fixed-size payloads instead of one write per affected row.
+  // This checks framing and signed timestamp bits only; recognizing an opcode does not implement its policy.
   TEST(JournalFormat, CompactCommandPayloadsRoundTripWithSignedTimes)
   {
     std::vector<mapped::RedoCommand> commands{write_command()};
@@ -278,6 +296,8 @@ namespace
     expect_error(mapped::encode_commands(std::array{invalid}), ErrorCode::InvalidArgument);
   }
 
+  // The envelope locates a record body and records its generation, revision, and readiness.
+  // Ready describes materialization; the enclosing journal commit still determines acceptance.
   TEST(JournalFormat, RecordEnvelopeMatchesIndependentGoldenBytes)
   {
     mapped::RecordEnvelope envelope;
@@ -321,6 +341,8 @@ namespace
     expect_error(mapped::encode_record_envelope(envelope), ErrorCode::InvalidArgument);
   }
 
+  // A manifest owns its record-reference list and redo bytes through absolute logical slices.
+  // Only short zero padding is permitted beyond those bytes, keeping the canonical encoding unambiguous.
   TEST(JournalFormat, ManifestMatchesIndependentGoldenAbsoluteSlices)
   {
     const auto fixture = manifest_fixture();
@@ -336,6 +358,8 @@ namespace
     expect_error(mapped::decode_manifest_body(padded, 8192));
   }
 
+  // Slices and record references are untrusted persisted values, not pointers to follow first.
+  // Reject overflow, overlap, duplicate/out-of-order references, and self-reference before exposing a manifest.
   TEST(JournalFormat, ManifestRejectsOverflowOverlapAndReferencesOutsideItsBatch)
   {
     const auto fixture = manifest_fixture();
@@ -358,6 +382,8 @@ namespace
     expect_error(mapped::decode_manifest_body(fixture, std::numeric_limits<std::uint64_t>::max() - 7));
   }
 
+  // Registry appends advance the Registry revision once; publication/retry appends preserve it.
+  // Keeping those rules in the wire format prevents a valid frame from describing an impossible transition.
   TEST(JournalFormat, ManifestRejectsUnknownCodesFlagsAndInvalidRevisionTransitions)
   {
     for (const auto [offset, value] : {std::pair{0u, 4u}, {4u, 1u}, {8u, 0u}, {24u, 6u}})
@@ -376,6 +402,8 @@ namespace
     }
   }
 
+  // An empty list has a zero offset as well as a zero count, rather than a dangling logical address.
+  // The codec can represent empty slices even though the execution layer imposes additional batch requirements.
   TEST(JournalFormat, EmptyManifestSlicesUseZeroOffsetsAndBoundedCounts)
   {
     auto value = manifest();

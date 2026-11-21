@@ -1,3 +1,7 @@
+// Strong identity types keep unrelated entities apart at compile time. The
+// literal values below isolate equality rules. Publication IDs come from
+// Task::next_publication_id(); delivery tokens describe the planned receive contract.
+
 #include "angaria/identities.h"
 
 #include <gtest/gtest.h>
@@ -31,6 +35,9 @@ namespace
   static_assert(EMPTY_TOKEN._sequence == 0);
   static_assert(EMPTY_TOKEN._issuance == 0);
 
+  // A message type can retain several immutable schema versions. Changing either
+  // the type or version selects a different schema rather than changing the
+  // meaning of an existing identity.
   TEST(Identities, SchemaVersionIsPartOfIdentity)
   {
     const SchemaId original{MessageType{1}, 1};
@@ -40,6 +47,9 @@ namespace
     EXPECT_NE(original, (SchemaId{MessageType{2}, 1}));
   }
 
+  // A sequence is unique only within its producer claim. Reusing sequence five
+  // after a Task restart must not collide with sequence five from its previous
+  // incarnation; comparing only the sequence would lose that distinction.
   TEST(Identities, PublicationIdentityIncludesProducerClaimAndSequence)
   {
     const PublicationId original{{{1, 2}, TaskId{3}, 4}, 5};
@@ -49,6 +59,9 @@ namespace
     EXPECT_NE(original, (PublicationId{{{1, 2}, TaskId{3}, 4}, 6}));
   }
 
+  // Keep the entire token returned by a receive operation for acknowledgment.
+  // The claim, Source, Queue, sequence, and issuance all contribute to equality,
+  // so an older issuance cannot masquerade as the current delivery.
   TEST(Identities, DeliveryTokenDistinguishesClaimAndIssuance)
   {
     const DeliveryToken original{{{1, 2}, TaskId{3}, 4}, SourceQueueSetId{5}, QueueId{6}, 7, 8};

@@ -12,6 +12,9 @@
 #include <variant>
 #include <vector>
 
+// The superblock is the first 4096 bytes of session.ang; it describes format,
+// compatibility, and fixed-section geometry (docs/mapped-format.md). These
+// portable codec tests neither recover the journal nor create a usable Session.
 namespace
 {
   using namespace angaria;
@@ -133,6 +136,8 @@ namespace
     return supported;
   }
 
+  // Compare against bytes authored from the format table, rather than decoding
+  // the encoder's own output. A matching encoder/decoder bug cannot hide here.
   TEST(MappedSuperblock, EncoderMatchesIndependentGoldenBytes)
   {
     const auto encoded = mapped::encode_initial_superblock(fixture_configuration());
@@ -140,6 +145,8 @@ namespace
     EXPECT_EQ(std::get<mapped::SuperblockBytes>(encoded), golden_superblock());
   }
 
+  // Decode known little-endian bytes into owning configuration values. The
+  // asymmetric numbers expose byte-order and field-width mistakes on any host.
   TEST(MappedSuperblock, DecoderReadsIndependentLittleEndianFixture)
   {
     const auto bytes = golden_superblock();
@@ -166,6 +173,9 @@ namespace
     EXPECT_EQ(configuration._segmentBytes, 0u);
   }
 
+  // Encoding reserves geometry and starts with empty roots/journal; it does not
+  // publish Session readiness. An empty capacity profile is valid for this
+  // low-level codec even though public creation must reserve its creator Task.
   TEST(MappedSuperblock, DefaultAndEmptyProfilesInitializeOnlyTheProvisionalPrefix)
   {
     auto configuration = fixture_configuration();
@@ -206,6 +216,8 @@ namespace
     EXPECT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(mapped::decode_superblock(bytes)));
   }
 
+  // A Session ID is an opaque 128-bit value. Only the all-zero value is invalid;
+  // applications must not impose separate nonzero requirements on its halves.
   TEST(MappedSuperblock, SessionIdentityNeedsOnlyOneNonzeroWord)
   {
     for (const auto zero_high : {false, true})
@@ -230,6 +242,8 @@ namespace
     }
   }
 
+  // Exercise capacities above 16 bits so metadata serialization cannot silently
+  // apply the narrower Task/Queue ID width to every reservation count.
   TEST(MappedSuperblock, WideCapacityCountsRetainTheirFullWidth)
   {
     auto configuration = fixture_configuration();
@@ -248,6 +262,8 @@ namespace
     EXPECT_EQ(limits._symbols, 65537u);
   }
 
+  // A recognizable header fragment is insufficient: the complete control area
+  // must be available before its directory or reserved bytes can be validated.
   TEST(MappedSuperblock, TruncatedPrefixesAreRejected)
   {
     const auto bytes = golden_superblock();
@@ -259,6 +275,8 @@ namespace
     }
   }
 
+  // Mutate one immutable field at a time in an otherwise valid fixture. These
+  // invalid markers, sizes, and capacities must fail before runtime references form.
   TEST(MappedSuperblock, InvalidImmutableHeaderMetadataIsRejected)
   {
     struct Mutation
@@ -289,6 +307,8 @@ namespace
     expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
   }
 
+  // Reserved bytes are part of the compatibility contract, not spare application
+  // storage. Unexpected values cannot be interpreted safely by this format reader.
   TEST(MappedSuperblock, ReservedHeaderAndDirectoryFlagsMustBeZero)
   {
     for (const auto offset : {111u, 184u, 255u, 258u, 2720u, 4095u})
@@ -300,6 +320,9 @@ namespace
     }
   }
 
+  // Recompute section geometry from recorded capacities instead of trusting
+  // on-disk offsets/counts. Forged overlaps, strides, ordering, or wrapped ranges
+  // must not become mapped references into unrelated bytes.
   TEST(MappedSuperblock, DirectoryRangesAndGeometryCannotBeForged)
   {
     struct Mutation
@@ -325,6 +348,8 @@ namespace
     expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
   }
 
+  // Caller mistakes are InvalidConfiguration, whereas malformed stored bytes
+  // are IoError. Reject impossible profiles before emitting a provisional prefix.
   TEST(MappedSuperblock, InvalidEncoderConfigurationFailsBeforeProducingBytes)
   {
     std::vector<mapped::SuperblockConfiguration> invalid;
@@ -370,6 +395,9 @@ namespace
     }
   }
 
+  // Deliberately nonsensical mutable bytes show this decoder's boundary: it
+  // validates immutable metadata only. Successful decoding is not permission to
+  // use those roots; Session attachment must acquire the gate and recover first.
   TEST(MappedSuperblock, MutableRootsAndJournalAreOpaqueToStructuralDecoding)
   {
     auto bytes = golden_superblock();
@@ -392,6 +420,9 @@ namespace
         mapped::decode_superblock(mapped_window)));
   }
 
+  // Inspection can retain a foreign native profile/protocol or unknown features
+  // even when this process cannot attach live. Decoding and live compatibility
+  // are separate decisions.
   TEST(MappedSuperblock, PortableDecodePreservesForeignCompatibilityMetadata)
   {
     auto bytes = golden_superblock();
@@ -408,6 +439,9 @@ namespace
     expect_error(mapped::check_live_compatibility(configuration, fixture_support()), ErrorCode::IoError);
   }
 
+  // A live adapter must explicitly support the recorded ABI, synchronization
+  // protocol, and required features. Supplying capability values here tests the
+  // comparison logic; native host qualification is tested separately.
   TEST(MappedSuperblock, LiveCompatibilityRequiresProfileProtocolAndRequiredFeatures)
   {
     auto configuration = fixture_configuration();
@@ -429,6 +463,8 @@ namespace
     expect_error(mapped::check_live_compatibility(configuration, supported), ErrorCode::InvalidArgument);
   }
 
+  // A valid segmented description remains portable metadata. Setting a test
+  // capability flag demonstrates negotiation, not an implemented segmented backend.
   TEST(MappedSuperblock, SegmentedMetadataRequiresExplicitLiveStorageSupport)
   {
     auto configuration = fixture_configuration();
@@ -448,6 +484,9 @@ namespace
         mapped::check_live_compatibility(stored, supported)));
   }
 
+  // An adapter may impose build-time ceilings below the file format's limits.
+  // Attachment must check every recorded reservation, including the string pool,
+  // rather than accepting a Session it cannot represent locally.
   TEST(MappedSuperblock, LiveCapacityCeilingsApplyToEveryRecordedReservation)
   {
     auto configuration = fixture_configuration();

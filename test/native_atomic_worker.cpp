@@ -1,3 +1,7 @@
+// Independent exec worker for test_native_atomic.cpp. Reopening the file gives
+// the atomic tests a separate process/mapping without inherited C++ state.
+// Publication mode handshakes each generation; crash mode runs until SIGKILL.
+
 #include "native_atomic.h"
 #include "native_file.h"
 
@@ -56,6 +60,9 @@ int main(int argc, char** argv)
     auto acknowledgment = require_value(mapped::AtomicWord::bind(bytes, 8));
     const auto deadline = Clock::now() + std::chrono::seconds{5};
     const std::string_view mode{argv[1]};
+    // The acknowledgment prevents reuse of ordinary body bytes until the
+    // observer has read them. File growth is the externally observed effect
+    // following control publication, rather than another ordinary memory read.
     if (mode == "publication")
     {
       for (std::uint64_t generation = 1; generation <= 256; ++generation)
@@ -72,6 +79,9 @@ int main(int argc, char** argv)
       wait_for(acknowledgment, 256, deadline);
       return 0;
     }
+    // Tell the parent that stores have begun, then alternate complete patterns
+    // until the parent kills this process. No destructor participates in the
+    // retained-word observation after termination.
     if (mode == "crash")
     {
       control.store_release(0xaaaaaaaa55555555);

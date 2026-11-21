@@ -1,3 +1,8 @@
+// Private coordination beneath the public Session API: one shared controller,
+// thread-affine mutation guards, and per-Task native lifetime leases. Fixtures
+// build provisional storage directly to isolate ownership from journal bootstrap;
+// application creation/attachment examples live in test_runtime_session.cpp.
+
 #include "mapped_superblock.h"
 #include "native_atomic.h"
 #include "native_file.h"
@@ -104,6 +109,9 @@ namespace
     std::array<int, 2> _fds{-1, -1};
   };
 
+  // Pipe handshakes establish when an independent exec process owns or is
+  // attempting a resource. Deadlines detect harness failures, and destruction
+  // reaps workers so a failed assertion cannot leave owners behind.
   class Worker
   {
   public:
@@ -309,6 +317,9 @@ namespace
       }
     }
 
+    // Private fixture only: allocate the reserved prefix and coordination files
+    // without creator registration or journal bootstrap. Public applications use
+    // Session::create() rather than assembling this provisional directory.
     static void make_session(const fs::path& directory, const mapped::SuperblockConfiguration& configuration)
     {
       fs::create_directories(directory / "claims");
@@ -363,6 +374,9 @@ namespace
     mapped::SuperblockConfiguration _configuration;
   };
 
+  // Local paths to one live Session must share its mutex and native locks.
+  // Directory aliases coalesce; a different resource namespace carrying the same
+  // Session identity is rejected to prevent independent ownership domains.
   TEST_F(SessionControllerTest, AliasesShareOneControllerAndLiveSessionCopiesAreRejected)
   {
     auto controller = open_controller();
@@ -382,6 +396,9 @@ namespace
     expect_error(mapped::SessionController::open_existing(copy), ErrorCode::Conflict);
   }
 
+  // Threads share the controller's native descriptor, so a local mutex also
+  // provides exclusion. A nonblocking contender reports busy; blocking
+  // acquisition proceeds only after the original guard closes.
   TEST_F(SessionControllerTest, LocalGateExcludesAnotherThreadOnTheSharedDescriptor)
   {
     auto controller = open_controller();
@@ -415,6 +432,9 @@ namespace
     require_value(completion.get());
   }
 
+  // A nested gate-taking operation must fail without weakening the original
+  // ownership. An independent process verifies that rejecting a nested
+  // acquisition did not release the outer gate.
   TEST_F(SessionControllerTest, NestedGateEntryIsRejectedWithoutReleasingTheOuterGuard)
   {
     auto controller = open_controller();
@@ -429,6 +449,9 @@ namespace
     require_value(controller->try_acquire_mutation());
   }
 
+  // A guard retains ownership when moved on its acquiring thread and authorizes
+  // access only to its own controller. Move assignment releases the destination's
+  // previous gate, demonstrated through independent contenders.
   TEST_F(SessionControllerTest, GateMovesRetainOwnershipAndValidateTheirController)
   {
     auto controller = open_controller();
@@ -460,6 +483,9 @@ namespace
     require_value(reopened.check_owner());
   }
 
+  // A guard remains thread-affine when another thread borrows its C++ reference.
+  // Wrong-thread access reports WrongOwner and leaves the acquiring thread's
+  // ownership intact until that thread releases the guard.
   TEST_F(SessionControllerTest, BorrowedGuardOperationsRejectOtherThreadsWithoutReleasingOwnership)
   {
     auto controller = open_controller();
@@ -487,6 +513,9 @@ namespace
     EXPECT_EQ(released.finish(), 0);
   }
 
+  // Unlocking a thread-owned mutex from another thread violates the guard
+  // contract. A worker deliberately destroys its live guard incorrectly;
+  // termination must release OS resources so a replacement can proceed.
   TEST_F(SessionControllerTest, DestroyingLiveGuardOnAnotherThreadTerminatesTheOwningProcess)
   {
     auto controller = open_controller();
@@ -504,6 +533,9 @@ namespace
     require_value(guard.check_owner());
   }
 
+  // The gate spans processes as well as threads. A handshake establishes that
+  // a second process has reached blocking acquisition; releasing the first
+  // guard then permits that acquisition to complete.
   TEST_F(SessionControllerTest, IndependentProcessGateAttemptsAndBlockingAcquisitionRespectOwnership)
   {
     auto controller = open_controller();
@@ -520,6 +552,9 @@ namespace
     require_value(controller->try_acquire_mutation());
   }
 
+  // Different Tasks can own claims concurrently. A child lease retains its
+  // parent claim and controller after their original handles close, underpinning
+  // the public Thread Task lifetime relationship with its Process Task.
   TEST_F(SessionControllerTest, ClaimsAreIndependentAndChildLeasesRetainTheirParentAndController)
   {
     auto controller = open_controller();
@@ -547,6 +582,9 @@ namespace
     require_value(controller->try_claim_task(static_cast<TaskId>(1)));
   }
 
+  // Bootstrap/registration explicitly creates stable claim files under the gate.
+  // Acquisition cannot create a missing file, repeated creation preserves file
+  // identity, and invalid Task IDs cannot allocate extra resources.
   TEST_F(SessionControllerTest, ClaimCreationIsExplicitStableAndBounded)
   {
     auto controller = open_controller();
@@ -578,6 +616,9 @@ namespace
     EXPECT_FALSE(fs::exists(_directory / "claims/task-5.lock"));
   }
 
+  // Start two claim attempts together and retain both results. Keeping the
+  // winning lease alive ensures the other attempt sees OwnershipBusy instead of
+  // succeeding after a temporary winner has already closed.
   TEST_F(SessionControllerTest, SimultaneousLocalClaimsHaveOneRetainedWinner)
   {
     auto controller = open_controller();
@@ -610,6 +651,9 @@ namespace
     EXPECT_EQ(winners, 1u);
   }
 
+  // One live claim excludes the same Task in another process while other Tasks
+  // remain available. Nonblocking probes observe native ownership under the gate;
+  // closing the final owner makes that logical Task claimable again.
   TEST_F(SessionControllerTest, ClaimExclusionAndProbesWorkAcrossIndependentProcesses)
   {
     auto controller = open_controller();
@@ -634,6 +678,9 @@ namespace
     require_value(controller->try_claim_task(static_cast<TaskId>(1)));
   }
 
+  // Attachment validates coordination resources without repairing them.
+  // Recreating a missing lock could split live participants across different
+  // files, so incomplete storage fails and remains unchanged.
   TEST_F(SessionControllerTest, MissingMutationLockAndClaimsDirectoryAreNeverRecreatedOnAttach)
   {
     fs::remove(_directory / "mutation.lock");
@@ -645,6 +692,9 @@ namespace
     EXPECT_FALSE(fs::exists(_directory / "claims"));
   }
 
+  // Coordination paths must name stable ordinary resources in one Session
+  // namespace. Substitute aliases and other file types to ensure attachment
+  // cannot establish locks outside the original ownership domain.
   TEST_F(SessionControllerTest, CoordinationFilesRejectSymlinksPipesDirectoriesAndHardLinks)
   {
     const auto lock = _directory / "mutation.lock";
@@ -668,6 +718,9 @@ namespace
     expect_error(mapped::SessionController::open_existing(_directory), ErrorCode::IoError);
   }
 
+  // Task ownership requires a stable claim file per logical Task. Inject
+  // symlinks, a FIFO, a directory, and a hard link to demonstrate rejection by
+  // creation/acquisition rather than acceptance of substituted lock resources.
   TEST_F(SessionControllerTest, TaskClaimFilesRejectNonregularAndAliasedLockResources)
   {
     auto controller = open_controller();
@@ -689,6 +742,9 @@ namespace
     expect_error(controller->try_claim_task(static_cast<TaskId>(1)), ErrorCode::IoError);
   }
 
+  // A valid superblock prefix is insufficient when its reserved tables are
+  // missing. Attachment rejects truncated storage before adding claim files or
+  // changing existing coordination resources.
   TEST_F(SessionControllerTest, TruncatedFixedSectionsFailBeforeCoordinationChanges)
   {
     auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang",
@@ -700,6 +756,9 @@ namespace
     EXPECT_EQ(fs::file_size(_directory / "mutation.lock"), 0u);
   }
 
+  // Structurally readable storage can still require another live ABI or an
+  // unsupported feature. Native attachment rejects that mismatch without
+  // attempting repairs or rewriting its metadata.
   TEST_F(SessionControllerTest, IncompatibleProfilesAndRequiredFeaturesFailWithoutWrites)
   {
     auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang",
@@ -726,6 +785,9 @@ namespace
     }
   }
 
+  // A controller binds the immutable configuration it first validated. Changing
+  // the stored ceiling or capacities beneath a live owner cannot silently alter
+  // its resource limits or establish a compatible second open.
   TEST_F(SessionControllerTest, RetainedFileLimitsAndImmutableConfigurationRemainBoundToTheController)
   {
     auto controller = open_controller();
@@ -758,6 +820,9 @@ namespace
     }
   }
 
+  // Replacing a lock path with a fresh file must not create a second ownership
+  // domain. Retained controllers detect the replacement and reject acquisition,
+  // probing, and attachment rather than trusting the pathname alone.
   TEST_F(SessionControllerTest, ReplacedCoordinationPathsFailClosedWhileOwnersRemainAlive)
   {
     auto controller = open_controller();
@@ -773,6 +838,9 @@ namespace
     expect_error(mapped::SessionController::open_existing(_directory), ErrorCode::IoError);
   }
 
+  // Guards and claims retain their controller and descriptors until their last
+  // owner closes. Exec closes these descriptors so another executable cannot
+  // accidentally keep the Session's native locks alive.
   TEST_F(SessionControllerTest, GuardAndClaimLifetimesRetainCloseOnExecDescriptors)
   {
     auto controller = open_controller();
@@ -802,6 +870,9 @@ namespace
     EXPECT_EQ(errno, EBADF);
   }
 
+  // Kill a worker while it owns both native resources, without orderly cleanup.
+  // The OS must make both available to a replacement; persisted incarnation
+  // repair is exercised separately by the public Session tests.
   TEST_F(SessionControllerTest, TerminatedProcessReleasesItsMutationGateAndTaskClaim)
   {
     auto controller = open_controller();
@@ -817,6 +888,9 @@ namespace
     require_value(guard.check_owner());
   }
 
+  // An inherited controller, guard, and lease cannot become child ownership.
+  // The worker checks rejection and quiescent cleanup while its original parent
+  // continues excluding outsiders until it releases its resources.
   TEST_F(SessionControllerTest, ForkChildRejectsInheritedOwnersWithoutUnlockingItsParent)
   {
     auto controller = open_controller();
@@ -830,6 +904,9 @@ namespace
     require_value(controller->try_claim_task(static_cast<TaskId>(1)));
   }
 
+  // Leave a fork child alive, then kill the process that acquired the locks.
+  // Child-side descriptor cleanup must prevent inherited open descriptions from
+  // keeping the dead parent's Session resources locked.
   TEST_F(SessionControllerTest, SurvivingForkChildCannotRetainItsTerminatedParentsLocks)
   {
     auto controller = open_controller();

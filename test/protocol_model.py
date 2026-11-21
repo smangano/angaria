@@ -399,6 +399,9 @@ class ProtocolModelTest(unittest.TestCase):
         model.finish(model.issue_id())
         return model
 
+    # Default fanout creates obligations for both destinations at one commit.
+    # Explore every modeled operation/recovery cut to rule out a visible half-fanout
+    # within this bounded two-Queue model.
     def test_default_fanout_is_all_or_none_at_every_crash_cut(self):
         base = self.with_id()
         done = self.explore(base, base.publish(base.next_id()))
@@ -406,6 +409,9 @@ class ProtocolModelTest(unittest.TestCase):
         self.assertEqual(done.state["publications"][identity]["accepted"], {1: 1, 2: 1})
         self.assertEqual([done.state["queues"][q]["last"] for q in (1, 2)], [1, 1])
 
+    # Destination rejection, insufficient output capacity, and LogFull are known
+    # failures before acceptance. None may leave a receipt, allocation, or journal
+    # change that would make a supposedly rejected publication observable.
     def test_known_rejections_change_no_stored_state(self):
         for arguments in ({"unavailable": (2,)}, {"unavailable": (1, 2), "partial": True},
                           {"output_capacity": 1}):
@@ -420,6 +426,9 @@ class ProtocolModelTest(unittest.TestCase):
             full.publish(full.next_id())
         self.assertEqual(full.__dict__, before)
 
+    # A fixed-state operation invalidates an older plan even without appending.
+    # This model compares full base state; the native journal tracks freshness with
+    # its captured generation and roots rather than persisting this whole snapshot.
     def test_stale_plans_reject_same_tail_state_changes_without_writes(self):
         for append_plan, recover_first in itertools.product((False, True), repeat=2):
             with self.subTest(append_plan=append_plan, recover_first=recover_first):
@@ -445,6 +454,9 @@ class ProtocolModelTest(unittest.TestCase):
                 model.finish(model.issue_id())
                 self.assertEqual(model.state["producer"]["issued"], issued_before + 2)
 
+    # The planned partial-delivery policy reserves all original receipt slots.
+    # Retry adds only missing obligations, preserves an acknowledged destination,
+    # and can resolve an older producer incarnation without authorizing a fresh send.
     def test_partial_retry_preserves_original_acceptance_without_duplicates(self):
         base = self.with_id()
         identity = base.next_id()
@@ -468,6 +480,9 @@ class ProtocolModelTest(unittest.TestCase):
         self.assertEqual(len(done.arena), 2)
         self.assertEqual([len(done.state["queues"][q]["history"]) for q in (1, 2)], [1, 1])
 
+    # History exhaustion must not strand existing delivery progress or replacement
+    # claims. Replacement changes the consumer incarnation; receiving again after
+    # release or Source close/reopen changes issuance, fencing the earlier token.
     def test_full_log_still_allows_claim_issuance_receive_ack_and_release(self):
         base = self.with_id(log_capacity=1)
         base.finish(base.publish(base.next_id()))
@@ -495,6 +510,9 @@ class ProtocolModelTest(unittest.TestCase):
         with self.assertRaisesRegex(KnownRejection, "StaleDelivery"):
             resumed.finish_delivery(1, token, acknowledge=True)
 
+    # One Source owns one in-flight delivery across all its member Queues.
+    # Queue choice is explicit here: the model checks shared-slot/token lifetime,
+    # not the selection policy or its fairness.
     def test_one_source_has_only_one_slot_across_multiple_member_queues(self):
         model = self.with_id(shared_source=True)
         model.finish(model.publish(model.next_id()))
@@ -508,6 +526,9 @@ class ProtocolModelTest(unittest.TestCase):
         self.assertEqual(second.state["inflight"][1][1:3], (2, 1))
         self.assertGreater(second.state["inflight"][1][3], token[3])
 
+    # Compare the planned recover-from-log and allow-loss behaviors after the
+    # two-slot ring overwrites its oldest entry. An issued delivery stays pinned;
+    # only after release may allow-loss record a gap and advance to retained entries.
     def test_ring_overwrite_preserves_recovery_and_an_issued_loss_policy_pin(self):
         for allow_loss in (False, True):
             model = self.with_id(log_capacity=3, allow_loss=allow_loss)
@@ -537,12 +558,18 @@ class ProtocolModelTest(unittest.TestCase):
                 self.assertEqual(skipped.state["inflight"][1][2], 2)
                 self.assertEqual(len(skipped.arena), 3)
 
+    # Inject a cache entry with no accepted publication to show that a ring is
+    # only an index into committed history. A provisional or stale candidate cannot
+    # create a delivery obligation by itself.
     def test_a_ring_candidate_is_not_commit_authority(self):
         model = self.with_id()
         model.state["queues"][1]["ring"] = [(1, model.next_id())]
         self.assertEqual(model.eligible_ring(1), [])
         self.assertIsNone(model.receive(1))
 
+    # The logical mutation gate must settle an interrupted predecessor before
+    # planning another operation. Try both operation orders and crash cuts, then
+    # check that both destination histories advance consistently.
     def test_mutations_serialize_after_recovering_an_interrupted_predecessor(self):
         for order in itertools.permutations(("first", "second")):
             base = self.with_id()
@@ -567,6 +594,9 @@ class ProtocolModelTest(unittest.TestCase):
                 self.assertEqual(len(model.state["queues"][1]["history"]), before + 1)
                 type(self).crash_cuts += 1
 
+    # Unknown control values or missing accepted records cannot be interpreted as
+    # permission to discard work. Recovery reports corruption instead of inventing
+    # a rolled-back or successfully delivered outcome.
     def test_unknown_control_and_incomplete_committed_body_fail_closed(self):
         model = self.with_id()
         model.control = 99
@@ -580,6 +610,9 @@ class ProtocolModelTest(unittest.TestCase):
         with self.assertRaises(CorruptJournal):
             list(model.recover())
 
+    # Prepared promises that this operation has not changed canonical state yet.
+    # The model snapshots all that state; native recovery checks its documented
+    # persisted roots. A contradiction must preserve evidence rather than roll back.
     def test_prepared_recovery_rejects_changed_canonical_roots(self):
         for append in (False, True):
             model = self.with_id()
@@ -593,6 +626,9 @@ class ProtocolModelTest(unittest.TestCase):
                 list(model.recover())
             self.assertEqual(model.__dict__, evidence)
 
+    # FixedState has no append allocation to undo. Inject an unexplained resource
+    # after preparation and retain it as corruption evidence instead of treating it
+    # as a disposable uncommitted tail.
     def test_prepared_fixed_state_never_truncates_unexpected_resources(self):
         model = self.with_id()
         steps = model.execute(model.issue_id())
@@ -604,6 +640,9 @@ class ProtocolModelTest(unittest.TestCase):
             list(model.recover())
         self.assertEqual(model.__dict__, evidence)
 
+    # A producer can commit and die before notifying a sleeping consumer.
+    # The planned watchdog recheck supplies eventual progress across these finite
+    # logical schedules; eventual execution is assumed, not native eventfd timing.
     def test_watchdog_covers_commit_before_lost_eventfd_notification(self):
         # Enumerate all order-preserving consumer/producer interleavings. FD
         # transport, notification generations, and real waits need native tests.

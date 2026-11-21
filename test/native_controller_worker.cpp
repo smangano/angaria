@@ -1,3 +1,9 @@
+// Independent exec worker for test_session_controller.cpp. Pipe handshakes
+// establish progress without assuming that elapsed time means a lock was reached:
+// A = acquired/succeeded, B = busy, S = about to block, W = wrong-thread checks
+// complete, and C = fork child is alive. Closing the release pipe permits orderly
+// exit; crash cases kill an owner instead. This is a private test protocol.
+
 #include "session_controller.h"
 
 #include <cerrno>
@@ -119,6 +125,8 @@ int main(int argc, char** argv)
     const std::string mode = argv[1];
     const int report_fd = std::stoi(argv[3]);
     const int release_fd = std::stoi(argv[4]);
+    // Inspect inherited descriptor numbers before opening library resources,
+    // which could otherwise reuse those numbers and obscure close-on-exec.
     if (mode == "check_closed")
     {
       const int first = std::stoi(argv[5]);
@@ -163,6 +171,8 @@ int main(int argc, char** argv)
       return 0;
     }
 
+    // Acquire the lifetime claim before the operation gate. The following
+    // modes retain both while the parent chooses orderly release or SIGKILL.
     auto claim = require_value(controller->try_claim_task(task));
     auto guard = require_value(controller->acquire_mutation());
     if (mode == "hold_both")

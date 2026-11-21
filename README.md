@@ -21,6 +21,8 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+For usage examples, start with the [test reading guide](test/README.md). Test comments explain the demonstrated scenarios and distinguish public Session usage from private fixtures, recovery checks, the protocol model, and the earlier prototype.
+
 ## Configuration contract
 
 The [configuration and lifecycle contract](docs/configuration.md) defines the proposed TOML schema for the Registry implementation. The [trading example](examples/trading.toml) exercises process and thread Tasks, both Queue Set types, and the delivery policies.
@@ -37,7 +39,7 @@ Milestone 2 integrates configuration loading and semantic validation with the Re
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Private file/mapping, coordination, and journal primitives implement its storage foundation; public Session and Registry operations follow in the [milestone 2 steps](docs/milestones/milestone-2.md).
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation, attachment, creator Task inspection, claims, and publication identity issuance are implemented. General Registry registration follows in the remaining [milestone 2 steps](docs/milestones/milestone-2.md).
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Publication, delivery, and notification behavior follow in their implementation milestones.
 
@@ -47,7 +49,9 @@ Step 2.2 adds private [native file and mapping owners](docs/native-storage.md): 
 
 Step 2.3 adds the shared [session controller, mutation guards, Task leases, and native atomic adapter](docs/native-storage.md#shared-controller-and-mutation-gate). Native tests exercise thread/process exclusion, claim lifetimes and process termination, and mapped-memory publication ordering.
 
-Step 2.4 adds the private [mutation journal](docs/native-storage.md#journal-transactions-and-recovery): inline fixed-state transactions, append batches with manifests, stale-plan rejection, and repeatable rollback/redo for two-plane storage. Tests terminate independent processes at real write/recovery boundaries and inject I/O failures. Public format-2 Session bootstrap/attachment follows in step 2.5; compact scheduling, loss, and claim-cleanup commands await their owning domain implementations.
+Step 2.4 adds the private [mutation journal](docs/native-storage.md#journal-transactions-and-recovery): inline fixed-state transactions, append batches with manifests, stale-plan rejection, and repeatable rollback/redo for two-plane storage. Tests terminate independent processes at real write/recovery boundaries and inject I/O failures.
+
+Step 2.5 integrates [public Session creation and attachment](docs/native-storage.md#public-session-and-task-lifetimes), persisted options/metadata, the creator Process Task, Task inspection, and fixed-state attachment/incarnation/publication-ID operations. Creation publishes a completely initialized directory exclusively; attachment validates and recovers existing state. Claim replacement, including cleanup of a dead Process Task's thread Tasks, works with no append space. TOML factories, general registration, and messaging operations follow their roadmap steps.
 
 ## Run the restart walkthrough
 

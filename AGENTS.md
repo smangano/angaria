@@ -14,6 +14,12 @@ Boost and Intel TBB are permitted dependencies when warranted by the implementat
 - Define specialized and project-specific terms at first use, or link to their canonical definition.
 - Keep shared terminology in `docs/glossary.md` consistent with the format/API contracts and code comments.
 
+## Tests as usage documentation
+
+- Treat tests as examples readers use to learn Angaria. Explain the scenario, relevant API sequence, and the guarantee or failure behavior being demonstrated.
+- Add brief suite orientation and purposeful test comments; explain non-obvious setup and ownership/lifetime transitions instead of narrating each assertion.
+- Clearly distinguish public API usage from private fixtures, deliberate corruption, fault injection, the legacy prototype, and models of future behavior. Do not imply a planned feature is implemented.
+
 ## Configuration
 
 Configuration files use TOML. Implement TOML support with [cpptoml](https://github.com/skystrife/cpptoml). Provide YAML, JSON, and XML configuration support through converters that emit TOML for the common loader and validation path.

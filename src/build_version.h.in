@@ -1,0 +1,6 @@
+#pragma once
+
+namespace angaria::detail
+{
+  inline constexpr char framework_version[] = "@PROJECT_VERSION@";
+} // namespace angaria::detail

@@ -1,3 +1,8 @@
+// Separate executable exercising global owners populated during main and
+// retained through static destruction. Late cleanup must close claims and
+// descriptors and safely run registered fork callbacks after ordinary local
+// static destruction would have begun.
+
 #include "native_atomic.h"
 #include "native_file.h"
 #include "session_controller.h"
