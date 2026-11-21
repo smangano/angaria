@@ -21,6 +21,9 @@ add_library(angaria STATIC
   src/mapped_region.cpp
   src/native_atomic.cpp
   src/session_controller.cpp
+  src/journal_format.cpp
+  src/journal_validation.cpp
+  src/mutation_journal.cpp
 )
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
@@ -54,6 +57,10 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_controller_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_controller_worker PRIVATE angaria)
 
+  add_executable(angaria_native_journal_worker test/native_journal_worker.cpp)
+  target_include_directories(angaria_native_journal_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_journal_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
@@ -66,6 +73,10 @@ if(BUILD_TESTING)
     test/test_native_file.cpp
     test/test_native_atomic.cpp
     test/test_session_controller.cpp
+    test/test_journal_format.cpp
+    test/test_journal_validation.cpp
+    test/test_mutation_journal.cpp
+    test/test_journal_bulk_redo.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
@@ -74,10 +85,11 @@ if(BUILD_TESTING)
     ANGARIA_TEST_PYTHON="${Python3_EXECUTABLE}"
     ANGARIA_NATIVE_ATOMIC_WORKER="$<TARGET_FILE:angaria_native_atomic_worker>"
     ANGARIA_NATIVE_CONTROLLER_WORKER="$<TARGET_FILE:angaria_native_controller_worker>"
+    ANGARIA_NATIVE_JOURNAL_WORKER="$<TARGET_FILE:angaria_native_journal_worker>"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
-  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests PROPERTIES TIMEOUT 10)
