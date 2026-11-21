@@ -154,6 +154,67 @@ namespace
     return plan;
   }
 
+  mapped::TransactionPlan make_publication_plan(const mapped::JournalSnapshot& base)
+  {
+    mapped::TransactionPlan plan;
+    plan._base = base;
+    plan._kind = mapped::JournalKind::Append;
+    plan._subtype = mapped::TransactionSubtype::Publication;
+    plan._actor = static_cast<TaskId>(1);
+    plan._actorIncarnation = 7;
+    plan._newRevision = base._revision;
+
+    mapped::JournalRecord record;
+    record._kind = 9;
+    record._immutable.resize(232); // Fixed body, two destinations, eight payload bytes.
+    const auto body = base._tail + mapped::record_envelope_bytes;
+    const auto receipts = body + record._immutable.size();
+    put_integer(record._immutable, 0, 1, 2); // Producer.
+    put_integer(record._immutable, 2, 1, 2); // Publishing set.
+    put_integer(record._immutable, 4, 1, 2); // Message type.
+    put_integer(record._immutable, 6, 1, 2); // Binary payload.
+    put_integer(record._immutable, 8, 1, 4); // Schema version.
+    put_integer(record._immutable, 16, 7);
+    put_integer(record._immutable, 24, 99);
+    put_integer(record._immutable, 32, 1000);
+    put_integer(record._immutable, 40, 3);
+    put_integer(record._immutable, 48, 2, 4);
+    put_integer(record._immutable, 56, body + 224);
+    put_integer(record._immutable, 64, 8);
+    // This fixture exercises journal framing; registered schema/Task existence
+    // is validated by the later domain layer, not by the journal.
+    put_integer(record._immutable, 80, body + 128);
+    put_integer(record._immutable, 88, 2);
+    put_integer(record._immutable, 96, receipts);
+    put_integer(record._immutable, 104, 2);
+    put_integer(record._immutable, 112, 1, 2); // All destinations.
+    for (std::size_t destination = 0; destination != 2; ++destination)
+    {
+      const auto row = 128 + destination * 48;
+      put_integer(record._immutable, row, destination + 1, 2);
+      put_integer(record._immutable, row + 2, 1, 2); // Accepted.
+      put_integer(record._immutable, row + 8, 101 + destination);
+      put_integer(record._immutable, row + 24, 1000 + destination);
+      put_integer(record._immutable, row + 32, receipts + destination * 128);
+    }
+    put_integer(record._immutable, 224, 0x0123456789abcdef);
+    record._mutable.resize(256);
+    put_integer(record._mutable, 0, 1); // Both receipts initially pending.
+    put_integer(record._mutable, 128, 1);
+    plan._records.push_back(std::move(record));
+
+    plan._commands.push_back(write_word(receipts, 2)); // Issue the first receipt.
+    mapped::RedoCommand issuance;
+    issuance._target = receipts + 8;
+    issuance._payload.resize(32);
+    put_integer(issuance._payload, 0, 0x0000000100010002); // Task 2, Source 1, dequeue flag.
+    put_integer(issuance._payload, 8, 7);
+    put_integer(issuance._payload, 16, 13);
+    put_integer(issuance._payload, 24, 1002);
+    plan._commands.push_back(std::move(issuance));
+    return plan;
+  }
+
   class CrashWorker
   {
   public:
@@ -430,6 +491,60 @@ namespace
       EXPECT_EQ(access.image(), before);
     }
 
+    void assert_publication_recovered(const fs::path& directory, const mapped::JournalSnapshot& base)
+    {
+      Access access(directory);
+      const auto snapshot = require_value(access._journal.snapshot(access._guard));
+      EXPECT_EQ(snapshot._generation, base._generation + 1);
+      EXPECT_EQ(snapshot._revision, base._revision);
+      EXPECT_EQ(snapshot._accounted, snapshot._tail);
+      EXPECT_EQ(snapshot._fileBytes, snapshot._tail);
+      EXPECT_GT(snapshot._manifest, base._tail);
+      EXPECT_EQ(access.word(mapped::journal_offset), 0u);
+      const auto plan = make_publication_plan(base);
+      const auto receipts = base._tail + 64 + plan._records[0]._immutable.size();
+      auto expected = plan._records[0]._mutable;
+      put_integer(expected, 0, 2);
+      put_integer(expected, 8, 0x0000000100010002);
+      put_integer(expected, 16, 7);
+      put_integer(expected, 24, 13);
+      put_integer(expected, 32, 1002);
+      const auto image = access.image();
+      ASSERT_GE(image.size(), base._tail + 576);
+      const auto envelope = require_value(mapped::decode_record_envelope(
+          std::span{image}.subspan(base._tail, 64)));
+      EXPECT_EQ(envelope._kind, 9u);
+      EXPECT_EQ(envelope._readiness, 2u);
+      EXPECT_EQ(envelope._generation, base._generation + 1);
+      EXPECT_EQ(envelope._registryRevision, base._revision);
+      EXPECT_EQ(envelope._immutableBytes, 232u);
+      EXPECT_EQ(envelope._totalBytes, 576u);
+      ASSERT_GE(envelope._totalBytes, 64u + 232u + expected.size());
+      ASSERT_LE(base._tail + envelope._totalBytes, image.size());
+      EXPECT_TRUE(std::equal(plan._records[0]._immutable.begin(), plan._records[0]._immutable.end(),
+                             image.begin() + base._tail + 64));
+      EXPECT_TRUE(std::equal(expected.begin(), expected.end(), image.begin() + receipts));
+      EXPECT_TRUE(std::all_of(image.begin() + receipts + expected.size(),
+                              image.begin() + base._tail + envelope._totalBytes,
+                              [](std::byte value)
+                              {
+                                return value == std::byte{};
+                              }));
+      EXPECT_EQ(access.word(receipts + 128), 1u); // Untouched initialized receipt survives.
+      const auto manifest_envelope = require_value(mapped::decode_record_envelope(
+          std::span{image}.subspan(snapshot._manifest, 64)));
+      EXPECT_EQ(manifest_envelope._readiness, 2u);
+      const auto manifest = require_value(mapped::decode_manifest_body(
+          std::span{image}.subspan(snapshot._manifest + 64, manifest_envelope._immutableBytes), snapshot._manifest));
+      EXPECT_EQ(manifest._subtype, mapped::TransactionSubtype::Publication);
+      EXPECT_EQ(manifest._records, (std::vector<std::uint64_t>{base._tail}));
+      EXPECT_EQ(manifest._commands, plan._commands);
+      EXPECT_EQ(manifest._baseRevision, base._revision);
+      EXPECT_EQ(manifest._newRevision, base._revision);
+      require_value(access._journal.recover(access._guard));
+      EXPECT_EQ(access.image(), image);
+    }
+
     fs::path _root;
     mapped::SuperblockConfiguration _configuration;
   };
@@ -476,6 +591,100 @@ namespace
       EXPECT_EQ(manifest._commands, make_plan(base, _configuration, true)._commands);
     }
     assert_recovered(directory, true, true);
+  }
+
+  TEST_F(MutationJournalTest, PublicationAppendMaterializesItsInitializedMutableReceipts)
+  {
+    const auto directory = make_session();
+    mapped::JournalSnapshot base;
+    {
+      Access access(directory);
+      base = require_value(access._journal.snapshot(access._guard));
+      const auto result = require_value(access._journal.execute(access._guard, make_publication_plan(base)));
+      ASSERT_EQ(result._records.size(), 1u);
+      EXPECT_EQ(result._records[0], base._tail);
+      EXPECT_GT(result._manifest, base._tail);
+    }
+    assert_publication_recovered(directory, base);
+  }
+
+  TEST_F(MutationJournalTest, InvalidPublicationReceiptStorageAndReservedBytesLeaveTheFileUnchanged)
+  {
+    Access access(make_session());
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    const auto before = access.image();
+    for (unsigned invalid = 0; invalid != 7; ++invalid)
+    {
+      SCOPED_TRACE(invalid);
+      auto plan = make_publication_plan(base);
+      auto& record = plan._records[0];
+      switch (invalid)
+      {
+      case 0:
+        record._mutable.resize(128);
+        break;
+      case 1:
+        record._mutable.resize(384);
+        break;
+      case 2:
+        record._mutable.clear();
+        break;
+      case 3:
+        put_integer(record._immutable, 104, 1);
+        break;
+      case 4:
+        put_integer(record._immutable, 104, std::numeric_limits<std::uint64_t>::max());
+        break;
+      case 5:
+        put_integer(record._immutable, 104, 0);
+        break;
+      case 6:
+        record._immutable.resize(127);
+        break;
+      }
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
+      EXPECT_EQ(access.image(), before);
+      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+    }
+    for (const auto reserved : {56u, 64u, 127u, 184u, 192u, 255u})
+    {
+      SCOPED_TRACE(reserved);
+      auto plan = make_publication_plan(base);
+      plan._records[0]._mutable[reserved] = std::byte{1};
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
+      EXPECT_EQ(access.image(), before);
+      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+    }
+  }
+
+  TEST_F(MutationJournalTest, PublicationReceiptInitializationSurvivesRepeatedInterruptedRecovery)
+  {
+    const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 3> cuts{{
+        {mapped::JournalCheckpoint::Committed, 0},
+        {mapped::JournalCheckpoint::RedoWord, 0},
+        {mapped::JournalCheckpoint::RedoWord, 2},
+    }};
+    for (std::size_t position = 0; position != cuts.size(); ++position)
+    {
+      SCOPED_TRACE(position);
+      const auto directory = make_session("publication-cut-" + std::to_string(position));
+      mapped::JournalSnapshot base;
+      {
+        Access access(directory);
+        base = require_value(access._journal.snapshot(access._guard));
+      }
+      CrashWorker writer(directory, "publication", cuts[position].first, cuts[position].second);
+      writer.kill_at_checkpoint();
+      {
+        Access access(directory);
+        EXPECT_EQ(access.word(base._tail + 64 + 232 + 128), 1u);
+      }
+      CrashWorker partial_redo(directory, "recover", mapped::JournalCheckpoint::RedoWord, 1);
+      partial_redo.kill_at_checkpoint();
+      CrashWorker partial_records(directory, "recover", mapped::JournalCheckpoint::RecordCommitted, 0);
+      partial_records.kill_at_checkpoint();
+      assert_publication_recovered(directory, base);
+    }
   }
 
   TEST_F(MutationJournalTest, FixedStateGenerationMakesOlderPlansStaleWithoutChangingTheirTail)

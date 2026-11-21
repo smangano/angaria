@@ -76,6 +76,7 @@ if(BUILD_TESTING)
     test/test_journal_format.cpp
     test/test_journal_validation.cpp
     test/test_mutation_journal.cpp
+    test/test_journal_bulk_redo.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(

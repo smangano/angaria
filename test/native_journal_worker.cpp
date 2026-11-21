@@ -103,6 +103,67 @@ namespace
     return plan;
   }
 
+  mapped::TransactionPlan make_publication_plan(const mapped::JournalSnapshot& base)
+  {
+    mapped::TransactionPlan plan;
+    plan._base = base;
+    plan._kind = mapped::JournalKind::Append;
+    plan._subtype = mapped::TransactionSubtype::Publication;
+    plan._actor = static_cast<TaskId>(1);
+    plan._actorIncarnation = 7;
+    plan._newRevision = base._revision;
+
+    mapped::JournalRecord record;
+    record._kind = 9;
+    record._immutable.resize(232); // Fixed body, two destinations, eight payload bytes.
+    const auto body = base._tail + mapped::record_envelope_bytes;
+    const auto receipts = body + record._immutable.size();
+    put_integer(record._immutable, 0, 1, 2); // Producer.
+    put_integer(record._immutable, 2, 1, 2); // Publishing set.
+    put_integer(record._immutable, 4, 1, 2); // Message type.
+    put_integer(record._immutable, 6, 1, 2); // Binary payload.
+    put_integer(record._immutable, 8, 1, 4); // Schema version.
+    put_integer(record._immutable, 16, 7);
+    put_integer(record._immutable, 24, 99);
+    put_integer(record._immutable, 32, 1000);
+    put_integer(record._immutable, 40, 3);
+    put_integer(record._immutable, 48, 2, 4);
+    put_integer(record._immutable, 56, body + 224);
+    put_integer(record._immutable, 64, 8);
+    // This fixture exercises journal framing; registered schema/Task existence
+    // is validated by the later domain layer, not by the journal.
+    put_integer(record._immutable, 80, body + 128);
+    put_integer(record._immutable, 88, 2);
+    put_integer(record._immutable, 96, receipts);
+    put_integer(record._immutable, 104, 2);
+    put_integer(record._immutable, 112, 1, 2); // All destinations.
+    for (std::size_t destination = 0; destination != 2; ++destination)
+    {
+      const auto row = 128 + destination * 48;
+      put_integer(record._immutable, row, destination + 1, 2);
+      put_integer(record._immutable, row + 2, 1, 2); // Accepted.
+      put_integer(record._immutable, row + 8, 101 + destination);
+      put_integer(record._immutable, row + 24, 1000 + destination);
+      put_integer(record._immutable, row + 32, receipts + destination * 128);
+    }
+    put_integer(record._immutable, 224, 0x0123456789abcdef);
+    record._mutable.resize(256);
+    put_integer(record._mutable, 0, 1); // Both receipts initially pending.
+    put_integer(record._mutable, 128, 1);
+    plan._records.push_back(std::move(record));
+
+    plan._commands.push_back(write_word(receipts, 2)); // Issue the first receipt.
+    mapped::RedoCommand issuance;
+    issuance._target = receipts + 8;
+    issuance._payload.resize(32);
+    put_integer(issuance._payload, 0, 0x0000000100010002); // Task 2, Source 1, dequeue flag.
+    put_integer(issuance._payload, 8, 7);
+    put_integer(issuance._payload, 16, 13);
+    put_integer(issuance._payload, 24, 1002);
+    plan._commands.push_back(std::move(issuance));
+    return plan;
+  }
+
   class StopAt : public mapped::JournalFaultInjector
   {
   public:
@@ -138,7 +199,7 @@ int main(int argc, char** argv)
   {
     if (argc != 5)
     {
-      throw std::runtime_error("usage: native_journal_worker fixed|append|recover directory checkpoint index");
+      throw std::runtime_error("usage: native_journal_worker fixed|append|publication|recover directory checkpoint index");
     }
     ::alarm(8);
     const std::string mode{argv[1]};
@@ -151,6 +212,11 @@ int main(int argc, char** argv)
     if (mode == "recover")
     {
       require_value(journal.recover(guard));
+    }
+    else if (mode == "publication")
+    {
+      const auto base = require_value(journal.snapshot(guard));
+      require_value(journal.execute(guard, make_publication_plan(base)));
     }
     else if (mode == "fixed" || mode == "append")
     {

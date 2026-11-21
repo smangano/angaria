@@ -492,9 +492,13 @@ namespace angaria::detail::mapped
       std::uint64_t word{};
       for (const auto& command : batch._commands)
       {
+        // Retain one checked mapping for the command, including across fault
+        // checkpoints, rather than mapping and unmapping every eight-byte word.
+        auto mapping = take(file.map_read_write(command._target, command._payload.size()));
+        const auto bytes = take(mapping.writable_bytes());
         for (std::size_t offset = 0; offset < command._payload.size(); offset += 8)
         {
-          store_at(file, command._target + offset, read_u64(command._payload, offset));
+          take(AtomicWord::bind(bytes, offset)).store_release(read_u64(command._payload, offset));
           checkpoint(state, JournalCheckpoint::RedoWord, word++);
         }
       }
