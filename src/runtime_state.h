@@ -72,6 +72,7 @@ namespace angaria::detail
     explicit RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady = true);
     std::vector<std::uint64_t> read_words(std::uint64_t offset, std::size_t count) const;
     std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length) const;
+    const mapped::RecordEnvelope& record_envelope(std::uint64_t reference, std::uint16_t kind) const;
     std::vector<std::byte> immutable_record(std::uint64_t reference, std::uint16_t kind) const;
     std::uint64_t section_offset(mapped::SectionKind kind) const;
 
@@ -80,6 +81,16 @@ namespace angaria::detail
     mapped::MutationJournal _journal;
     mapped::JournalSnapshot _snapshot;
     mapped::NativeFile* _file{};
+
+  private:
+    struct RecordBoundary
+    {
+      std::uint64_t _offset{};
+      mapped::RecordEnvelope _envelope;
+    };
+
+    void index_records();
+    std::vector<RecordBoundary> _recordBoundaries;
   };
 
   struct LoadedTask
@@ -95,9 +106,20 @@ namespace angaria::detail
   mapped::SessionDefinition runtime_session_definition(RuntimeAccess& access);
   void runtime_validate_options(const SessionOptions& options, ErrorCode invalidCode);
   void runtime_check_task(const std::shared_ptr<TaskState>& task);
+
+  // Private qualification seam. The public attachment path has no observer;
+  // tests can pause after native acquisition while the mutation gate is held.
+  class TaskAttachmentObserver
+  {
+  public:
+    virtual ~TaskAttachmentObserver() = default;
+    virtual OperationResult after_native_claim() = 0;
+  };
+
   Result<std::shared_ptr<TaskState>> attach_runtime_task(std::shared_ptr<SessionState> session,
                                                         TaskId task, bool bootstrap = false,
-                                                        std::shared_ptr<mapped::TaskLease> bootstrapLease = {});
+                                                        std::shared_ptr<mapped::TaskLease> bootstrapLease = {},
+                                                        TaskAttachmentObserver* observer = nullptr);
   Result<PublicationId> runtime_next_publication_id(const std::shared_ptr<TaskState>& task);
   Result<TaskRuntimeInfo> runtime_task_status(RuntimeAccess& access, TaskId task);
 } // namespace angaria::detail

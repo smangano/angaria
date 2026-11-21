@@ -204,6 +204,20 @@ namespace
       return value;
     }
 
+    void proceed()
+    {
+      const char signal = 'C';
+      ssize_t count;
+      do
+      {
+        count = ::write(_input, &signal, 1);
+      } while (count == -1 && errno == EINTR);
+      if (count != 1)
+      {
+        throw std::runtime_error("Session worker continuation failed");
+      }
+    }
+
     int finish()
     {
       release();
@@ -405,6 +419,33 @@ namespace
       // The programmatic entry point returns both the Session and creator claim.
       // No separate attach_task call is needed for that first creator owner.
       return require_value(Session::create(options(), creator()));
+    }
+
+    std::pair<Session, TaskRuntimeInfo> abandon_process_claim(const fs::path& directory = {})
+    {
+      const auto path = directory.empty() ? _directory : directory;
+      auto created = require_value(Session::create(options(path), creator()));
+      auto session = std::move(created._session);
+      {
+        auto closing = std::move(created._creator);
+      }
+      SessionWorker owner(path, "hold_issue");
+      if (owner.receive() != 'A')
+      {
+        throw std::runtime_error("predecessor failed to attach");
+      }
+      const auto incarnation = owner.receive_number();
+      const auto first = owner.receive_number();
+      const auto second = owner.receive_number();
+      const auto live = require_value(session.registry().task_status(TaskId{1}));
+      if (!live._attached || live._incarnation != incarnation || first != 1 || second != 2)
+      {
+        throw std::runtime_error("predecessor did not install its live claim");
+      }
+      // SIGKILL leaves attached diagnostics in storage while releasing native
+      // ownership. That is exactly the stale predecessor a replacement must fence.
+      owner.terminate();
+      return {std::move(session), live};
     }
 
     static void add_thread_tasks(const fs::path& directory, unsigned count = 1)
@@ -796,6 +837,96 @@ namespace
     EXPECT_EQ(replacement.claim()._incarnation, incarnation + 1);
     EXPECT_EQ(require_value(replacement.next_publication_id())._sequence, 1u);
     EXPECT_EQ(require_value(session.registry().task_status(TaskId{1}))._restartCount, 2u);
+  }
+
+  // Pause a successor after native acquisition but before its incarnation commit.
+  // Another process proves the same mutation gate excludes its status read, then
+  // observes only the committed successor rather than reviving the dead claim.
+  TEST_F(RuntimeSessionTest, ReplacementAndStatusShareOneGateObservationBoundary)
+  {
+    auto [session, predecessor] = abandon_process_claim();
+    std::uint64_t row{};
+    {
+      RuntimeFile access(_directory);
+      row = access.section(mapped::SectionKind::TaskState);
+    }
+    auto file = require_value(mapped::NativeFile::open_existing(
+        _directory / "session.ang", mapped::FileAccess::ReadWrite));
+    auto region = require_value(file.map_read_write(row, 80));
+    const auto bytes = require_value(region.writable_bytes());
+
+    SessionWorker reader(_directory, "await_status");
+    ASSERT_EQ(reader.receive(), 'S');
+    SessionWorker replacement(_directory, "pause_attach");
+    ASSERT_EQ(replacement.receive(), 'R');
+    // Atomic, test-only observation confirms the hook precedes installation:
+    // the new native owner coexists with the old row while the gate is closed.
+    EXPECT_EQ(require_value(mapped::AtomicWord::bind(bytes, 0)).load_acquire(), predecessor._incarnation);
+    EXPECT_EQ(require_value(mapped::AtomicWord::bind(bytes, 24)).load_acquire(), predecessor._processId);
+    EXPECT_NE(require_value(mapped::AtomicWord::bind(bytes, 48)).load_acquire() & 1, 0u);
+    reader.proceed();
+    EXPECT_EQ(reader.receive(), 'B');
+
+    replacement.proceed();
+    ASSERT_EQ(replacement.receive(), 'A');
+    const auto incarnation = replacement.receive_number();
+    const auto process = replacement.receive_number();
+    EXPECT_EQ(incarnation, predecessor._incarnation + 1);
+    EXPECT_EQ(reader.receive(), 'A');
+    EXPECT_EQ(reader.receive_number(), incarnation);
+    EXPECT_EQ(reader.receive_number(), process);
+    EXPECT_EQ(reader.finish(), 0);
+    EXPECT_EQ(replacement.finish(), 0);
+    EXPECT_FALSE(require_value(session.registry().task_status(TaskId{1}))._attached);
+  }
+
+  // Failure or SIGKILL before the successor's intent must expose no new claim.
+  // A waiting status reader sees the predecessor as detached, the file remains
+  // unchanged, and the next real attachment can install exactly one successor.
+  TEST_F(RuntimeSessionTest, FailedOrKilledPrecommitReplacementNeverRevivesThePredecessor)
+  {
+    for (const auto killed : {false, true})
+    {
+      SCOPED_TRACE(killed);
+      const auto directory = _root / (killed ? "killed-replacement" : "failed-replacement");
+      auto [session, predecessor] = abandon_process_claim(directory);
+      std::vector<std::byte> before;
+      {
+        RuntimeFile access(directory);
+        before = access.image();
+      }
+      SessionWorker reader(directory, "await_status");
+      ASSERT_EQ(reader.receive(), 'S');
+      SessionWorker replacement(directory, killed ? "pause_attach" : "fail_attach");
+      ASSERT_EQ(replacement.receive(), 'R');
+      reader.proceed();
+      EXPECT_EQ(reader.receive(), 'B');
+      if (killed)
+      {
+        replacement.terminate();
+      }
+      else
+      {
+        replacement.proceed();
+        EXPECT_EQ(replacement.receive(), 'F');
+      }
+      EXPECT_EQ(reader.receive(), 'D');
+      EXPECT_EQ(reader.receive_number(), predecessor._incarnation);
+      EXPECT_EQ(reader.receive_number(), predecessor._processId);
+      EXPECT_EQ(reader.finish(), 0);
+      if (!killed)
+      {
+        EXPECT_EQ(replacement.finish(), 0);
+      }
+      {
+        RuntimeFile access(directory);
+        EXPECT_EQ(access.image(), before);
+        EXPECT_FALSE(require_value(access._controller->probe_task_claim(TaskId{1})));
+      }
+      auto actual = require_value(session.attach_task(TaskId{1}));
+      EXPECT_EQ(actual.claim()._incarnation, predecessor._incarnation + 1);
+      EXPECT_EQ(require_value(actual.next_publication_id())._sequence, 1u);
+    }
   }
 
   // Moving a handle transfers its owner; the moved-from wrapper cannot be used.

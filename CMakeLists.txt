@@ -90,6 +90,7 @@ if(BUILD_TESTING)
     test/test_journal_bulk_redo.cpp
     test/test_session_metadata.cpp
     test/test_runtime_session.cpp
+    test/test_runtime_access.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(

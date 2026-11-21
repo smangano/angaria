@@ -163,6 +163,50 @@ namespace
     return plan;
   }
 
+  // Install a real committed Process definition and well-formed claim state
+  // (incarnation 7 by default), so rejection cannot pass merely because its target was
+  // never registered. This is private journal setup, not public Task attachment.
+  mapped::TransactionPlan registered_claim_plan(const mapped::JournalSnapshot& base,
+                                                const mapped::SuperblockConfiguration& configuration,
+                                                std::uint64_t incarnation = 7)
+  {
+    auto plan = make_plan(base, configuration, true);
+    auto index = std::move(plan._commands.back());
+    plan._commands.clear();
+    plan._commands.push_back(std::move(index));
+    const auto state = section_offset(configuration, mapped::SectionKind::TaskState);
+    auto attached = write_word(state, 0);
+    attached._payload.resize(80);
+    const std::array<std::uint64_t, 10> words{incarnation, 0, incarnation - 1, 111, 42, 100, 3, 0, 0, 0};
+    for (std::size_t word = 0; word != words.size(); ++word)
+    {
+      put_integer(attached._payload, word * 8, words[word]);
+    }
+    plan._commands.push_back(std::move(attached));
+    return plan;
+  }
+
+  // Synthetic two-step replacement: a partial application can leave incarnation
+  // 9 while the first ReleaseClaim still expects 7 or 8. Public attachment emits
+  // only one release; the journal must reject this broader command stream.
+  mapped::TransactionPlan chained_claim_plan(const mapped::JournalSnapshot& base,
+                                             const mapped::SuperblockConfiguration& configuration)
+  {
+    mapped::TransactionPlan plan;
+    plan._base = base;
+    plan._newRevision = base._revision;
+    const auto state = section_offset(configuration, mapped::SectionKind::TaskState);
+    for (const auto ending : {std::uint64_t{7}, std::uint64_t{8}})
+    {
+      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, state, std::vector<std::byte>(16)};
+      put_integer(release._payload, 0, ending);
+      put_integer(release._payload, 8, 200 + ending);
+      plan._commands.push_back(std::move(release));
+      plan._commands.push_back(write_word(state, ending + 1));
+    }
+    return plan;
+  }
+
   mapped::TransactionPlan make_publication_plan(const mapped::JournalSnapshot& base)
   {
     mapped::TransactionPlan plan;
@@ -1133,6 +1177,98 @@ namespace
     EXPECT_EQ(access.word(task_state()), 11u);
     EXPECT_EQ(access.word(task_state() + 8), 22u);
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard))._manifest, accepted._manifest);
+  }
+
+  // One transaction may release each Task at most once, and every incarnation
+  // write must remain in that release's ending/immediate-successor window. A
+  // transient jump outside it is unsafe even when another write later restores
+  // a valid value: a crash between those writes must still be replayable.
+  TEST_F(MutationJournalTest, RepeatedOrSkippedClaimIncarnationsRejectBeforePreparingAnyIntent)
+  {
+    for (unsigned variant = 0; variant != 5; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      const auto incarnation = variant == 4 ? std::numeric_limits<std::uint64_t>::max() : 7;
+      Access access(make_session("unsafe-release-" + std::to_string(variant)));
+      require_value(access._journal.execute(access._guard, registered_claim_plan(
+          require_value(access._journal.snapshot(access._guard)), _configuration, incarnation)));
+      const auto base = require_value(access._journal.snapshot(access._guard));
+      auto plan = chained_claim_plan(base, _configuration);
+      const auto release = plan._commands.front();
+      if (variant == 0)
+      {
+        plan._commands = {release, release};
+      }
+      else if (variant == 2 || variant == 3)
+      {
+        plan._commands = {release, write_word(task_state(), 9)};
+        if (variant == 3)
+        {
+          plan._commands.push_back(write_word(task_state(), 8));
+        }
+      }
+      else if (variant == 4)
+      {
+        // The greatest incarnation has no successor; adding one must not wrap.
+        auto last_release = release;
+        put_integer(last_release._payload, 0, incarnation);
+        plan._commands = {std::move(last_release), write_word(task_state(), 0)};
+      }
+      const auto before = access.image();
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
+      EXPECT_EQ(access.image(), before);
+      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+      EXPECT_EQ(access.word(task_state()), incarnation);
+      EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
+    }
+  }
+
+  // Deliberately install unsupported repeated/jumping streams as stored intent,
+  // bypassing the public preflight that now prevents it. Prepared recovery must
+  // not discard the evidence, and Committed recovery must reject the whole stream
+  // before writing even its first valid release, including after partial apply.
+  TEST_F(MutationJournalTest, PersistedUnsafeClaimTransitionsPreserveEvidenceBeforeAnyRecoveryWrites)
+  {
+    for (unsigned variant = 0; variant != 6; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      const auto stage = variant % 3;
+      Access access(make_session("persisted-releases-" + std::to_string(variant)));
+      require_value(access._journal.execute(access._guard, registered_claim_plan(
+          require_value(access._journal.snapshot(access._guard)), _configuration)));
+      const auto base = require_value(access._journal.snapshot(access._guard));
+      auto plan = chained_claim_plan(base, _configuration);
+      if (variant >= 3)
+      {
+        const auto release = plan._commands.front();
+        plan._commands = {release, write_word(task_state(), 9)};
+      }
+      const auto commands = require_value(mapped::encode_commands(plan._commands));
+      mapped::JournalHeader header;
+      header._control = stage == 0 ? mapped::JournalControl::Prepared : mapped::JournalControl::Committed;
+      header._generation = base._generation + 1;
+      header._baseTail = header._newTail = base._tail;
+      header._baseAccounted = header._newAccounted = base._accounted;
+      header._inlineBytes = static_cast<std::uint32_t>(commands.size());
+      header._originalFileBytes = header._newFileBytes = base._fileBytes;
+      header._baseRevision = header._newRevision = base._revision;
+      const auto encoded = require_value(mapped::encode_journal_header(header));
+      std::array<std::byte, mapped::journal_bytes> body{};
+      std::copy(encoded.begin(), encoded.end(), body.begin());
+      std::copy(commands.begin(), commands.end(), body.begin() + mapped::journal_header_bytes);
+      require_value(access.file().write_exact(mapped::journal_offset + 8, std::span{body}.subspan(8)));
+      if (stage == 2)
+      {
+        // Reproduce a crash after both successor incarnation words were stored.
+        access.set_word(task_state(), 9);
+      }
+      access.set_word(mapped::journal_offset, static_cast<std::uint64_t>(header._control));
+      const auto evidence = access.image();
+      expect_error(access._journal.recover(access._guard), ErrorCode::IoError);
+      EXPECT_EQ(access.image(), evidence);
+      EXPECT_EQ(access.word(task_state()), stage == 2 ? 9u : 7u);
+      EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(header._control));
+    }
   }
 
   // A replacement ends the previous Process claim and its Thread claims before installing the successor.

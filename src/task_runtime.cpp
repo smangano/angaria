@@ -221,17 +221,6 @@ namespace angaria::detail
       return plan;
     }
 
-    bool same_task(const LoadedTask& left, const LoadedTask& right)
-    {
-      const auto& a = left._definition;
-      const auto& b = right._definition;
-      return left._reference == right._reference && left._stateOffset == right._stateOffset && a._id == b._id &&
-             a._descriptor._name == b._descriptor._name && a._descriptor._kind == b._descriptor._kind &&
-             a._descriptor._process == b._descriptor._process && a._descriptor._doc == b._descriptor._doc &&
-             a._registration._createdBy == b._registration._createdBy &&
-             a._registration._createdAt == b._registration._createdAt &&
-             a._registration._revision == b._registration._revision;
-    }
   } // namespace
 
   TaskState::~TaskState()
@@ -278,7 +267,8 @@ namespace angaria::detail
 
   Result<std::shared_ptr<TaskState>> attach_runtime_task(std::shared_ptr<SessionState> session,
                                                         TaskId task, bool bootstrap,
-                                                        std::shared_ptr<mapped::TaskLease> bootstrapLease)
+                                                        std::shared_ptr<mapped::TaskLease> bootstrapLease,
+                                                        TaskAttachmentObserver* observer)
   {
     try
     {
@@ -295,22 +285,25 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::InvalidArgument, "task", "A preheld claim is valid only for creator bootstrap");
       }
-      LoadedTask initial;
+      // Status readers use this same gate. Keep native lease acquisition and
+      // incarnation installation inside one observation boundary so a busy new
+      // lease can never make the predecessor's stale diagnostics appear live.
+      RuntimeAccess access(session, !bootstrap);
+      const auto loaded = runtime_task(access, task);
+      if (bootstrap && (task != static_cast<TaskId>(1) ||
+          loaded._definition._descriptor._kind != TaskKind::Process || access.read_words(112, 1)[0] != 0))
       {
-        RuntimeAccess access(session, !bootstrap);
-        initial = runtime_task(access, task);
-        if (bootstrap && (task != static_cast<TaskId>(1) ||
-            initial._definition._descriptor._kind != TaskKind::Process || access.read_words(112, 1)[0] != 0))
-        {
-          runtime_fail(ErrorCode::InvalidState, "task", "Only the creator Process Task can publish Session readiness");
-        }
+        runtime_fail(ErrorCode::InvalidState, "task", "Only the creator Process Task can publish Session readiness");
       }
       std::shared_ptr<TaskState> parent;
-      if (initial._definition._descriptor._kind == TaskKind::Thread)
+      if (loaded._definition._descriptor._kind == TaskKind::Thread)
       {
-        parent = find_parent(session, *initial._definition._descriptor._process);
+        parent = find_parent(session, *loaded._definition._descriptor._process);
         check_native(parent, false);
       }
+      // Declare temporary ownership after access: every precommit failure drops
+      // its lease before the guard unlocks. The controller's local bookkeeping
+      // and native claim attempts are both nonblocking while this gate is held.
       auto lease = std::move(bootstrapLease);
       if (lease)
       {
@@ -324,11 +317,9 @@ namespace angaria::detail
       {
         lease = runtime_value(session->_controller->try_claim_task(task, parent ? parent->_lease : nullptr));
       }
-      RuntimeAccess access(session, !bootstrap);
-      const auto loaded = runtime_task(access, task);
-      if (!same_task(initial, loaded))
+      if (observer)
       {
-        runtime_fail(ErrorCode::Conflict, "task", "Task registration changed during native claim acquisition");
+        runtime_value(observer->after_native_claim());
       }
       require_task_only_state(access);
       auto words = task_words(access, loaded);

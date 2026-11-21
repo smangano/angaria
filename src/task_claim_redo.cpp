@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -234,6 +235,7 @@ namespace angaria::detail::mapped
     {
       const auto unsupported = errorCode == ErrorCode::InvalidArgument ? ErrorCode::UnsupportedPolicy : errorCode;
       bool hasRelease{};
+      std::map<std::uint64_t, std::uint64_t> releaseTargets;
       for (const auto& command : commands)
       {
         if (command._opcode == RedoOpcode::ReleaseClaim)
@@ -242,6 +244,13 @@ namespace angaria::detail::mapped
           if (command._payload.size() != 16 || read_word(command._payload, 0) == 0)
           {
             fail(errorCode, "ReleaseClaim requires a nonzero ending incarnation and release timestamp");
+          }
+          // Replay recognizes only the ending incarnation or its immediate
+          // successor. Chaining another replacement of the same row could leave
+          // that first intent two incarnations behind after a partial apply.
+          if (!releaseTargets.emplace(command._target, read_word(command._payload, 0)).second)
+          {
+            fail(errorCode, "ReleaseClaim may target each Task only once per transaction");
           }
         }
         else if (command._opcode != RedoOpcode::WriteRange)
@@ -270,6 +279,24 @@ namespace angaria::detail::mapped
             *end > taskIndex._offset)
         {
           fail(errorCode, "ReleaseClaim cannot change the Task index used for replay discovery");
+        }
+        if (command._opcode == RedoOpcode::WriteRange)
+        {
+          for (const auto& [target, ending] : releaseTargets)
+          {
+            if (target >= command._target && target - command._target < command._payload.size())
+            {
+              const auto incarnation = read_word(command._payload,
+                                                   static_cast<std::size_t>(target - command._target));
+              // Every possible interrupted prefix must remain inside the same
+              // replay window, not just the stream's final simulated state.
+              if (incarnation != ending && (ending == std::numeric_limits<std::uint64_t>::max() ||
+                  incarnation != ending + 1))
+              {
+                fail(errorCode, "Task incarnation write leaves its ReleaseClaim replay window");
+              }
+            }
+          }
         }
         for (const auto kind : {SectionKind::QueueIndex, SectionKind::SourceIndex,
                                 SectionKind::PublishingIndex, SectionKind::SourceState})

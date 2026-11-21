@@ -8,6 +8,7 @@
 #include <cstring>
 #include <exception>
 #include <limits>
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <system_error>
@@ -127,6 +128,7 @@ namespace angaria::detail
     {
       runtime_fail(ErrorCode::IoError, "session.flags", "Session is incomplete or has unknown flags");
     }
+    index_records();
   }
 
   std::vector<std::uint64_t> RuntimeAccess::read_words(std::uint64_t offset, std::size_t count) const
@@ -162,20 +164,22 @@ namespace angaria::detail
     return result;
   }
 
-  std::vector<std::byte> RuntimeAccess::immutable_record(std::uint64_t reference, std::uint16_t kind) const
+  void RuntimeAccess::index_records()
   {
     const auto layout = mapped::make_fixed_layout(_session->_controller->configuration()._limits);
-    if (!layout || reference < layout->_arenaBegin || reference % mapped::section_alignment != 0)
+    if (!layout || _snapshot._tail < layout->_arenaBegin ||
+        _snapshot._tail % mapped::section_alignment != 0)
     {
-      runtime_fail(ErrorCode::IoError, "record.reference", "Invalid immutable record reference");
+      runtime_fail(ErrorCode::IoError, "record", "Invalid committed record arena");
     }
-    // Walk record boundaries rather than accepting an aligned address inside
-    // another record. The journal has already validated this committed prefix.
-    for (auto offset = layout->_arenaBegin; offset <= reference;)
+    // The journal has recovered and validated this prefix. Capture its exact
+    // boundaries once while holding the gate; definition lookups then reuse
+    // the same owning envelope copies instead of rescanning preceding records.
+    for (auto offset = layout->_arenaBegin; offset < _snapshot._tail;)
     {
       if (!mapped::contains_range(_snapshot._tail, offset, mapped::record_envelope_bytes))
       {
-        break;
+        runtime_fail(ErrorCode::IoError, "record", "Committed history ends inside a record envelope");
       }
       mapped::RecordEnvelopeBytes bytes{};
       runtime_value(_file->read_exact(offset, std::span{bytes}.first(48)));
@@ -192,19 +196,40 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::IoError, "record", "Reference is outside committed record history");
       }
-      if (offset == reference)
-      {
-        if (envelope._kind != kind)
-        {
-          runtime_fail(ErrorCode::IoError, "record.kind", "Reference has the wrong record kind");
-        }
-        auto body = read_bytes(offset + mapped::record_envelope_bytes, envelope._immutableBytes);
-        runtime_value(mapped::validate_journal_record(offset, envelope, body, layout->_arenaBegin));
-        return body;
-      }
+      const auto body = read_bytes(offset + mapped::record_envelope_bytes,
+                                  std::min<std::uint64_t>(128, envelope._immutableBytes));
+      runtime_value(mapped::validate_journal_record(offset, envelope, body, layout->_arenaBegin));
+      _recordBoundaries.push_back(RecordBoundary{offset, envelope});
       offset += envelope._totalBytes;
     }
-    runtime_fail(ErrorCode::IoError, "record.reference", "Reference does not name a committed record boundary");
+  }
+
+  const mapped::RecordEnvelope& RuntimeAccess::record_envelope(std::uint64_t reference, std::uint16_t kind) const
+  {
+    if (reference % mapped::section_alignment != 0)
+    {
+      runtime_fail(ErrorCode::IoError, "record.reference", "Invalid immutable record reference");
+    }
+    const auto found = std::lower_bound(_recordBoundaries.begin(), _recordBoundaries.end(), reference,
+                                       [](const auto& candidate, std::uint64_t value)
+                                       {
+                                         return candidate._offset < value;
+                                       });
+    if (found == _recordBoundaries.end() || found->_offset != reference)
+    {
+      runtime_fail(ErrorCode::IoError, "record.reference", "Reference does not name a committed record boundary");
+    }
+    if (found->_envelope._kind != kind)
+    {
+      runtime_fail(ErrorCode::IoError, "record.kind", "Reference has the wrong record kind");
+    }
+    return found->_envelope;
+  }
+
+  std::vector<std::byte> RuntimeAccess::immutable_record(std::uint64_t reference, std::uint16_t kind) const
+  {
+    const auto& envelope = record_envelope(reference, kind);
+    return read_bytes(reference + mapped::record_envelope_bytes, envelope._immutableBytes);
   }
 
   std::uint64_t RuntimeAccess::section_offset(mapped::SectionKind kind) const
@@ -258,7 +283,7 @@ namespace angaria::detail
     const auto words = access.read_words(index, std::size_t{capacity} * 8);
     const auto stateWords = access.read_words(states, std::size_t{capacity} * 32);
     std::vector<LoadedTask> tasks;
-    std::set<TaskId> ids;
+    std::map<TaskId, TaskKind> kinds;
     std::set<std::string> names;
     for (std::size_t slot = 0; slot < capacity; ++slot)
     {
@@ -289,8 +314,9 @@ namespace angaria::detail
       }
       auto definition = runtime_value(mapped::decode_task_definition(access.immutable_record(row[1], 2), row[1]));
       if (static_cast<std::uint16_t>(definition._id) != row[0] || definition._registration._revision != row[2] ||
-          access.read_words(row[1] + 40, 1)[0] != row[2] ||
-          !ids.insert(definition._id).second || !names.insert(definition._descriptor._name).second)
+          access.record_envelope(row[1], 2)._registryRevision != row[2] ||
+          !kinds.emplace(definition._id, definition._descriptor._kind).second ||
+          !names.insert(definition._descriptor._name).second)
       {
         runtime_fail(ErrorCode::IoError, "task.index", "Task index disagrees with unique registered definitions");
       }
@@ -300,17 +326,14 @@ namespace angaria::detail
     for (const auto& task : tasks)
     {
       const auto& definition = task._definition;
-      if (!ids.contains(definition._registration._createdBy))
+      if (!kinds.contains(definition._registration._createdBy))
       {
         runtime_fail(ErrorCode::IoError, "task.created_by", "Task registration names an unknown creator");
       }
       if (definition._descriptor._kind == TaskKind::Thread)
       {
-        const auto parent = std::find_if(tasks.begin(), tasks.end(), [&](const auto& candidate)
-        {
-          return candidate._definition._id == *definition._descriptor._process;
-        });
-        if (parent == tasks.end() || parent->_definition._descriptor._kind != TaskKind::Process)
+        const auto parent = kinds.find(*definition._descriptor._process);
+        if (parent == kinds.end() || parent->second != TaskKind::Process)
         {
           runtime_fail(ErrorCode::IoError, "task.process", "Thread Task parent is not a registered Process Task");
         }

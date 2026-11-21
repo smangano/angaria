@@ -1,16 +1,19 @@
 // Independent exec worker for test_runtime_session.cpp. A fresh process tests
 // persisted Session behavior without sharing the parent controller or caches.
 // Stdout is a test-only pipe protocol: A=attached/inspected, B=busy/conflict,
-// C=created, E=unexpected claim error; selected modes then send native u64 values.
+// C=created, D=detached status, F=injected attachment failure, R=paused claim,
+// S=status reader ready, E/G=unexpected errors; some modes then send native u64s.
 // Closing the stdin pipe lets a held owner exit normally; SIGKILL tests omit it.
 
 #include "angaria/runtime.h"
+#include "runtime_state.h"
 
 #include <cerrno>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -93,6 +96,30 @@ namespace
       throw std::runtime_error("session worker release failed");
     }
   }
+
+  // Stop after acquiring native ownership but before any new incarnation/intent
+  // is installed. The public API never supplies this private observation hook.
+  class PausedAttachment : public angaria::detail::TaskAttachmentObserver
+  {
+  public:
+    explicit PausedAttachment(bool fail) : _fail(fail)
+    {
+    }
+
+    OperationResult after_native_claim() override
+    {
+      report('R');
+      wait_for_release();
+      if (_fail)
+      {
+        return Error{ErrorCode::IoError, "Injected precommit attachment failure", "test.attachment"};
+      }
+      return std::monostate{};
+    }
+
+  private:
+    bool _fail;
+  };
 } // namespace
 
 int main(int argc, char** argv)
@@ -101,7 +128,7 @@ int main(int argc, char** argv)
   {
     if (argc != 3 && argc != 4)
     {
-      throw std::runtime_error("usage: native_session_worker create|inspect|try_claim|hold_issue|hold_children|fork_reject directory [task-or-child-count]");
+      throw std::runtime_error("usage: native_session_worker create|inspect|try_claim|hold_issue|hold_children|fork_reject|await_status|pause_attach|fail_attach directory [task-or-child-count]");
     }
     const std::string mode{argv[1]};
     if (mode == "create")
@@ -155,6 +182,48 @@ int main(int argc, char** argv)
 
     const auto id = argc == 4 && mode != "hold_children" ?
         static_cast<TaskId>(std::stoul(argv[3])) : TaskId{1};
+    if (mode == "await_status")
+    {
+      // Attach only the Session before a replacement starts. When signaled,
+      // prove the replacement still owns the gate, then let the public status
+      // query wait for that replacement's commit or failed-attempt cleanup.
+      auto controller = require_value(angaria::detail::mapped::SessionController::open_existing(argv[2]));
+      report('S');
+      wait_for_release();
+      {
+        auto gate = controller->try_acquire_mutation();
+        report(has_error(gate, ErrorCode::OwnershipBusy) ? 'B' : 'G');
+      }
+      const auto status = require_value(session.registry().task_status(id));
+      report(status._attached ? 'A' : 'D');
+      report(status._incarnation);
+      report(status._processId);
+      return 0;
+    }
+    if (mode == "pause_attach" || mode == "fail_attach")
+    {
+      auto state = std::make_shared<angaria::detail::SessionState>();
+      state->_directory = std::filesystem::canonical(argv[2]);
+      state->_controller = require_value(angaria::detail::mapped::SessionController::open_existing(argv[2]));
+      PausedAttachment pause(mode == "fail_attach");
+      auto result = angaria::detail::attach_runtime_task(state, id, false, {}, &pause);
+      if (mode == "fail_attach")
+      {
+        if (!has_error(result, ErrorCode::IoError))
+        {
+          throw std::runtime_error("attachment accepted an injected precommit failure");
+        }
+        report('F');
+        wait_for_release();
+        return 0;
+      }
+      auto task = require_value(std::move(result));
+      report('A');
+      report(task->_claim._incarnation);
+      report(static_cast<std::uint64_t>(::getpid()));
+      wait_for_release();
+      return 0;
+    }
     auto attached = session.attach_task(id);
     if (mode == "try_claim")
     {
