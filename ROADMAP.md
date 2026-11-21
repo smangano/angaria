@@ -2,7 +2,7 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and milestone 2 is under implementation. Milestone 6 delivers an application using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and milestone 2 is under implementation. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Versioning
 
@@ -11,6 +11,32 @@ The framework uses `major.minor.build`, recorded in the root [VERSION](VERSION) 
 Build numbers continue increasing across milestones. For example, successive PRs could use `0.2.1`, `0.2.2`, milestone integration `0.2.3`, and then `0.3.4` for the first milestone-3 PR. Assign the next unused build number when opening a PR and include the version in its description. Check previously assigned PR versions so parallel or closed work does not cause a number to be reused.
 
 Tracking begins with the versioning PR at `0.2.1`; earlier PRs remain unversioned. Completion of all ten milestones produces release **`1.0.0`**, resetting the development counter. Framework versions are independent of configuration, mapped-format, message-schema, and synchronization protocol versions; those retain their own compatibility rules.
+
+## Demonstration application
+
+The agreed milestone-6 demo is a trading simulation with five cooperating application processes:
+
+| Process | Role |
+| --- | --- |
+| Market-data feed | Produce a repeatable synthetic quote workload. |
+| Strategy | Consume quotes and execution reports, and generate simulated orders using simple rules. |
+| Risk gateway | Apply simple configured checks and forward approved orders to the exchange simulator. |
+| Exchange simulator | Process approved orders and produce simulated execution reports. |
+| Audit consumer | Observe orders, risk decisions, and execution reports through its own destination queues. |
+
+Each producer-consumer connection uses a separate single-producer queue in the consumer's Source Queue Set. Publishing Queue Sets fan out messages, including quotes and execution reports. Quote queues may allow stale-data loss with visible gap reporting; order, risk-decision, and execution-report paths recover from the log and acknowledge independently. Configuration uses TOML through the common loader.
+
+The complete demo must exercise Source selection policies, all-destination acceptance, configurable partial acceptance/retry, ring wraparound, bounded log exhaustion, and producer/consumer termination and restart. Rejection scenarios require a destination that actually cannot accept: an offline consumer or overwritten ring alone does not cause rejection. Assertions cover message contents, per-queue order, acceptance results, gaps, and acknowledgment/redelivery progress.
+
+Use stable application order and execution identifiers to recognize repeated processing after redelivery. Transport redelivery does not provide exactly-once application effects or a total order across producer queues. Detailed schemas, queue wiring, workload bounds, and simulated-order processing rules will be reviewed during planning.
+
+| Milestone | Demo objective |
+| --- | --- |
+| 2–3 | Plan the topology, schemas, workloads, and failure scenarios against the Registry and message APIs. |
+| 4 | Build the first runnable multi-process path using mapped messages and log recovery. |
+| 5 | Exercise multiple inputs and Source Queue Set selection policies. |
+| 6 | Deliver the complete five-process application and the acceptance scenarios above. |
+| 7–10 | Extend the same application across waiting/storage policies, then add release walkthroughs and measurements. |
 
 ## Agreed architecture
 
@@ -109,7 +135,7 @@ Completion requires multiple producer queues feeding a consumer, with verified p
 - Implement recovery around publication commits and retry handling for rejected destinations.
 - Compose publishing sets with the destinations' consumer-owned Source Queue Sets and configured delivery policies.
 
-Completion requires tests for a destination that cannot accept, rejection without queue or log changes, partial acceptance and retry, independent acknowledgment, and publisher termination around commit and publication. A multi-process example must use the Registry and both Queue Set types.
+Completion requires tests for a destination that cannot accept, rejection without queue or log changes, partial acceptance and retry, independent acknowledgment, and publisher termination around commit and publication. The [five-process trading simulation](#demonstration-application) must demonstrate these behaviors using the Registry and both Queue Set types.
 
 ## 7 Consumer synchronization policies
 
