@@ -1,3 +1,8 @@
+// Private transaction/recovery examples behind the public Session API. These
+// fixtures deliberately build provisional storage, synthetic records, and corrupt
+// bytes to isolate journal guarantees; applications should use Session/Task methods.
+// SIGKILL cases cover process termination on a running host, not power-loss durability.
+
 #include "mutation_journal.h"
 #include "native_atomic.h"
 #include "session_metadata.h"
@@ -117,6 +122,9 @@ namespace
     return command;
   }
 
+  // The two recognizable word values make partial redo visible. This minimal
+  // draft tests journal framing/atomicity and intentionally omits the complete
+  // Session bootstrap and Task-claim semantics required by the public runtime.
   mapped::TransactionPlan make_plan(const mapped::JournalSnapshot& base,
                                     const mapped::SuperblockConfiguration& configuration,
                                     bool append = false)
@@ -216,6 +224,9 @@ namespace
     return plan;
   }
 
+  // Spawn a fresh executable rather than inheriting a live controller through
+  // fork. Its 'R' handshake identifies an exact checkpoint before SIGKILL;
+  // deadlines turn an unreachable checkpoint into a failure instead of a hang.
   class CrashWorker
   {
   public:
@@ -331,6 +342,9 @@ namespace
     int _output{-1};
   };
 
+  // Keep the controller, gate, and journal in dependency order for one test
+  // operation. set_word/image are deliberate corruption/observation seams:
+  // application code must not bypass journaled updates this way.
   struct Access
   {
     explicit Access(const fs::path& directory, mapped::JournalFaultInjector* injector = nullptr)
@@ -380,6 +394,8 @@ namespace
     mapped::MutationJournal _journal;
   };
 
+  // A one-shot error lets execute's own recovery succeed; a persistent error
+  // also obstructs that repair, exercising the OutcomeUnknown path separately.
   class FailingInjector : public mapped::JournalFaultInjector
   {
   public:
@@ -432,6 +448,9 @@ namespace
       }
     }
 
+    // Create only the provisional native resources needed by MutationJournal.
+    // The resulting fixture is not a bootstrapped public Session. Setting full
+    // reserves exactly the fixed arena so any Append lacks allocation space.
     fs::path make_session(const std::string& name = "session", bool full = false)
     {
       const auto directory = _root / name;
@@ -551,6 +570,8 @@ namespace
     mapped::SuperblockConfiguration _configuration;
   };
 
+  // Reserve no append headroom, then compare a successful fixed-state update with a rejected Append.
+  // Claim/issuance progress must not depend on allocating history; a known LogFull rejection changes no bytes.
   TEST_F(MutationJournalTest, FixedStateUsesReservedJournalEvenAtTheExactLogLimit)
   {
     const auto directory = make_session("full", true);
@@ -571,6 +592,8 @@ namespace
     EXPECT_EQ(access.image(), before);
   }
 
+  // A definition and its index update belong to one Append, whose final manifest records the entire batch.
+  // Reopening verifies that accepted records, roots, revision, and generation form one recoverable result.
   TEST_F(MutationJournalTest, AppendCommitsDefinitionsManifestAndCanonicalRootsTogether)
   {
     const auto directory = make_session();
@@ -595,6 +618,8 @@ namespace
     assert_recovered(directory, true, true);
   }
 
+  // Publication storage includes preallocated mutable receipt slots as well as immutable bytes.
+  // Initial receipt state and its redo must both survive reopening; this is storage coverage, not send semantics.
   TEST_F(MutationJournalTest, PublicationAppendMaterializesItsInitializedMutableReceipts)
   {
     const auto directory = make_session();
@@ -610,6 +635,8 @@ namespace
     assert_publication_recovered(directory, base);
   }
 
+  // Receipt count, allocated suffix, and reserved bytes must agree before preparing an Append.
+  // These deliberately malformed drafts show that input rejection leaves both storage and the base snapshot intact.
   TEST_F(MutationJournalTest, InvalidPublicationReceiptStorageAndReservedBytesLeaveTheFileUnchanged)
   {
     Access access(make_session());
@@ -659,6 +686,8 @@ namespace
     }
   }
 
+  // Kill an accepted publication writer and then kill two successive recovery processes.
+  // Eventually recovering must preserve the untouched pending receipt and finish the partially issued receipt.
   TEST_F(MutationJournalTest, PublicationReceiptInitializationSurvivesRepeatedInterruptedRecovery)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 3> cuts{{
@@ -689,6 +718,8 @@ namespace
     }
   }
 
+  // A captured plan becomes stale after any completed operation, including one that appends nothing.
+  // The generation check prevents overwriting newer fixed-state progress merely because tail/revision stayed equal.
   TEST_F(MutationJournalTest, FixedStateGenerationMakesOlderPlansStaleWithoutChangingTheirTail)
   {
     Access access(make_session());
@@ -704,6 +735,8 @@ namespace
     EXPECT_EQ(access.image(), before);
   }
 
+  // Interleave Append and FixedState so operation generation differs from Registry revision.
+  // A later interrupted Append must accept mixed old/new final roots and still link to the previous Append manifest.
   TEST_F(MutationJournalTest, AppendAfterFixedStateRecoversMixedRootsAndRetainsItsManifestPredecessor)
   {
     const auto directory = make_session();
@@ -738,6 +771,8 @@ namespace
     EXPECT_EQ(get_integer(image, section_offset(_configuration, mapped::SectionKind::TaskIndex) + 8), base._tail);
   }
 
+  // Validate targets, inline capacity, alignment, and compact-command prerequisites before publishing intent.
+  // The byte-for-byte comparison makes the difference between known rejection and interrupted work explicit.
   TEST_F(MutationJournalTest, InvalidPreflightChangesNoSessionBytes)
   {
     Access access(make_session());
@@ -769,6 +804,8 @@ namespace
     EXPECT_EQ(access.image(), before);
   }
 
+  // Idle is the authority that no pending operation exists; its reusable body may contain stale or partial bytes.
+  // Trying to decode that body would turn a harmless interrupted preparation into false corruption.
   TEST_F(MutationJournalTest, IdleIgnoresAnInterruptedOrGarbageJournalBody)
   {
     Access access(make_session());
@@ -779,6 +816,8 @@ namespace
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), before);
   }
 
+  // Stop real exec workers on both sides of the sole acceptance point, Committed.
+  // Recovery must expose the old state before that point or finish the complete accepted state after it, never a mixture.
   TEST_F(MutationJournalTest, NativeFixedStateCrashesKeepExactlyThePrecommitOrCommittedState)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 10> cuts{{
@@ -804,6 +843,8 @@ namespace
     }
   }
 
+  // Append adds growth and record-materialization boundaries to the same acceptance rule.
+  // Ready records before Committed are discardable; accepted records and their manifest must survive every later cut.
   TEST_F(MutationJournalTest, NativeAppendCrashesRecoverWithoutLosingCommittedRecords)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 15> cuts{{
@@ -834,6 +875,8 @@ namespace
     }
   }
 
+  // Recovery is itself an interruptible operation, so restart it at each major repair boundary.
+  // Absolute redo must preserve accepted work, while repeated precommit rollback must remain harmless.
   TEST_F(MutationJournalTest, RepeatedRecoveryCrashesRedoAcceptedWorkAndRepeatRollbackSafely)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 7> cuts{{
@@ -866,6 +909,8 @@ namespace
     assert_recovered(directory, true, false);
   }
 
+  // A prepared FixedState operation has no legitimate file-growth effect.
+  // An unexplained suffix is therefore evidence to retain and report, not space recovery may silently truncate.
   TEST_F(MutationJournalTest, PreparedFixedStateNeverTruncatesAnUnexpectedSuffix)
   {
     const auto directory = make_session();
@@ -880,6 +925,8 @@ namespace
     EXPECT_EQ(require_value(access.file().size()), size + 64);
   }
 
+  // Prepared means canonical state was not yet changed by this operation.
+  // Unexpected roots or malformed header bytes invalidate that assumption and must prevent destructive rollback.
   TEST_F(MutationJournalTest, PreparedCanonicalChangesAndMalformedHeadersRetainEvidence)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -896,6 +943,8 @@ namespace
     }
   }
 
+  // Even unaccepted inline intent must be valid before recovery clears its evidence.
+  // Inject malformed framing, targets, compact prerequisites, and padding to demonstrate failure without writes.
   TEST_F(MutationJournalTest, PreparedFixedStateValidatesItsEntireInlineIntentBeforeDiscardingIt)
   {
     for (unsigned variant = 0; variant < 5; ++variant)
@@ -954,6 +1003,8 @@ namespace
     }
   }
 
+  // A prepared Append must describe a feasible record batch and a legal Registry revision transition.
+  // An impossible plan cannot justify truncating storage, even though it has not reached acceptance.
   TEST_F(MutationJournalTest, ImpossiblePreparedAppendPlansRetainTheirEvidence)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -975,6 +1026,8 @@ namespace
     }
   }
 
+  // An Idle journal does not make previously committed history trustworthy without validation.
+  // Corrupt a retained record revision and show that both inspection and the next mutation preserve the evidence.
   TEST_F(MutationJournalTest, HistoricalRecordRevisionCorruptionBlocksSnapshotsAndLaterMutations)
   {
     Access access(make_session());
@@ -991,6 +1044,8 @@ namespace
     EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
   }
 
+  // Accepted intent is not permission to apply a malformed command stream.
+  // Corrupt the control word or second command and verify validation prevents even the first otherwise valid write.
   TEST_F(MutationJournalTest, InvalidControlAndCommittedCommandsFailBeforeAnyRedoWrites)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -1020,6 +1075,8 @@ namespace
     }
   }
 
+  // Once accepted, a damaged record or manifest cannot be treated as an uncommitted tail.
+  // Recovery fails without applying redo or truncating the accepted allocation, leaving evidence for diagnosis.
   TEST_F(MutationJournalTest, CorruptCommittedRecordAndManifestNeverDiscardAcceptedEvidence)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -1050,6 +1107,8 @@ namespace
     }
   }
 
+  // A one-shot growth failure occurs before Committed, so execute can prove rollback.
+  // It returns the original I/O error with the old snapshot and no new logical effects.
   TEST_F(MutationJournalTest, OneShotPrecommitIoFailureRollsBackWithoutAcceptance)
   {
     FailingInjector injector(mapped::JournalCheckpoint::FileGrowth);
@@ -1061,6 +1120,8 @@ namespace
     EXPECT_EQ(access.word(task_state()), 0u);
   }
 
+  // The same kind of failure after Committed has a different meaning: the operation was accepted.
+  // If in-call repair succeeds, execute returns its accepted result instead of a false rejection.
   TEST_F(MutationJournalTest, PostcommitIoFailureRecoversAcceptanceRatherThanReportingRejection)
   {
     FailingInjector injector(mapped::JournalCheckpoint::Committed);
@@ -1074,6 +1135,9 @@ namespace
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard))._manifest, accepted._manifest);
   }
 
+  // A replacement ends the previous Process claim and its Thread claims before installing the successor.
+  // Interrupt every absolute write to show compact cleanup is repeatable, preserves child discovery tags,
+  // and needs no new records even while issuance and retirement-floor words are temporarily mixed.
   TEST_F(MutationJournalTest, TaskReplacementReplaysEveryCleanupAndAttachmentWord)
   {
     // Two detach words per old claim, then ten absolute replacement words.
@@ -1166,6 +1230,8 @@ namespace
     }
   }
 
+  // Keep failing accepted repair so execute cannot establish the final state.
+  // OutcomeUnknown preserves that uncertainty; later recovery resolves the committed operation instead of retrying it as new.
   TEST_F(MutationJournalTest, UnfinishedPostcommitRepairReportsOutcomeUnknownUntilRecoverySucceeds)
   {
     FailingInjector injector(mapped::JournalCheckpoint::EpilogueWord, true);

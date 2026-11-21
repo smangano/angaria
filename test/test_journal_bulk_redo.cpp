@@ -1,3 +1,7 @@
+// Private journal regression for large redo ranges. The synthetic ring record
+// provides legal mutable storage without requiring Queue publication APIs; this is
+// transaction-layer setup, not an example of sending an application message.
+
 #include "mutation_journal.h"
 #include "native_atomic.h"
 
@@ -38,6 +42,8 @@ namespace
     }
   }
 
+  // Fail once after an actual word store, then observe execute's repair pass.
+  // Seeing index zero again distinguishes replay from simply continuing on.
   class MiddleRedoFailure : public mapped::JournalFaultInjector
   {
   public:
@@ -111,6 +117,9 @@ namespace
     mapped::SuperblockConfiguration _configuration;
   };
 
+  // Interrupt a committed 1 MiB write halfway through, then let execute repair it.
+  // Replay must restart safely, preserve recorded command order for the overlap, and
+  // number checkpoints across the entire command stream rather than restarting per command.
   TEST_F(JournalBulkRedoTest, MidrangeFailureReplaysLargeAndOverlappingCommandsWithContinuousCheckpoints)
   {
     constexpr std::size_t range_bytes = 1024 * 1024;

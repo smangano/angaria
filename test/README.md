@@ -1,0 +1,31 @@
+# Reading the tests
+
+Start with [test_runtime_session.cpp](test_runtime_session.cpp) for the implemented public format-2 API. Its test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
+
+A useful reading order is:
+
+1. `CreationRecordsCreatorEffectiveOptionsAndFrameworkMetadata`: create a Session, use its returned creator Task, and inspect options and Registry metadata.
+2. `ActorRegistryRetainsItsTaskWhileReadOnlyViewsDoNot`: see which views retain a Task claim and when another owner can attach.
+3. `PublicationIdsPersistWithinAClaimAndResetOnlyWithANewIncarnation`: issue IDs and observe the identity boundary at Task replacement. This does not send a publication.
+4. `ThreadTasksRequireAndRetainTheirParentAndRejectOtherThreads`: understand parent retention and thread affinity. The fixture seeds registration through private machinery until public Task registration is implemented in step 2.6.
+5. The termination, full-log, and malformed-state scenarios: understand recovery and rejection guarantees after learning normal use.
+
+Build instructions are in the [project README](../README.md). Run just the public Session examples with:
+
+```sh
+ctest --test-dir build -R '^RuntimeSessionTest\.' --output-on-failure
+```
+
+The rest of the suite explains the supporting contracts:
+
+| Tests | What readers should learn |
+| --- | --- |
+| [API values](test_api_contract.cpp), [identities](test_identities.cpp), [Fields](test_field.cpp) | Descriptor defaults and capacity setters, distinct IDs, result alternatives, and basic Field serialization. Value construction alone does not exercise delivery or endpoint operations. |
+| [TOML example](test_configuration.cpp) | How the trading configuration is represented and parsed with cpptoml. Semantic loading into a Session follows step 2.10. |
+| [Layout](test_mapped_format.cpp), [superblock](test_mapped_superblock.cpp), [Session/Task bodies](test_session_metadata.cpp) | Capacity accounting and explicit portable encoding. Hand-authored byte fixtures check format compatibility independently of production encoders. |
+| [Files/mappings](test_native_file.cpp), [atomics](test_native_atomic.cpp), [controller](test_session_controller.cpp) | Private ownership, aliasing, synchronization, and native process boundaries beneath the Session API. |
+| [Journal encoding](test_journal_format.cpp), [allowed targets](test_journal_validation.cpp), [transactions/recovery](test_mutation_journal.cpp), [bulk redo](test_journal_bulk_redo.cpp) | Acceptance, complete-stream validation, rollback, repeatable replay, and uncertain outcomes. Artificial byte changes and fault checkpoints are controlled test techniques. |
+| [Prototype Session tests](test_session.cpp), [queue CLI check](queue_demo.cmake), [restart walkthrough](restart_demo.py) | The earlier v0 producer/consumer prototype. Its APIs and delivery behavior are separate from the format-2 implementation milestones. |
+| [Protocol model](protocol_model.py) | Logical scenarios for the full planned protocol. Model success does not mean every modeled runtime feature is implemented or native behavior is qualified. |
+
+The `native_*_worker.cpp` programs run operations in independent exec processes so tests cannot pass solely because handles share process-local state. The startup/shutdown programs cover resource owners outside ordinary test-body lifetimes. Native crash tests exercise process termination on a running local filesystem; the [native storage contract](../docs/native-storage.md) defines their scope, and the [glossary](../docs/glossary.md) defines the storage and recovery terms.

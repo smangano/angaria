@@ -1,3 +1,7 @@
+// These tests cover the legacy v0 Producer/Consumer queue used by queue_demo.
+// Its filesystem publication and fork behavior are prototype-specific; read
+// test_runtime_session.cpp for the format-2 Session API and native exec boundary.
+
 #include "angaria/session.h"
 #include "session_log.h"
 #include "role_lock.h"
@@ -24,6 +28,8 @@ namespace
 
   std::optional<std::int32_t> consume_reading(const fs::path& session)
   {
+    // A convenience for tests that want complete prototype consumption. Tests
+    // about redelivery use Consumer directly so they can leave work unacknowledged.
     angaria::Consumer consumer(session);
     const auto delivery = consumer.receive_reading();
     if (!delivery)
@@ -65,6 +71,8 @@ namespace
 
     void kill_after(const std::function<void()>& action)
     {
+      // SIGKILL deliberately bypasses endpoint destructors. A normal scope exit
+      // would exercise graceful cleanup instead of recovery after process death.
       const pid_t child = ::fork();
       ASSERT_NE(child, -1);
       if (child == 0)
@@ -95,6 +103,9 @@ namespace
     fs::path _log;
   };
 
+  // The v0 prototype can commit a log record before adding its queue entry. Kill
+  // at that boundary to show that the unpublished record remains inspectable,
+  // while the consumer sees only published entries and later sends can proceed.
   TEST_F(SessionTest, ProducerKilledAfterCommitBeforePublication)
   {
     ASSERT_EQ(angaria::send_reading(_session, 17), angaria::SendResult::Sent);
@@ -143,6 +154,9 @@ namespace
     EXPECT_NE(output.str().find("sequence=3 timestamp_ns="), std::string::npos);
   }
 
+  // Append a deliberately truncated record to emulate an interrupted v0 write.
+  // Inspection ignores only the incomplete tail, and the next send replaces that
+  // tail while preserving earlier committed deliveries.
   TEST_F(SessionTest, PartialTailIsIgnoredAndReplacedByNextSend)
   {
     ASSERT_EQ(angaria::send_reading(_session, -5), angaria::SendResult::Sent);
@@ -164,6 +178,9 @@ namespace
     EXPECT_EQ(consume_reading(_session), 6);
   }
 
+  // An independently encoded log describes a different queue/message name and
+  // schema identity. Inspection must use that stored schema rather than hard-code
+  // the demo Reading layout.
   TEST_F(SessionTest, InspectorUsesStoredSchema)
   {
     constexpr char fixture[] = "ANGARIA\0"
@@ -189,6 +206,8 @@ namespace
     EXPECT_EQ(output.str(), "queue=demo sequence=1 timestamp_ns=123 type=Counter count=-42\n");
   }
 
+  // A complete-sized but corrupt record is not an ignorable partial tail. The
+  // inspector must fail before presenting it as a committed delivery.
   TEST_F(SessionTest, InspectorRejectsFullRecordWithInvalidCommitMarker)
   {
     ASSERT_EQ(angaria::send_reading(_session, 1), angaria::SendResult::Sent);
@@ -201,6 +220,9 @@ namespace
     EXPECT_THROW(angaria::inspect_session(_log, output), std::runtime_error);
     EXPECT_TRUE(output.str().empty());
   }
+  // One prototype Producer and one Consumer may coexist, but a second owner of
+  // either role is rejected locally and in another process. Queue removal also
+  // requires those retained endpoint owners to close first.
   TEST_F(SessionTest, RolesAreExclusiveAndIndependent)
   {
     angaria::Producer producer(_session);
@@ -243,6 +265,9 @@ namespace
         });
   }
 
+  // Start competing prototype owners together and keep the winner alive until
+  // both attempts finish. This prevents sequential success from disguising a
+  // failure of exclusive role acquisition.
   TEST_F(SessionTest, SimultaneousRoleClaimsHaveOneWinner)
   {
     std::barrier gate(2);
@@ -270,6 +295,9 @@ namespace
     EXPECT_NE(first.get(), second.get());
   }
 
+  // An abandoned temporary role-state file must not become the authoritative
+  // attachment. Reopening advances the last committed incarnation and removes
+  // the incomplete replacement file.
   TEST_F(SessionTest, InterruptedRoleStateWritePreservesIncarnation)
   {
     {
@@ -285,6 +313,9 @@ namespace
     EXPECT_FALSE(fs::exists(_session / "producer.state.tmp"));
   }
 
+  // The prototype consumer reads the same pending delivery until it acknowledges
+  // that exact sequence. Invalid or repeated acknowledgments cannot make progress;
+  // valid acknowledgment permits the next queued delivery and frees capacity.
   TEST_F(SessionTest, OneDeliveryRemainsPendingUntilAcknowledged)
   {
     angaria::Producer producer(_session);
@@ -315,6 +346,9 @@ namespace
     EXPECT_FALSE(consumer.receive_reading());
   }
 
+  // Producer wrappers can close and reattach without recreating the Consumer.
+  // The producer incarnation changes, while queue sequence order continues and
+  // the surviving consumer claim remains unchanged.
   TEST_F(SessionTest, ProducerRestartsWhileConsumerStaysAttached)
   {
     angaria::Consumer consumer(_session);
@@ -334,6 +368,9 @@ namespace
     EXPECT_EQ(consumer.identity()._incarnation, 1u);
   }
 
+  // Let a Consumer close with an unacknowledged delivery, then attach a new one.
+  // The replacement receives that same sequence and original timestamp before
+  // acknowledging it; the Producer does not need to restart.
   TEST_F(SessionTest, ConsumerRestartsWhileProducerStaysAttached)
   {
     angaria::Producer producer(_session);
@@ -358,6 +395,9 @@ namespace
     EXPECT_EQ(producer.identity()._incarnation, 1u);
   }
 
+  // Receiving alone does not complete a delivery obligation. Abrupt consumer
+  // death releases its native role and the replacement receives the unacknowledged
+  // message again under a new incarnation.
   TEST_F(SessionTest, ConsumerKilledBeforeAcknowledgmentRedelivers)
   {
     angaria::Producer producer(_session);
@@ -383,6 +423,9 @@ namespace
     EXPECT_FALSE(replacement.receive_reading());
   }
 
+  // Make the child acknowledge before killing it. The replacement must resume
+  // after that committed prototype progress point, preserving the acknowledgment
+  // and delivering the next message.
   TEST_F(SessionTest, ConsumerKilledAfterAcknowledgmentResumesNextMessage)
   {
     angaria::Producer producer(_session);
@@ -410,6 +453,9 @@ namespace
     replacement.acknowledge(delivery->_sequence);
   }
 
+  // Publish the prototype queue entry and kill its producer before any subsequent
+  // notification. The waiting consumer must discover the published entry anyway;
+  // notification is not the authoritative record of available work.
   TEST_F(SessionTest, ProducerKilledAfterPublicationNeedsNoNotification)
   {
     angaria::Consumer consumer(_session);
@@ -454,6 +500,9 @@ namespace
     EXPECT_EQ(replacement.send_reading(43), angaria::SendResult::Sent);
   }
 
+  // An inherited prototype endpoint cannot act as its parent, and its copied
+  // descriptor must not keep the role busy after the parent closes. The fresh-child
+  // reattachment here is legacy behavior, not the format-2 fork/exec contract.
   TEST_F(SessionTest, ForkedChildDoesNotRetainParentRole)
   {
     auto producer = std::make_unique<angaria::Producer>(_session);
@@ -492,6 +541,9 @@ namespace
     EXPECT_EQ(WEXITSTATUS(status), 0);
   }
 
+  // An invalid pending entry makes prototype attachment fail. Removing the
+  // corruption must permit a fresh attachment with no leaked role lock; receive
+  // timeouts also distinguish invalid durations from an ordinary empty queue.
   TEST_F(SessionTest, AttachmentRejectsCorruptionAndReleasesRole)
   {
     const auto path = _session / "pending" / "999";

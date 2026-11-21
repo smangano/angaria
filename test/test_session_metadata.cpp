@@ -14,6 +14,9 @@
 #include <variant>
 #include <vector>
 
+// These private codecs persist the metadata returned by Session/Registry APIs.
+// Fixtures describe record bodies without creating a Session or claiming Tasks;
+// public lifecycle usage is demonstrated in test_runtime_session.cpp instead.
 namespace
 {
   using namespace angaria;
@@ -140,6 +143,9 @@ namespace
     return bytes;
   }
 
+  // Independent bytes document the Session body and its absolute string slices.
+  // Start decoding one byte into a buffer to verify that storage encoding does
+  // not depend on native structure alignment.
   TEST(SessionMetadata, SessionEncoderAndUnalignedDecoderMatchIndependentGolden)
   {
     EXPECT_EQ(require_value(mapped::encode_session_definition(session_definition(), record_offset)),
@@ -162,6 +168,9 @@ namespace
     EXPECT_EQ(result._policyFeatures, 0x1122334455667788u);
   }
 
+  // A Task's immutable registration metadata is separate from its live claim.
+  // Decode its ID, descriptor, creator, timestamp, and revision without copying
+  // a native C++ structure from the unaligned fixture.
   TEST(SessionMetadata, TaskEncoderAndUnalignedDecoderMatchIndependentGolden)
   {
     EXPECT_EQ(require_value(mapped::encode_task_definition(task_definition(), record_offset)), golden_task());
@@ -178,6 +187,9 @@ namespace
     EXPECT_EQ(result._registration._revision, 7u);
   }
 
+  // Empty application versions/docs use zero offset-and-length slices. Up to
+  // 63 zero padding bytes account for record alignment; extra or nonzero trailing
+  // bytes are not silently accepted as another metadata field.
   TEST(SessionMetadata, EmptyOptionalStringsUseZeroSlicesAndAllowShortZeroPadding)
   {
     auto session = session_definition();
@@ -209,6 +221,9 @@ namespace
     expect_error(mapped::decode_task_definition(body, record_offset), ErrorCode::IoError);
   }
 
+  // Change stored fields directly to exercise malformed-input handling. A
+  // truncated body, unknown code, or reserved data must fail before its options
+  // could be exposed by public Session attachment.
   TEST(SessionMetadata, SessionRejectsTruncationReservedAndUnknownPolicyCodes)
   {
     for (const auto offset : {0, 2, 4, 6, 8, 10, 12, 15, 24})
@@ -231,6 +246,9 @@ namespace
     expect_error(mapped::decode_session_definition(body, record_offset, configuration()), ErrorCode::IoError);
   }
 
+  // The body must describe a nonzero Task and registration, with a parent only
+  // for Thread Tasks. This local codec checks the relationship's shape; checking
+  // that the named parent is a registered Process Task belongs to the runtime.
   TEST(SessionMetadata, TaskRejectsInvalidKeysRegistrationKindAndParent)
   {
     for (const auto offset : {0, 8, 24, 64})
@@ -263,6 +281,9 @@ namespace
     expect_error(mapped::decode_task_definition(body, record_offset), ErrorCode::IoError);
   }
 
+  // String slices use logical file offsets but must stay inside their own
+  // definition's canonical string area. Reject overlaps, empty nonzero slices,
+  // and references into another record rather than reading unrelated bytes.
   TEST(SessionMetadata, SlicesMustBeCanonicalOwnedAndBounded)
   {
     for (const auto offset : {body_offset, std::uint64_t{8327}, std::uint64_t{8329},
@@ -286,6 +307,9 @@ namespace
     expect_error(mapped::decode_session_definition(body, record_offset, configuration()), ErrorCode::IoError);
   }
 
+  // Names are nonempty UTF-8 without embedded NULs. Documentation is length
+  // delimited and may contain NUL bytes; preserving it must not weaken name
+  // validation or accept malformed UTF-8 in stored metadata.
   TEST(SessionMetadata, NamesAndStringsValidateUtf8WithoutLosingOptionalBytes)
   {
     const std::array<std::string, 8> invalid{
@@ -316,6 +340,9 @@ namespace
     EXPECT_EQ(result._descriptor._doc, task._descriptor._doc);
   }
 
+  // Round-trip the full wire ranges, including UTC times before the epoch.
+  // These boundary descriptors test serialization only, not a live parent claim
+  // or a registration history containing those extreme values.
   TEST(SessionMetadata, ThreadSupportsMaximumIdsAndSignedNanosecondRange)
   {
     for (const auto timestamp : {std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max()})
@@ -337,6 +364,9 @@ namespace
     }
   }
 
+  // The caller supplies the owning record offset so absolute slices can be
+  // checked before construction. Invalid placement is an argument error for
+  // encoding and malformed storage for decoding.
   TEST(SessionMetadata, RecordOffsetsRejectMisalignmentAndSignedOffsetOverflow)
   {
     for (const auto offset : {std::uint64_t{0}, std::uint64_t{4095}, std::uint64_t{8193},
@@ -349,6 +379,9 @@ namespace
     }
   }
 
+  // Portable inspection recognizes policy/storage codes beyond today's native
+  // implementation. Storage mapping and segment size must agree with the header;
+  // decoding policy codes does not enable them for live creation/attachment.
   TEST(SessionMetadata, PortablePolicyCodesAndSegmentedMetadataMatchHeader)
   {
     auto header = configuration();
@@ -380,6 +413,9 @@ namespace
     expect_error(mapped::decode_session_definition(body, record_offset, header), ErrorCode::IoError);
   }
 
+  // Reject contradictory owning values before generating bytes, including an
+  // application version that differs between options and metadata. Native Session
+  // creation additionally checks which recognized policies are implemented.
   TEST(SessionMetadata, EncoderRejectsInconsistentNativeValuesAndUnknownEnums)
   {
     auto session = session_definition();

@@ -1,3 +1,9 @@
+// Independent exec worker for test_runtime_session.cpp. A fresh process tests
+// persisted Session behavior without sharing the parent controller or caches.
+// Stdout is a test-only pipe protocol: A=attached/inspected, B=busy/conflict,
+// C=created, E=unexpected claim error; selected modes then send native u64 values.
+// Closing the stdin pipe lets a held owner exit normally; SIGKILL tests omit it.
+
 #include "angaria/runtime.h"
 
 #include <cerrno>
@@ -100,6 +106,9 @@ int main(int argc, char** argv)
     const std::string mode{argv[1]};
     if (mode == "create")
     {
+      // Mirror the parent fixture so two fresh processes can contend for the
+      // same creation path. Keep the winning creator alive until the parent
+      // has inspected both reports, preventing accidental sequential reuse.
       SessionOptions options;
       options._name = "Runtime";
       options._applicationVersion = "App-2.5";
@@ -124,6 +133,8 @@ int main(int argc, char** argv)
     auto session = require_value(Session::attach(argv[2]));
     if (mode == "inspect")
     {
+      // Inspect without attach_task: reading an existing Registry does not
+      // require taking the creator's exclusive claim from its current owner.
       const auto metadata = require_value(session.metadata());
       const auto options = require_value(session.options());
       auto registry = session.registry();
@@ -154,6 +165,9 @@ int main(int argc, char** argv)
     auto task = require_value(std::move(attached));
     if (mode == "hold_children")
     {
+      // These are separately registered logical Thread Tasks attached on this
+      // native thread. Retaining every wrapper keeps their parent claim alive
+      // until normal release or until the parent test kills this whole process.
       const auto count = argc == 4 ? std::stoul(argv[3]) : 1;
       std::vector<Task> children;
       for (unsigned index = 0; index != count; ++index)
@@ -168,6 +182,8 @@ int main(int argc, char** argv)
     }
     if (mode == "hold_issue")
     {
+      // Report only after both issuance transactions complete. Killing after
+      // this report leaves persisted counters and stale diagnostics to inspect.
       const auto first = require_value(task.next_publication_id());
       const auto second = require_value(task.next_publication_id());
       report('A');
@@ -179,6 +195,9 @@ int main(int argc, char** argv)
     }
     if (mode == "fork_reject")
     {
+      // Unlike the usual fresh-exec path, this mode inherits handles only to
+      // verify that their use fails. The child uses _exit rather than running
+      // inherited owner cleanup; applications exec before normal library use.
       const auto child = ::fork();
       if (child == -1)
       {

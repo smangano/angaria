@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Exercise the earlier v0 queue executable as a user would from the command line.
+# This prototype's bounded queue and log are separate from format-2 Queue policies;
+# test_runtime_session.cpp demonstrates the implemented public Session API.
 string(RANDOM LENGTH 12 ALPHABET abcdef0123456789 session_name)
 set(session "${CMAKE_CURRENT_BINARY_DIR}/${session_name}")
 set(log "${session}/session.ang")
@@ -46,6 +49,9 @@ check_demo(1 "angaria_queue_demo: value must be a signed 32-bit integer" send 21
 check_demo(1 "angaria_queue_demo: queue is empty" receive)
 check_demo(0 "" send 42)
 check_demo(0 "" send -7)
+# A receive without acknowledgment leaves the same delivery pending and the queue
+# full. Acknowledging frees a queue slot, but the already-full append log still
+# rejects another send; neither kind of rejection should rewrite retained history.
 file(SHA256 "${log}" before_rejection)
 check_demo(3 "angaria_queue_demo: queue is full" send 9)
 check_demo(0 "Reading sequence=1 value=42" receive)
@@ -60,6 +66,8 @@ if(NOT before_rejection STREQUAL after_rejection)
   file(REMOVE "${empty_input}" "${ack_input}")
   message(FATAL_ERROR "A rejection or receive changed the session log")
 endif()
+# Removing the live queue does not erase its committed log: inspect still decodes
+# both messages from stored schema information after the endpoints have closed.
 check_demo(0 "" remove)
 check_demo(0 "queue=${session_name} sequence=1 timestamp_ns=TIME type=Reading value=42\nqueue=${session_name} sequence=2 timestamp_ns=TIME type=Reading value=-7" inspect)
 file(REMOVE_RECURSE "${session}")

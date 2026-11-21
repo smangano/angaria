@@ -1,3 +1,7 @@
+// Private storage primitives used by Session: explicit allocation, bounded I/O,
+// mapping ownership, and alias-aware lifetime protection. Application-facing
+// creation/attachment examples start in test_runtime_session.cpp.
+
 #include "mapped_superblock.h"
 #include "native_file.h"
 
@@ -113,6 +117,9 @@ namespace
     fs::path _path;
   };
 
+  // Creating storage and attaching to existing storage are separate operations.
+  // Exclusive creation preserves another owner's file; an existing-file open
+  // identifies the same underlying file and observes its bytes.
   TEST_F(NativeFileTest, ExclusiveCreationAndExistingOpenPreserveContents)
   {
     auto file = require_value(mapped::NativeFile::create_exclusive(_path, 64));
@@ -135,6 +142,9 @@ namespace
     EXPECT_NE(flags & FD_CLOEXEC, 0);
   }
 
+  // Reserve space with resize() before writing it. Positional I/O stays within
+  // that reservation and leaves the descriptor cursor untouched, allowing
+  // independent operations without interference through a shared seek position.
   TEST_F(NativeFileTest, ExactIoDoesNotGrowTheFileOrChangeItsCursor)
   {
     auto file = create_file(16, 64);
@@ -160,6 +170,9 @@ namespace
     expect_error(file.read_exact(17, std::span<std::byte>{}), ErrorCode::IoError);
   }
 
+  // Invalid paths and impossible ceilings fail before creation. Exceeding an
+  // existing file's ceiling also preserves its length, so callers can distinguish
+  // invalid input from exhausted capacity without repairing partial changes.
   TEST_F(NativeFileTest, InvalidInputsAndByteLimitsFailBeforeChangingStorage)
   {
     expect_error(mapped::NativeFile::create_exclusive({}, 64), ErrorCode::InvalidArgument);
@@ -182,6 +195,9 @@ namespace
     EXPECT_EQ(require_value(file.size()), 16u);
   }
 
+  // Storage must be an ordinary file at the requested path. Substitute a
+  // symlink, directory, and FIFO to demonstrate rejection instead of following
+  // an alias or blocking on a pipe.
   TEST_F(NativeFileTest, SymlinksDirectoriesAndFifosAreRejected)
   {
     auto file = create_file();
@@ -197,6 +213,9 @@ namespace
     EXPECT_EQ(require_value(file.size()), 64u);
   }
 
+  // A writable open does not upgrade another read-only owner or view. Both
+  // observe shared bytes, but only explicitly writable capabilities may modify
+  // them; alias coalescing must preserve each handle's access restrictions.
   TEST_F(NativeFileTest, ReadOnlyCapabilitiesRemainSeparateAcrossAliases)
   {
     auto writable = create_file(16);
@@ -218,6 +237,9 @@ namespace
     EXPECT_EQ(observed, data);
   }
 
+  // Mapping protection follows file identity, while ceilings belong to each
+  // open. Growth through a permissive owner makes a stricter handle reject the
+  // oversized file without invalidating its already retained mapping.
   TEST_F(NativeFileTest, IndependentHandleLimitsRemainSeparateAcrossSharedInodeState)
   {
     auto owner = create_file(16, 64);
@@ -249,6 +271,9 @@ namespace
     EXPECT_EQ(require_value(restored.bytes()).size(), data.size());
   }
 
+  // Combine portable encoding with native allocation/mapping to show how the
+  // prefix reaches storage. This fixture stops before journal bootstrap;
+  // successful decoding alone does not establish a usable Session.
   TEST_F(NativeFileTest, SuperblockCodecRoundTripsThroughNativeFileAndReadOnlyMapping)
   {
     mapped::SuperblockConfiguration configuration;
@@ -291,6 +316,9 @@ namespace
     EXPECT_EQ(decoded._limits._stringPoolBytes, configuration._limits._stringPoolBytes);
   }
 
+  // Logical record ranges need not begin at a host page boundary. The mapping
+  // owner handles page alignment internally while exposing exactly the requested
+  // bytes, including a range that crosses pages.
   TEST_F(NativeFileTest, UnalignedMappingsExposeOnlyTheRequestedHostPageRange)
   {
     const long page = ::sysconf(_SC_PAGESIZE);
@@ -313,6 +341,9 @@ namespace
     EXPECT_EQ(require_value(later_page.bytes()).size(), 9u);
   }
 
+  // A reference must fit both format arithmetic and the physical file.
+  // Overflowing offsets and ranges beyond EOF must fail before a mapped pointer
+  // or I/O access is exposed.
   TEST_F(NativeFileTest, InvalidMappingAndIoRangesAreRejectedBeforeAccess)
   {
     auto file = create_file(64);
@@ -329,6 +360,9 @@ namespace
     EXPECT_EQ(require_value(file.size()), 64u);
   }
 
+  // Appending storage preserves existing borrowed spans at their original
+  // address and length. Accessing the zero-filled extension requires a new view;
+  // an old mapping does not grow with its backing file.
   TEST_F(NativeFileTest, GrowthPreservesExistingViewsAndZeroExtendsTheFile)
   {
     auto file = create_file(16, 128);
@@ -358,6 +392,9 @@ namespace
     EXPECT_EQ(require_value(last_byte.bytes())[0], std::byte{0});
   }
 
+  // Shrinking below a live view would make later access unsafe. Protection
+  // follows the underlying file across opens and hard links, and ends only when
+  // the last relevant mapping owner releases its view.
   TEST_F(NativeFileTest, ShrinkProtectionCoversIndependentHandlesAndHardLinks)
   {
     auto file = create_file(64);
@@ -378,6 +415,9 @@ namespace
     EXPECT_EQ(require_value(file.size()), 0u);
   }
 
+  // A mapping retains its backing descriptor and shrink protection after the
+  // NativeFile wrapper leaves scope. A borrowed span therefore depends on the
+  // mapping owner's lifetime, rather than the original file wrapper's lifetime.
   TEST_F(NativeFileTest, MappingRetainsItsFileAndLeaseAfterTheFileWrapperCloses)
   {
     mapped::MappedRegion region;
@@ -401,6 +441,9 @@ namespace
     require_value(alias.resize(11));
   }
 
+  // These native owners are move-only. Moving preserves the borrowed address;
+  // move assignment releases the destination's old resource, and subsequent
+  // operations on an emptied source report InvalidState.
   TEST_F(NativeFileTest, MovesTransferOwnershipAndReleasePreviousResources)
   {
     mapped::NativeFile empty_file;
@@ -434,6 +477,9 @@ namespace
     EXPECT_EQ(require_value(high.bytes()).size(), 8u);
   }
 
+  // Views with the same end offset still have independent lifetimes. Closing
+  // one must not erase the other's shrink protection just because their
+  // protected range ends coincide.
   TEST_F(NativeFileTest, EqualRangeEndsKeepIndependentMappingLeases)
   {
     auto file = create_file(32);
@@ -445,6 +491,9 @@ namespace
     require_value(file.resize(15));
   }
 
+  // Inject an external truncate directly as adversarial fixture setup. The
+  // adapter must recheck physical size instead of trusting an earlier open,
+  // rejecting subsequent operations that would extend beyond the new EOF.
   TEST_F(NativeFileTest, FreshSizeChecksRejectExternallyTruncatedRanges)
   {
     auto file = create_file(64, 128);
@@ -461,6 +510,9 @@ namespace
     EXPECT_EQ(require_value(short_view.bytes()).size(), 8u);
   }
 
+  // Race mapping creation against a conflicting shrink through another open.
+  // Either the view wins and shrink is busy, or shrink wins and mapping fails;
+  // a successful view must never cover bytes removed by a successful shrink.
   TEST_F(NativeFileTest, ConcurrentMapAndAliasShrinkCannotBothInvalidateTheView)
   {
     auto file = create_file(16);
@@ -498,6 +550,9 @@ namespace
     require_value(alias.resize(8));
   }
 
+  // Native owners and initialized factories belong to their creating process.
+  // A quiescent fork child checks WrongOwner and uses _exit(); applications exec
+  // before using the native library in a child.
   TEST_F(NativeFileTest, InheritedObjectsAndFactoriesRejectQuiescentForkUse)
   {
     auto file = create_file(16);
@@ -523,6 +578,9 @@ namespace
     EXPECT_EQ(require_value(file.size()), 16u);
   }
 
+  // Exec starts an independent process that maps the same file through Python.
+  // Its write becomes visible in the retained C++ view without inherited C++
+  // state or a shared process-local mapping object.
   TEST_F(NativeFileTest, IndependentExecProcessObservesAndUpdatesTheSharedMapping)
   {
     auto file = create_file(16);

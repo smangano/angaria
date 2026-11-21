@@ -1,3 +1,8 @@
+// Independent exec worker for the private journal crash tests. It pauses at a
+// selected real write/recovery checkpoint so the parent can SIGKILL it and
+// reopen the file with fresh process state; this is a test harness, not a
+// public transaction API example. See test_mutation_journal.cpp for outcomes.
+
 #include "mutation_journal.h"
 
 #include <cstddef>
@@ -65,6 +70,9 @@ namespace
     return command;
   }
 
+  // Match the parent's synthetic draft so it can distinguish old words from
+  // fully accepted words after reopening. Public Task mutations construct and
+  // validate their own plans; applications do not populate these raw fields.
   mapped::TransactionPlan make_plan(const mapped::JournalSnapshot& base,
                                     const mapped::SuperblockConfiguration& configuration,
                                     bool append)
@@ -164,6 +172,9 @@ namespace
     return plan;
   }
 
+  // Report the selected checkpoint and remain alive there until the parent
+  // kills us. Returning from the callback would let the operation progress and
+  // make the observed crash state depend on timing instead of the chosen cut.
   class StopAt : public mapped::JournalFaultInjector
   {
   public:
@@ -201,6 +212,7 @@ int main(int argc, char** argv)
     {
       throw std::runtime_error("usage: native_journal_worker fixed|append|publication|recover directory checkpoint index");
     }
+    // Bound worker lifetime even if the parent fails before issuing SIGKILL.
     ::alarm(8);
     const std::string mode{argv[1]};
     const auto point = static_cast<mapped::JournalCheckpoint>(std::stoul(argv[3]));
@@ -211,6 +223,8 @@ int main(int argc, char** argv)
     auto journal = require_value(mapped::MutationJournal::open(controller, guard, &stop));
     if (mode == "recover")
     {
+      // The same hook can stop recovery itself, testing repair after another
+      // interrupted repair rather than only after an interrupted writer.
       require_value(journal.recover(guard));
     }
     else if (mode == "publication")

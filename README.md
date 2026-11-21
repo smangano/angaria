@@ -21,6 +21,8 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+For usage examples, start with the [test reading guide](test/README.md). Test comments explain the demonstrated scenarios and distinguish public Session usage from private fixtures, recovery checks, the protocol model, and the earlier prototype.
+
 ## Configuration contract
 
 The [configuration and lifecycle contract](docs/configuration.md) defines the proposed TOML schema for the Registry implementation. The [trading example](examples/trading.toml) exercises process and thread Tasks, both Queue Set types, and the delivery policies.

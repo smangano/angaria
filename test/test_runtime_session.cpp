@@ -1,3 +1,8 @@
+// Public format-2 Session examples: start with creation below, then follow
+// attachment, Registry inspection, and retained Task lifetimes. Private storage
+// helpers only prepare boundary/failure fixtures; normal applications use the
+// public API in angaria/runtime.h. See docs/api.md and docs/native-storage.md.
+
 #include "angaria/runtime.h"
 #include "mutation_journal.h"
 #include "native_atomic.h"
@@ -55,6 +60,8 @@ namespace
   template <typename T>
   T require_value(Result<T> result)
   {
+    // Test shorthand for a successful Result. Application code should inspect
+    // the Error alternative and choose its retry/reporting policy explicitly.
     if (const auto* error = std::get_if<Error>(&result))
     {
       throw std::runtime_error(error->_path + ": " + error->_message);
@@ -98,6 +105,9 @@ namespace
     fs::path _previous;
   };
 
+  // Start a fresh executable, then wait for its pipe report before inspecting or
+  // killing it. This makes ownership/crash boundaries explicit rather than
+  // relying on a sleep or sharing the parent's in-process Session state.
   class SessionWorker
   {
   public:
@@ -285,6 +295,9 @@ namespace
     int _input{-1};
   };
 
+  // Private, gate-bound access used only to inspect storage or construct faults
+  // that the public API intentionally prevents. Application updates must go
+  // through Session/Task/Registry operations, not these raw word writes.
   class RuntimeFile
   {
   public:
@@ -368,6 +381,8 @@ namespace
 
     SessionOptions options(const fs::path& directory = {}) const
     {
+      // Reserve only Tasks to keep examples small. CapacityLimits::empty()
+      // disables other facilities; ordinary CapacityLimits{} has useful defaults.
       SessionOptions result;
       result._name = "Runtime";
       result._applicationVersion = "App-2.5";
@@ -387,11 +402,16 @@ namespace
 
     CreatedSession create()
     {
+      // The programmatic entry point returns both the Session and creator claim.
+      // No separate attach_task call is needed for that first creator owner.
       return require_value(Session::create(options(), creator()));
     }
 
     static void add_thread_tasks(const fs::path& directory, unsigned count = 1)
     {
+      // General registration arrives in step 2.6. Seed committed Thread Task
+      // definitions through private journal fixtures so these tests can exercise
+      // public attachment now; this is not a supported registration recipe.
       RuntimeFile access(directory);
       for (unsigned child = 0; child != count; ++child)
       {
@@ -431,6 +451,9 @@ namespace
     fs::path _directory;
   };
 
+  // Start here: Session::create returns both the Session and its already attached
+  // creator Task. Inspect the recorded options and registration through a Session
+  // Registry view, then have an independent process discover the same metadata.
   TEST_F(RuntimeSessionTest, CreationRecordsCreatorEffectiveOptionsAndFrameworkMetadata)
   {
     auto created = create();
@@ -459,6 +482,7 @@ namespace
     EXPECT_EQ(recorded._defaults._wait, WaitPolicy::Spin);
     EXPECT_EQ(recorded._defaults._acceptance, AcceptancePolicy::AllDestinations);
     auto registry = created._session.registry();
+    // Session views inspect registrations without retaining the creator claim.
     EXPECT_EQ(require_value(registry.find_task("Creator")), TaskId{1});
     const auto definition = require_value(registry.describe_task(TaskId{1}));
     EXPECT_EQ(definition._name, "Creator");
@@ -482,6 +506,9 @@ namespace
     EXPECT_EQ(worker.finish(), 0);
   }
 
+  // Resolve configuration errors before publishing any Session resources. Known
+  // policies awaiting implementation produce UnsupportedPolicy, while malformed
+  // values produce InvalidConfiguration; neither leaves a partial directory.
   TEST_F(RuntimeSessionTest, InvalidCreationSettingsLeaveNoPublishedOrTemporaryDirectory)
   {
     struct InvalidCase
@@ -581,6 +608,9 @@ namespace
     EXPECT_TRUE(fs::is_empty(_root));
   }
 
+  // Creation needs a new path: existing content is never replaced, even when the
+  // target is a file or dangling symlink. Two independent creators racing for a
+  // fresh path must leave exactly one complete, attachable Session.
   TEST_F(RuntimeSessionTest, ExistingTargetsArePreservedAndConcurrentCreationHasOneWinner)
   {
     fs::create_directory(_directory);
@@ -612,6 +642,9 @@ namespace
     EXPECT_EQ(std::distance(fs::directory_iterator(_root), fs::directory_iterator{}), 1);
   }
 
+  // Session::attach opens an existing identity without claiming its creator Task.
+  // After every owner closes, relocate the directory and attach again: recorded
+  // metadata stays the same, while options()._directory reports the current path.
   TEST_F(RuntimeSessionTest, IndependentAttachmentAndRelocationUseTheActualDirectory)
   {
     SessionId identity;
@@ -641,6 +674,9 @@ namespace
     EXPECT_EQ(worker.finish(), 0);
   }
 
+  // A Registry obtained from Task::registry retains the acting claim after the
+  // Task wrapper leaves scope. A Session::registry view permits inspection without
+  // holding that claim, so replacement becomes possible when the actor view closes.
   TEST_F(RuntimeSessionTest, ActorRegistryRetainsItsTaskWhileReadOnlyViewsDoNot)
   {
     std::optional<Session> session;
@@ -657,12 +693,17 @@ namespace
     EXPECT_EQ(busy.receive(), 'B');
     EXPECT_EQ(busy.finish(), 0);
     actor.reset();
+    // The reader remains usable, but closing the actor releases the last claim
+    // owner and permits a new incarnation of the same registered Task.
     EXPECT_FALSE(require_value(reader->task_status(TaskId{1}))._attached);
     auto replacement = require_value(session->attach_task(TaskId{1}));
     EXPECT_EQ(replacement.claim()._incarnation, 2u);
     EXPECT_EQ(require_value(reader->task_status(TaskId{1}))._restartCount, 1u);
   }
 
+  // Request publication IDs from the Task rather than assembling sequence values.
+  // After the last claim owner closes, reattach the same logical Task: its sequence
+  // restarts at one, but the advanced incarnation keeps the full identity distinct.
   TEST_F(RuntimeSessionTest, PublicationIdsPersistWithinAClaimAndResetOnlyWithANewIncarnation)
   {
     auto created = create();
@@ -685,6 +726,9 @@ namespace
     EXPECT_TRUE(status._attached);
   }
 
+  // A Process Task can serve cooperating application threads. Concurrent issuance
+  // uses the shared mutation gate to persist distinct sequences; the mutex here
+  // only protects the test result vectors, not the Angaria issuance operation.
   TEST_F(RuntimeSessionTest, CoordinatedProcessTaskIssuanceIsUniqueAcrossThreads)
   {
     auto created = create();
@@ -727,6 +771,9 @@ namespace
     }
   }
 
+  // Wait until another process has attached and issued IDs before killing it.
+  // Task status must consult native ownership rather than trusting stale attached
+  // bits, and replacement must advance the claim before issuing new IDs.
   TEST_F(RuntimeSessionTest, TerminatedOwnerIsReportedDetachedAndCanBeReplaced)
   {
     auto created = create();
@@ -751,6 +798,9 @@ namespace
     EXPECT_EQ(require_value(session.registry().task_status(TaskId{1}))._restartCount, 2u);
   }
 
+  // Moving a handle transfers its owner; the moved-from wrapper cannot be used.
+  // The exec worker also forks to check rejection of inherited format-2 handles.
+  // That rejection check is not permission for general library use after fork.
   TEST_F(RuntimeSessionTest, MovesAndForkRejectionPreserveNativeClaimOwnership)
   {
     auto created = create();
@@ -771,6 +821,9 @@ namespace
     require_value(session.attach_task(TaskId{1}));
   }
 
+  // Attach a registered Thread Task on its owning thread while its Process Task
+  // is live. Passing its wrapper to another thread does not transfer permission to
+  // use it, and its actor Registry continues retaining the parent after close.
   TEST_F(RuntimeSessionTest, ThreadTasksRequireAndRetainTheirParentAndRejectOtherThreads)
   {
     auto created = create();
@@ -781,6 +834,7 @@ namespace
     std::optional<Error> attachment_error;
     std::thread attaching([&]
     {
+      // Attachment binds this logical Thread Task to the current native thread.
       auto result = session.attach_task(TaskId{2});
       if (const auto* error = std::get_if<Error>(&result))
       {
@@ -798,6 +852,8 @@ namespace
     attaching.join();
     ASSERT_FALSE(attachment_error);
     ASSERT_TRUE(child);
+    // Merely moving/retaining the wrapper on the test thread does not transfer
+    // Thread Task affinity. Its Registry still owns the child and parent claims.
     EXPECT_THROW(static_cast<void>(child->claim()), std::logic_error);
     expect_error(child->next_publication_id(), ErrorCode::WrongOwner);
     {
@@ -815,6 +871,9 @@ namespace
     expect_error(session.attach_task(TaskId{2}), ErrorCode::WrongOwner);
   }
 
+  // Recreate with a cap exactly equal to bootstrap storage, leaving no append
+  // space. ID issuance, detach, and replacement still succeed because their
+  // transactions use preallocated state and the reserved journal.
   TEST_F(RuntimeSessionTest, AttachAndIssuanceWorkAtTheExactRecordedLogLimit)
   {
     std::uint64_t required{};
@@ -843,6 +902,9 @@ namespace
     EXPECT_EQ(snapshot._accounted, required);
   }
 
+  // A killed Process Task can leave recorded child attachments behind. Use 24
+  // children at the exact log cap to demonstrate compact, replayable cleanup that
+  // needs neither append space nor an inline journal command for every child.
   TEST_F(RuntimeSessionTest, ReplacingADeadParentClearsManyChildrenAtTheFullLogLimit)
   {
     constexpr unsigned child_count = 24;
@@ -889,6 +951,9 @@ namespace
     EXPECT_EQ(snapshot._accounted, required);
   }
 
+  // The private fixture places counters at their representable maximum, which
+  // would be impractical to reach through normal calls. Public operations must
+  // report CapacityExceeded before preparing an intent or wrapping an identity.
   TEST_F(RuntimeSessionTest, ExhaustedIssuanceAndAttachmentCountersChangeNoStoredBytes)
   {
     auto created = create();
@@ -931,6 +996,9 @@ namespace
     }
   }
 
+  // These direct word edits deliberately violate the persisted format; they are
+  // not application update examples. Public attachment must reject malformed state
+  // and preserve the bytes for diagnosis instead of inventing a repair.
   TEST_F(RuntimeSessionTest, CorruptMetadataIndexesAndCompatibilityFailWithoutRepairWrites)
   {
     auto created = create();

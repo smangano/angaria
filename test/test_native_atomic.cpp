@@ -1,3 +1,7 @@
+// Native qualification for the private atomic adapter used by Session recovery.
+// These tests exercise actual shared mappings and independent processes on this
+// host; they do not establish power-loss durability or every possible schedule.
+
 #include "native_atomic.h"
 #include "native_file.h"
 
@@ -160,6 +164,9 @@ namespace
     fs::path _path;
   };
 
+  // Portable decoding can inspect foreign metadata, but live atomic access
+  // requires this compiler/OS/CPU profile and synchronization version. Qualify
+  // the host, then reject compatibility mismatches before live use.
   TEST_F(NativeAtomicTest, QualifiesOnlyTheActualNativeProfile)
   {
     const auto supported = require_value(mapped::qualify_native_profile());
@@ -188,6 +195,9 @@ namespace
     expect_error(mapped::check_live_compatibility(configuration, supported), ErrorCode::IoError);
   }
 
+  // An AtomicWord borrows one naturally aligned eight-byte location. Binding
+  // validates the actual address and complete range without changing storage;
+  // sentinel bytes around the valid word reveal accidental neighboring writes.
   TEST_F(NativeAtomicTest, RejectsInvalidRangesAndAlignmentWithoutWrites)
   {
     alignas(8) std::array<std::byte, 24> bytes;
@@ -220,6 +230,9 @@ namespace
                             }));
   }
 
+  // The worker fills ordinary body bytes, publishes a control generation, then
+  // grows the file. Observing that later effect must expose both control and
+  // preceding body; acknowledgments prevent overlapping body generations.
   TEST_F(NativeAtomicTest, IndependentProcessPublishesBodyBeforeFollowingFileGrowth)
   {
     auto file = create_file();
@@ -250,6 +263,9 @@ namespace
     EXPECT_EQ(WEXITSTATUS(status), 0);
   }
 
+  // Sample alternating eight-byte patterns and kill their independent writer.
+  // Every sample, including the retained post-kill word, must be one complete
+  // pattern; this qualifies process-crash behavior on the tested host.
   TEST_F(NativeAtomicTest, TerminatedWriterLeavesAnIndivisibleNativeWord)
   {
     auto file = create_file();
