@@ -1,5 +1,11 @@
+// Private transaction/recovery examples behind the public Session API. These
+// fixtures deliberately build provisional storage, synthetic records, and corrupt
+// bytes to isolate journal guarantees; applications should use Session/Task methods.
+// SIGKILL cases cover process termination on a running host, not power-loss durability.
+
 #include "mutation_journal.h"
 #include "native_atomic.h"
+#include "session_metadata.h"
 
 #include <gtest/gtest.h>
 
@@ -116,6 +122,9 @@ namespace
     return command;
   }
 
+  // The two recognizable word values make partial redo visible. This minimal
+  // draft tests journal framing/atomicity and intentionally omits the complete
+  // Session bootstrap and Task-claim semantics required by the public runtime.
   mapped::TransactionPlan make_plan(const mapped::JournalSnapshot& base,
                                     const mapped::SuperblockConfiguration& configuration,
                                     bool append = false)
@@ -150,6 +159,50 @@ namespace
       put_integer(index._payload, 8, base._tail);
       put_integer(index._payload, 16, plan._newRevision);
       plan._commands.push_back(std::move(index));
+    }
+    return plan;
+  }
+
+  // Install a real committed Process definition and well-formed claim state
+  // (incarnation 7 by default), so rejection cannot pass merely because its target was
+  // never registered. This is private journal setup, not public Task attachment.
+  mapped::TransactionPlan registered_claim_plan(const mapped::JournalSnapshot& base,
+                                                const mapped::SuperblockConfiguration& configuration,
+                                                std::uint64_t incarnation = 7)
+  {
+    auto plan = make_plan(base, configuration, true);
+    auto index = std::move(plan._commands.back());
+    plan._commands.clear();
+    plan._commands.push_back(std::move(index));
+    const auto state = section_offset(configuration, mapped::SectionKind::TaskState);
+    auto attached = write_word(state, 0);
+    attached._payload.resize(80);
+    const std::array<std::uint64_t, 10> words{incarnation, 0, incarnation - 1, 111, 42, 100, 3, 0, 0, 0};
+    for (std::size_t word = 0; word != words.size(); ++word)
+    {
+      put_integer(attached._payload, word * 8, words[word]);
+    }
+    plan._commands.push_back(std::move(attached));
+    return plan;
+  }
+
+  // Synthetic two-step replacement: a partial application can leave incarnation
+  // 9 while the first ReleaseClaim still expects 7 or 8. Public attachment emits
+  // only one release; the journal must reject this broader command stream.
+  mapped::TransactionPlan chained_claim_plan(const mapped::JournalSnapshot& base,
+                                             const mapped::SuperblockConfiguration& configuration)
+  {
+    mapped::TransactionPlan plan;
+    plan._base = base;
+    plan._newRevision = base._revision;
+    const auto state = section_offset(configuration, mapped::SectionKind::TaskState);
+    for (const auto ending : {std::uint64_t{7}, std::uint64_t{8}})
+    {
+      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, state, std::vector<std::byte>(16)};
+      put_integer(release._payload, 0, ending);
+      put_integer(release._payload, 8, 200 + ending);
+      plan._commands.push_back(std::move(release));
+      plan._commands.push_back(write_word(state, ending + 1));
     }
     return plan;
   }
@@ -215,6 +268,9 @@ namespace
     return plan;
   }
 
+  // Spawn a fresh executable rather than inheriting a live controller through
+  // fork. Its 'R' handshake identifies an exact checkpoint before SIGKILL;
+  // deadlines turn an unreachable checkpoint into a failure instead of a hang.
   class CrashWorker
   {
   public:
@@ -330,6 +386,9 @@ namespace
     int _output{-1};
   };
 
+  // Keep the controller, gate, and journal in dependency order for one test
+  // operation. set_word/image are deliberate corruption/observation seams:
+  // application code must not bypass journaled updates this way.
   struct Access
   {
     explicit Access(const fs::path& directory, mapped::JournalFaultInjector* injector = nullptr)
@@ -379,17 +438,19 @@ namespace
     mapped::MutationJournal _journal;
   };
 
+  // A one-shot error lets execute's own recovery succeed; a persistent error
+  // also obstructs that repair, exercising the OutcomeUnknown path separately.
   class FailingInjector : public mapped::JournalFaultInjector
   {
   public:
-    FailingInjector(mapped::JournalCheckpoint point, bool persistent = false)
-        : _point(point), _persistent(persistent)
+    FailingInjector(mapped::JournalCheckpoint point, bool persistent = false, std::uint64_t index = 0)
+        : _point(point), _persistent(persistent), _index(index)
     {
     }
 
     OperationResult checkpoint(mapped::JournalCheckpoint point, std::uint64_t index) override
     {
-      if (_active && point == _point && index == 0 && (_persistent || !_fired))
+      if (_active && point == _point && index == _index && (_persistent || !_fired))
       {
         _fired = true;
         return Error{ErrorCode::IoError, "Injected native journal I/O failure", "test.journal"};
@@ -403,6 +464,7 @@ namespace
   private:
     mapped::JournalCheckpoint _point;
     bool _persistent{};
+    std::uint64_t _index{};
   };
 
   class MutationJournalTest : public testing::Test
@@ -430,6 +492,9 @@ namespace
       }
     }
 
+    // Create only the provisional native resources needed by MutationJournal.
+    // The resulting fixture is not a bootstrapped public Session. Setting full
+    // reserves exactly the fixed arena so any Append lacks allocation space.
     fs::path make_session(const std::string& name = "session", bool full = false)
     {
       const auto directory = _root / name;
@@ -549,6 +614,8 @@ namespace
     mapped::SuperblockConfiguration _configuration;
   };
 
+  // Reserve no append headroom, then compare a successful fixed-state update with a rejected Append.
+  // Claim/issuance progress must not depend on allocating history; a known LogFull rejection changes no bytes.
   TEST_F(MutationJournalTest, FixedStateUsesReservedJournalEvenAtTheExactLogLimit)
   {
     const auto directory = make_session("full", true);
@@ -569,6 +636,8 @@ namespace
     EXPECT_EQ(access.image(), before);
   }
 
+  // A definition and its index update belong to one Append, whose final manifest records the entire batch.
+  // Reopening verifies that accepted records, roots, revision, and generation form one recoverable result.
   TEST_F(MutationJournalTest, AppendCommitsDefinitionsManifestAndCanonicalRootsTogether)
   {
     const auto directory = make_session();
@@ -593,6 +662,8 @@ namespace
     assert_recovered(directory, true, true);
   }
 
+  // Publication storage includes preallocated mutable receipt slots as well as immutable bytes.
+  // Initial receipt state and its redo must both survive reopening; this is storage coverage, not send semantics.
   TEST_F(MutationJournalTest, PublicationAppendMaterializesItsInitializedMutableReceipts)
   {
     const auto directory = make_session();
@@ -608,6 +679,8 @@ namespace
     assert_publication_recovered(directory, base);
   }
 
+  // Receipt count, allocated suffix, and reserved bytes must agree before preparing an Append.
+  // These deliberately malformed drafts show that input rejection leaves both storage and the base snapshot intact.
   TEST_F(MutationJournalTest, InvalidPublicationReceiptStorageAndReservedBytesLeaveTheFileUnchanged)
   {
     Access access(make_session());
@@ -657,6 +730,8 @@ namespace
     }
   }
 
+  // Kill an accepted publication writer and then kill two successive recovery processes.
+  // Eventually recovering must preserve the untouched pending receipt and finish the partially issued receipt.
   TEST_F(MutationJournalTest, PublicationReceiptInitializationSurvivesRepeatedInterruptedRecovery)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 3> cuts{{
@@ -687,6 +762,8 @@ namespace
     }
   }
 
+  // A captured plan becomes stale after any completed operation, including one that appends nothing.
+  // The generation check prevents overwriting newer fixed-state progress merely because tail/revision stayed equal.
   TEST_F(MutationJournalTest, FixedStateGenerationMakesOlderPlansStaleWithoutChangingTheirTail)
   {
     Access access(make_session());
@@ -702,6 +779,8 @@ namespace
     EXPECT_EQ(access.image(), before);
   }
 
+  // Interleave Append and FixedState so operation generation differs from Registry revision.
+  // A later interrupted Append must accept mixed old/new final roots and still link to the previous Append manifest.
   TEST_F(MutationJournalTest, AppendAfterFixedStateRecoversMixedRootsAndRetainsItsManifestPredecessor)
   {
     const auto directory = make_session();
@@ -736,6 +815,8 @@ namespace
     EXPECT_EQ(get_integer(image, section_offset(_configuration, mapped::SectionKind::TaskIndex) + 8), base._tail);
   }
 
+  // Validate targets, inline capacity, alignment, and compact-command prerequisites before publishing intent.
+  // The byte-for-byte comparison makes the difference between known rejection and interrupted work explicit.
   TEST_F(MutationJournalTest, InvalidPreflightChangesNoSessionBytes)
   {
     Access access(make_session());
@@ -763,10 +844,12 @@ namespace
     compact._commands[0]._opcode = mapped::RedoOpcode::ReleaseClaim;
     compact._commands[0]._payload.resize(16);
     put_integer(compact._commands[0]._payload, 0, 1);
-    expect_error(access._journal.execute(access._guard, compact), ErrorCode::UnsupportedPolicy);
+    expect_error(access._journal.execute(access._guard, compact), ErrorCode::InvalidArgument);
     EXPECT_EQ(access.image(), before);
   }
 
+  // Idle is the authority that no pending operation exists; its reusable body may contain stale or partial bytes.
+  // Trying to decode that body would turn a harmless interrupted preparation into false corruption.
   TEST_F(MutationJournalTest, IdleIgnoresAnInterruptedOrGarbageJournalBody)
   {
     Access access(make_session());
@@ -777,6 +860,8 @@ namespace
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), before);
   }
 
+  // Stop real exec workers on both sides of the sole acceptance point, Committed.
+  // Recovery must expose the old state before that point or finish the complete accepted state after it, never a mixture.
   TEST_F(MutationJournalTest, NativeFixedStateCrashesKeepExactlyThePrecommitOrCommittedState)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 10> cuts{{
@@ -802,6 +887,8 @@ namespace
     }
   }
 
+  // Append adds growth and record-materialization boundaries to the same acceptance rule.
+  // Ready records before Committed are discardable; accepted records and their manifest must survive every later cut.
   TEST_F(MutationJournalTest, NativeAppendCrashesRecoverWithoutLosingCommittedRecords)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 15> cuts{{
@@ -832,6 +919,8 @@ namespace
     }
   }
 
+  // Recovery is itself an interruptible operation, so restart it at each major repair boundary.
+  // Absolute redo must preserve accepted work, while repeated precommit rollback must remain harmless.
   TEST_F(MutationJournalTest, RepeatedRecoveryCrashesRedoAcceptedWorkAndRepeatRollbackSafely)
   {
     const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 7> cuts{{
@@ -864,6 +953,8 @@ namespace
     assert_recovered(directory, true, false);
   }
 
+  // A prepared FixedState operation has no legitimate file-growth effect.
+  // An unexplained suffix is therefore evidence to retain and report, not space recovery may silently truncate.
   TEST_F(MutationJournalTest, PreparedFixedStateNeverTruncatesAnUnexpectedSuffix)
   {
     const auto directory = make_session();
@@ -878,6 +969,8 @@ namespace
     EXPECT_EQ(require_value(access.file().size()), size + 64);
   }
 
+  // Prepared means canonical state was not yet changed by this operation.
+  // Unexpected roots or malformed header bytes invalidate that assumption and must prevent destructive rollback.
   TEST_F(MutationJournalTest, PreparedCanonicalChangesAndMalformedHeadersRetainEvidence)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -894,6 +987,8 @@ namespace
     }
   }
 
+  // Even unaccepted inline intent must be valid before recovery clears its evidence.
+  // Inject malformed framing, targets, compact prerequisites, and padding to demonstrate failure without writes.
   TEST_F(MutationJournalTest, PreparedFixedStateValidatesItsEntireInlineIntentBeforeDiscardingIt)
   {
     for (unsigned variant = 0; variant < 5; ++variant)
@@ -952,6 +1047,8 @@ namespace
     }
   }
 
+  // A prepared Append must describe a feasible record batch and a legal Registry revision transition.
+  // An impossible plan cannot justify truncating storage, even though it has not reached acceptance.
   TEST_F(MutationJournalTest, ImpossiblePreparedAppendPlansRetainTheirEvidence)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -973,6 +1070,8 @@ namespace
     }
   }
 
+  // An Idle journal does not make previously committed history trustworthy without validation.
+  // Corrupt a retained record revision and show that both inspection and the next mutation preserve the evidence.
   TEST_F(MutationJournalTest, HistoricalRecordRevisionCorruptionBlocksSnapshotsAndLaterMutations)
   {
     Access access(make_session());
@@ -989,6 +1088,8 @@ namespace
     EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
   }
 
+  // Accepted intent is not permission to apply a malformed command stream.
+  // Corrupt the control word or second command and verify validation prevents even the first otherwise valid write.
   TEST_F(MutationJournalTest, InvalidControlAndCommittedCommandsFailBeforeAnyRedoWrites)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -1018,6 +1119,8 @@ namespace
     }
   }
 
+  // Once accepted, a damaged record or manifest cannot be treated as an uncommitted tail.
+  // Recovery fails without applying redo or truncating the accepted allocation, leaving evidence for diagnosis.
   TEST_F(MutationJournalTest, CorruptCommittedRecordAndManifestNeverDiscardAcceptedEvidence)
   {
     for (unsigned variant = 0; variant < 2; ++variant)
@@ -1048,6 +1151,8 @@ namespace
     }
   }
 
+  // A one-shot growth failure occurs before Committed, so execute can prove rollback.
+  // It returns the original I/O error with the old snapshot and no new logical effects.
   TEST_F(MutationJournalTest, OneShotPrecommitIoFailureRollsBackWithoutAcceptance)
   {
     FailingInjector injector(mapped::JournalCheckpoint::FileGrowth);
@@ -1059,6 +1164,8 @@ namespace
     EXPECT_EQ(access.word(task_state()), 0u);
   }
 
+  // The same kind of failure after Committed has a different meaning: the operation was accepted.
+  // If in-call repair succeeds, execute returns its accepted result instead of a false rejection.
   TEST_F(MutationJournalTest, PostcommitIoFailureRecoversAcceptanceRatherThanReportingRejection)
   {
     FailingInjector injector(mapped::JournalCheckpoint::Committed);
@@ -1072,6 +1179,195 @@ namespace
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard))._manifest, accepted._manifest);
   }
 
+  // One transaction may release each Task at most once, and every incarnation
+  // write must remain in that release's ending/immediate-successor window. A
+  // transient jump outside it is unsafe even when another write later restores
+  // a valid value: a crash between those writes must still be replayable.
+  TEST_F(MutationJournalTest, RepeatedOrSkippedClaimIncarnationsRejectBeforePreparingAnyIntent)
+  {
+    for (unsigned variant = 0; variant != 5; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      const auto incarnation = variant == 4 ? std::numeric_limits<std::uint64_t>::max() : 7;
+      Access access(make_session("unsafe-release-" + std::to_string(variant)));
+      require_value(access._journal.execute(access._guard, registered_claim_plan(
+          require_value(access._journal.snapshot(access._guard)), _configuration, incarnation)));
+      const auto base = require_value(access._journal.snapshot(access._guard));
+      auto plan = chained_claim_plan(base, _configuration);
+      const auto release = plan._commands.front();
+      if (variant == 0)
+      {
+        plan._commands = {release, release};
+      }
+      else if (variant == 2 || variant == 3)
+      {
+        plan._commands = {release, write_word(task_state(), 9)};
+        if (variant == 3)
+        {
+          plan._commands.push_back(write_word(task_state(), 8));
+        }
+      }
+      else if (variant == 4)
+      {
+        // The greatest incarnation has no successor; adding one must not wrap.
+        auto last_release = release;
+        put_integer(last_release._payload, 0, incarnation);
+        plan._commands = {std::move(last_release), write_word(task_state(), 0)};
+      }
+      const auto before = access.image();
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
+      EXPECT_EQ(access.image(), before);
+      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+      EXPECT_EQ(access.word(task_state()), incarnation);
+      EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
+    }
+  }
+
+  // Deliberately install unsupported repeated/jumping streams as stored intent,
+  // bypassing the public preflight that now prevents it. Prepared recovery must
+  // not discard the evidence, and Committed recovery must reject the whole stream
+  // before writing even its first valid release, including after partial apply.
+  TEST_F(MutationJournalTest, PersistedUnsafeClaimTransitionsPreserveEvidenceBeforeAnyRecoveryWrites)
+  {
+    for (unsigned variant = 0; variant != 6; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      const auto stage = variant % 3;
+      Access access(make_session("persisted-releases-" + std::to_string(variant)));
+      require_value(access._journal.execute(access._guard, registered_claim_plan(
+          require_value(access._journal.snapshot(access._guard)), _configuration)));
+      const auto base = require_value(access._journal.snapshot(access._guard));
+      auto plan = chained_claim_plan(base, _configuration);
+      if (variant >= 3)
+      {
+        const auto release = plan._commands.front();
+        plan._commands = {release, write_word(task_state(), 9)};
+      }
+      const auto commands = require_value(mapped::encode_commands(plan._commands));
+      mapped::JournalHeader header;
+      header._control = stage == 0 ? mapped::JournalControl::Prepared : mapped::JournalControl::Committed;
+      header._generation = base._generation + 1;
+      header._baseTail = header._newTail = base._tail;
+      header._baseAccounted = header._newAccounted = base._accounted;
+      header._inlineBytes = static_cast<std::uint32_t>(commands.size());
+      header._originalFileBytes = header._newFileBytes = base._fileBytes;
+      header._baseRevision = header._newRevision = base._revision;
+      const auto encoded = require_value(mapped::encode_journal_header(header));
+      std::array<std::byte, mapped::journal_bytes> body{};
+      std::copy(encoded.begin(), encoded.end(), body.begin());
+      std::copy(commands.begin(), commands.end(), body.begin() + mapped::journal_header_bytes);
+      require_value(access.file().write_exact(mapped::journal_offset + 8, std::span{body}.subspan(8)));
+      if (stage == 2)
+      {
+        // Reproduce a crash after both successor incarnation words were stored.
+        access.set_word(task_state(), 9);
+      }
+      access.set_word(mapped::journal_offset, static_cast<std::uint64_t>(header._control));
+      const auto evidence = access.image();
+      expect_error(access._journal.recover(access._guard), ErrorCode::IoError);
+      EXPECT_EQ(access.image(), evidence);
+      EXPECT_EQ(access.word(task_state()), stage == 2 ? 9u : 7u);
+      EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(header._control));
+    }
+  }
+
+  // A replacement ends the previous Process claim and its Thread claims before installing the successor.
+  // Interrupt every absolute write to show compact cleanup is repeatable, preserves child discovery tags,
+  // and needs no new records even while issuance and retirement-floor words are temporarily mixed.
+  TEST_F(MutationJournalTest, TaskReplacementReplaysEveryCleanupAndAttachmentWord)
+  {
+    // Two detach words per old claim, then ten absolute replacement words.
+    // In particular, stop after resetting issuance but before its retired floor.
+    for (std::uint64_t cut = 0; cut != 14; ++cut)
+    {
+      SCOPED_TRACE(cut);
+      FailingInjector injector(mapped::JournalCheckpoint::RedoWord, false, cut);
+      injector._active = false;
+      Access access(make_session("claim-cut-" + std::to_string(cut)), &injector);
+      const auto base = require_value(access._journal.snapshot(access._guard));
+      mapped::TransactionPlan registration;
+      registration._base = base;
+      registration._kind = mapped::JournalKind::Append;
+      registration._newRevision = 1;
+      auto offset = base._tail;
+      for (std::uint64_t id = 1; id != 3; ++id)
+      {
+        mapped::TaskDefinition definition;
+        definition._id = static_cast<TaskId>(id);
+        definition._descriptor._name = id == 1 ? "Process" : "Thread";
+        definition._descriptor._kind = id == 1 ? TaskKind::Process : TaskKind::Thread;
+        if (id == 2)
+        {
+          definition._descriptor._process = TaskId{1};
+        }
+        definition._registration._createdBy = TaskId{1};
+        definition._registration._revision = 1;
+        mapped::JournalRecord record;
+        record._kind = 2;
+        record._immutable = require_value(mapped::encode_task_definition(definition, offset));
+        auto index = write_word(section_offset(_configuration, mapped::SectionKind::TaskIndex) + (id - 1) * 64, id);
+        index._payload.resize(32);
+        put_integer(index._payload, 8, offset);
+        put_integer(index._payload, 16, 1);
+        registration._commands.push_back(std::move(index));
+        const auto next = mapped::checked_align(offset + 64 + record._immutable.size(), 64);
+        ASSERT_TRUE(next);
+        offset = *next;
+        registration._records.push_back(std::move(record));
+      }
+      const std::array<std::uint64_t, 10> process{7, 20, 3, 111, 42, 100, 7, 0, 10, 50};
+      const std::array<std::uint64_t, 10> thread{2, 10, 1, 111, 43, 120, 3, 7, 3, 0};
+      for (const auto& [target, values] : std::array{
+               std::pair{task_state(), process}, std::pair{task_state() + 256, thread}})
+      {
+        auto command = write_word(target, 0);
+        command._payload.resize(80);
+        for (std::size_t word = 0; word != values.size(); ++word)
+        {
+          put_integer(command._payload, word * 8, values[word]);
+        }
+        registration._commands.push_back(std::move(command));
+      }
+      require_value(access._journal.execute(access._guard, registration));
+      const auto before = require_value(access._journal.snapshot(access._guard));
+      mapped::TransactionPlan replacement;
+      replacement._base = before;
+      replacement._newRevision = before._revision;
+      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, task_state(), std::vector<std::byte>(16)};
+      put_integer(release._payload, 0, 7);
+      put_integer(release._payload, 8, 200);
+      replacement._commands.push_back(std::move(release));
+      auto attached = write_word(task_state(), 0);
+      attached._payload.resize(80);
+      const std::array<std::uint64_t, 10> successor{8, 0, 4, 222, 44, 200, 7, 0, 0, 200};
+      for (std::size_t word = 0; word != successor.size(); ++word)
+      {
+        put_integer(attached._payload, word * 8, successor[word]);
+      }
+      replacement._commands.push_back(std::move(attached));
+      injector._active = true;
+      require_value(access._journal.execute(access._guard, replacement));
+      EXPECT_TRUE(injector._fired);
+      for (std::size_t word = 0; word != successor.size(); ++word)
+      {
+        EXPECT_EQ(access.word(task_state() + word * 8), successor[word]);
+      }
+      EXPECT_EQ(access.word(task_state() + 256 + 48), 6u);
+      EXPECT_EQ(access.word(task_state() + 256 + 56), 7u);
+      EXPECT_EQ(access.word(task_state() + 256 + 72), 200u);
+      const auto after = require_value(access._journal.snapshot(access._guard));
+      EXPECT_EQ(after._tail, before._tail);
+      EXPECT_EQ(after._accounted, before._accounted);
+      EXPECT_EQ(after._fileBytes, before._fileBytes);
+      EXPECT_EQ(after._generation, before._generation + 1);
+      const auto settled = access.image();
+      require_value(access._journal.recover(access._guard));
+      EXPECT_EQ(access.image(), settled);
+    }
+  }
+
+  // Keep failing accepted repair so execute cannot establish the final state.
+  // OutcomeUnknown preserves that uncertainty; later recovery resolves the committed operation instead of retrying it as new.
   TEST_F(MutationJournalTest, UnfinishedPostcommitRepairReportsOutcomeUnknownUntilRecoverySucceeds)
   {
     FailingInjector injector(mapped::JournalCheckpoint::EpilogueWord, true);

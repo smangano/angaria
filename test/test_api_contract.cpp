@@ -1,3 +1,7 @@
+// Public value/declaration contracts: these examples construct descriptors and
+// result values without executing queue publication or selection. Runtime
+// behavior is covered as each implementation milestone becomes available.
+
 #include "angaria/runtime.h"
 #include "angaria/session.h"
 
@@ -23,6 +27,9 @@ namespace
   static_assert(std::is_same_v<decltype(std::declval<CapacityLimits&>().tasks(1)), CapacityLimits&>);
   static_assert(std::is_same_v<decltype(CapacityLimits{}.tasks(1)), CapacityLimits>);
 
+  // Leave entity overrides empty to request the Session defaults. An unset
+  // optional override differs from explicitly choosing a policy; registration
+  // will resolve and persist the effective choice in its implementation step.
   TEST(ApiContract, DescriptorsExposeTheAgreedDefaults)
   {
     const PolicyDefaults defaults;
@@ -41,6 +48,9 @@ namespace
     EXPECT_FALSE(publisher._acceptance);
   }
 
+  // Configure only the capacities that an application needs to change. Temporary
+  // setter chains return owning values, while chaining on an existing object
+  // updates that object without disturbing unrelated defaults.
   TEST(ApiContract, CapacityOverridesPreserveDefaultsAndOwnTheirValues)
   {
     constexpr auto configured = CapacityLimits{}.tasks(8).queues(64).source_sets(4);
@@ -70,6 +80,9 @@ namespace
     EXPECT_EQ(disabled._tasks, defaults._limits._tasks);
   }
 
+  // This constructed report illustrates how a caller would inspect acceptance
+  // for each destination and its rejection reason. It tests the result shape only;
+  // it does not execute partial-delivery policy or publish any message.
   TEST(ApiContract, PartialPublicationPreservesPerDestinationReasons)
   {
     const PublicationId publication{{{1, 2}, TaskId{3}, 1}, 4};
@@ -87,6 +100,9 @@ namespace
     EXPECT_EQ(report._destinations[1]._reason, ErrorCode::LogFull);
   }
 
+  // Visit the receive-result alternative before interpreting it: a declared lost
+  // range, an elapsed wait, and an operation error have different meanings. These
+  // constructed values check that the API keeps those outcomes distinguishable.
   TEST(ApiContract, ReceiveEventsKeepGapsTimeoutsAndErrorsDistinct)
   {
     ReceiveResult result = DeliveryGap{QueueId{7}, 2, 9};

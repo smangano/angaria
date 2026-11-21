@@ -1,3 +1,7 @@
+// These private validation examples separate a well-formed command from permission
+// to mutate its target. The allowlist protects immutable history, reserved bytes, and
+// engine-owned roots; application code submits operations through Session/Task instead.
+
 #include "journal_validation.h"
 
 #include <gtest/gtest.h>
@@ -88,6 +92,8 @@ namespace
                                                                 .memberships_per_set(1));
   };
 
+  // Each retained destination reserves mutable receipt state for delivery progress.
+  // Only its seven declared words are generic redo targets; recovery space remains protected.
   TEST_F(JournalValidationTest, PublicationReceiptsExposeOnlyTheirSevenStateWords)
   {
     const std::array records{publication()};
@@ -107,6 +113,8 @@ namespace
     }
   }
 
+  // A valid first word or command cannot excuse an invalid later target.
+  // Whole-stream validation is what lets replay reject malformed intent before any partial repair.
   TEST_F(JournalValidationTest, AReservedLaterWordRejectsTheCompleteRangeOrStream)
   {
     const std::array records{publication()};
@@ -120,6 +128,8 @@ namespace
     EXPECT_EQ(commands, before);
   }
 
+  // Generic redo must not rewrite accepted history or bypass the journal engine
+  // that installs allocation, revision, manifest, and generation roots as one final sequence.
   TEST_F(JournalValidationTest, ImmutableRecordsAndOwnedControlWordsAreNeverRedoTargets)
   {
     const std::array records{publication()};
@@ -140,6 +150,8 @@ namespace
     }
   }
 
+  // Some atomic words combine narrow fields with reserved bits. A full-word write
+  // is allowed only when those reserved bits stay zero, including at the end of a writable row.
   TEST_F(JournalValidationTest, PackedFixedStateWordsPreserveReservedUpperBits)
   {
     const std::array<std::uint64_t, 2> targets{
@@ -159,6 +171,8 @@ namespace
     expect_error(mapped::validate_redo_targets(crossing, _layout, {}));
   }
 
+  // Ring slots are replaceable indexes into retained history, while their allocation
+  // envelope stays immutable. A range must fit the slot area without crossing either boundary.
   TEST_F(JournalValidationTest, RingSlotsRemainWritableWithoutExposingTheirEnvelope)
   {
     mapped::RecordEnvelope envelope;

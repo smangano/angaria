@@ -1,3 +1,8 @@
+// Separate executable exercising native resource creation before main(). A
+// global constructor acquires file/mapping state, then main checks the retained
+// state. Keeping this outside GTest discovery makes initialization ordering
+// itself the test rather than a side effect of discovering ordinary unit tests.
+
 #include "native_file.h"
 
 #include <cstddef>

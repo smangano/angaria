@@ -1,3 +1,6 @@
+// Scalar Field examples for the prototype field API. These demonstrate value
+// access and stream failure handling, rather than format-2 schema registration.
+
 #include "angaria/field.h"
 
 #include <gtest/gtest.h>
@@ -12,6 +15,8 @@ namespace angaria
     TestField3
   };
 
+  // Bind a scalar value to a compile-time Field identity, then use get/set and
+  // text conversion without losing the Field type carried by the wrapper.
   TEST(Field, Int32)
   {
     using TestField = Int32Field<EFieldType::TestField1>;
@@ -23,6 +28,8 @@ namespace angaria
     EXPECT_EQ(field, TestField(-42));
   }
 
+  // Use the Field stream methods as a pair to preserve both identity and value.
+  // This is a prototype serialization example, not a portable mapped-record codec.
   TEST(Field, Int32StreamRoundTrip)
   {
     using TestField = Int32Field<EFieldType::TestField1>;
@@ -37,6 +44,9 @@ namespace angaria
     EXPECT_EQ(decoded, original);
   }
 
+  // Decode a deliberately incomplete stream into an existing value. Failure must
+  // leave its original Field identity and value intact instead of installing
+  // partially read input.
   TEST(Field, Int32TruncatedRead)
   {
     const Int32Field<EFieldType::TestField2> original(-42);

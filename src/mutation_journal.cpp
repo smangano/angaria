@@ -2,6 +2,7 @@
 
 #include "journal_validation.h"
 #include "native_atomic.h"
+#include "task_claim_redo.h"
 
 #include <algorithm>
 #include <array>
@@ -440,6 +441,43 @@ namespace angaria::detail::mapped
       std::vector<RedoCommand> _commands;
     };
 
+    bool has_compact(std::span<const RedoCommand> commands)
+    {
+      return std::any_of(commands.begin(), commands.end(), [](const auto& command)
+      {
+        return command._opcode != RedoOpcode::WriteRange;
+      });
+    }
+
+    void require_fixed_compacts(std::span<const RedoCommand> commands, JournalKind kind, ErrorCode code)
+    {
+      if (kind != JournalKind::FixedState && std::any_of(commands.begin(), commands.end(), [](const auto& command)
+          {
+            return command._opcode == RedoOpcode::ReleaseClaim;
+          }))
+      {
+        fail(code == ErrorCode::InvalidArgument ? ErrorCode::UnsupportedPolicy : code,
+             "ReleaseClaim requires FixedState so Task discovery remains stable");
+      }
+    }
+
+    void validate_domain_targets(NativeFile& file, const FixedLayout& layout,
+                                 std::span<const JournalRecordRange> records,
+                                 std::span<const RedoCommand> commands, JournalKind kind,
+                                 ErrorCode code = ErrorCode::IoError)
+    {
+      require_fixed_compacts(commands, kind, code);
+      if (has_compact(commands))
+      {
+        const auto expanded = take(expand_task_claim_commands(file, layout, records, commands, code));
+        take(validate_redo_targets(expanded, layout, records, code));
+      }
+      else
+      {
+        take(validate_redo_targets(commands, layout, records, code));
+      }
+    }
+
     AcceptedBatch validate_accepted(MutationJournalState& state, NativeFile& file,
                                     const JournalHeader& header, const PrefixRecords& prefix)
     {
@@ -481,6 +519,11 @@ namespace angaria::detail::mapped
         }
         check_manifest_records(manifest, std::span{batch._records}.first(batch._records.size() - 1));
         batch._commands = manifest._commands;
+      }
+      require_fixed_compacts(batch._commands, header._kind, ErrorCode::IoError);
+      if (has_compact(batch._commands))
+      {
+        batch._commands = take(expand_task_claim_commands(file, fixed_layout(state), allRecords, batch._commands));
       }
       take(validate_redo_targets(batch._commands, fixed_layout(state), allRecords));
       return batch;
@@ -542,7 +585,7 @@ namespace angaria::detail::mapped
         {
           const auto commands = take(decode_commands(prefix_bytes(state).subspan(
               journal_offset + journal_header_bytes, header._inlineBytes)));
-          take(validate_redo_targets(commands, fixed_layout(state), prefix._ranges));
+          validate_domain_targets(file, fixed_layout(state), prefix._ranges, commands, header._kind);
         }
         checkpoint(state, JournalCheckpoint::Rollback);
         publish(state, JournalControl::Idle, JournalCheckpoint::Idle);
@@ -654,6 +697,7 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidArgument, "Unknown journal operation kind");
       }
+      require_fixed_compacts(plan._commands, plan._kind, ErrorCode::InvalidArgument);
       std::uint64_t commandBytes{};
       for (const auto& command : plan._commands)
       {
@@ -752,7 +796,8 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidArgument, "Unknown journal operation kind");
       }
-      take(validate_redo_targets(plan._commands, fixed_layout(state), allRecords, ErrorCode::InvalidArgument));
+      validate_domain_targets(file, fixed_layout(state), allRecords, plan._commands,
+                              plan._kind, ErrorCode::InvalidArgument);
       operation._headerBytes = take(encode_journal_header(header));
       operation._result._generation = header._generation;
       operation._result._tail = header._newTail;
