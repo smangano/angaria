@@ -7,6 +7,7 @@ if(NOT ANGARIA_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
 endif()
 project(Angaria VERSION "${ANGARIA_VERSION}" LANGUAGES CXX)
 configure_file(VERSION VERSION COPYONLY)
+configure_file(src/build_version.h.in generated/build_version.h @ONLY)
 message(STATUS "Angaria version ${PROJECT_VERSION}")
 
 find_package(Boost 1.70 CONFIG REQUIRED)
@@ -24,8 +25,14 @@ add_library(angaria STATIC
   src/journal_format.cpp
   src/journal_validation.cpp
   src/mutation_journal.cpp
+  src/session_metadata.cpp
+  src/runtime_state.cpp
+  src/runtime_session.cpp
+  src/task_runtime.cpp
+  src/task_claim_redo.cpp
 )
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(angaria PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_features(angaria PUBLIC cxx_std_20)
 target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
 
@@ -61,6 +68,10 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_journal_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_journal_worker PRIVATE angaria)
 
+  add_executable(angaria_native_session_worker test/native_session_worker.cpp)
+  target_include_directories(angaria_native_session_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_session_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
@@ -77,6 +88,8 @@ if(BUILD_TESTING)
     test/test_journal_validation.cpp
     test/test_mutation_journal.cpp
     test/test_journal_bulk_redo.cpp
+    test/test_session_metadata.cpp
+    test/test_runtime_session.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
@@ -86,10 +99,12 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_ATOMIC_WORKER="$<TARGET_FILE:angaria_native_atomic_worker>"
     ANGARIA_NATIVE_CONTROLLER_WORKER="$<TARGET_FILE:angaria_native_controller_worker>"
     ANGARIA_NATIVE_JOURNAL_WORKER="$<TARGET_FILE:angaria_native_journal_worker>"
+    ANGARIA_NATIVE_SESSION_WORKER="$<TARGET_FILE:angaria_native_session_worker>"
+    ANGARIA_TEST_VERSION="${PROJECT_VERSION}"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
-  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests PROPERTIES TIMEOUT 10)

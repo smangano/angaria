@@ -1,5 +1,6 @@
 #include "mutation_journal.h"
 #include "native_atomic.h"
+#include "session_metadata.h"
 
 #include <gtest/gtest.h>
 
@@ -382,14 +383,14 @@ namespace
   class FailingInjector : public mapped::JournalFaultInjector
   {
   public:
-    FailingInjector(mapped::JournalCheckpoint point, bool persistent = false)
-        : _point(point), _persistent(persistent)
+    FailingInjector(mapped::JournalCheckpoint point, bool persistent = false, std::uint64_t index = 0)
+        : _point(point), _persistent(persistent), _index(index)
     {
     }
 
     OperationResult checkpoint(mapped::JournalCheckpoint point, std::uint64_t index) override
     {
-      if (_active && point == _point && index == 0 && (_persistent || !_fired))
+      if (_active && point == _point && index == _index && (_persistent || !_fired))
       {
         _fired = true;
         return Error{ErrorCode::IoError, "Injected native journal I/O failure", "test.journal"};
@@ -403,6 +404,7 @@ namespace
   private:
     mapped::JournalCheckpoint _point;
     bool _persistent{};
+    std::uint64_t _index{};
   };
 
   class MutationJournalTest : public testing::Test
@@ -763,7 +765,7 @@ namespace
     compact._commands[0]._opcode = mapped::RedoOpcode::ReleaseClaim;
     compact._commands[0]._payload.resize(16);
     put_integer(compact._commands[0]._payload, 0, 1);
-    expect_error(access._journal.execute(access._guard, compact), ErrorCode::UnsupportedPolicy);
+    expect_error(access._journal.execute(access._guard, compact), ErrorCode::InvalidArgument);
     EXPECT_EQ(access.image(), before);
   }
 
@@ -1070,6 +1072,98 @@ namespace
     EXPECT_EQ(access.word(task_state()), 11u);
     EXPECT_EQ(access.word(task_state() + 8), 22u);
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard))._manifest, accepted._manifest);
+  }
+
+  TEST_F(MutationJournalTest, TaskReplacementReplaysEveryCleanupAndAttachmentWord)
+  {
+    // Two detach words per old claim, then ten absolute replacement words.
+    // In particular, stop after resetting issuance but before its retired floor.
+    for (std::uint64_t cut = 0; cut != 14; ++cut)
+    {
+      SCOPED_TRACE(cut);
+      FailingInjector injector(mapped::JournalCheckpoint::RedoWord, false, cut);
+      injector._active = false;
+      Access access(make_session("claim-cut-" + std::to_string(cut)), &injector);
+      const auto base = require_value(access._journal.snapshot(access._guard));
+      mapped::TransactionPlan registration;
+      registration._base = base;
+      registration._kind = mapped::JournalKind::Append;
+      registration._newRevision = 1;
+      auto offset = base._tail;
+      for (std::uint64_t id = 1; id != 3; ++id)
+      {
+        mapped::TaskDefinition definition;
+        definition._id = static_cast<TaskId>(id);
+        definition._descriptor._name = id == 1 ? "Process" : "Thread";
+        definition._descriptor._kind = id == 1 ? TaskKind::Process : TaskKind::Thread;
+        if (id == 2)
+        {
+          definition._descriptor._process = TaskId{1};
+        }
+        definition._registration._createdBy = TaskId{1};
+        definition._registration._revision = 1;
+        mapped::JournalRecord record;
+        record._kind = 2;
+        record._immutable = require_value(mapped::encode_task_definition(definition, offset));
+        auto index = write_word(section_offset(_configuration, mapped::SectionKind::TaskIndex) + (id - 1) * 64, id);
+        index._payload.resize(32);
+        put_integer(index._payload, 8, offset);
+        put_integer(index._payload, 16, 1);
+        registration._commands.push_back(std::move(index));
+        const auto next = mapped::checked_align(offset + 64 + record._immutable.size(), 64);
+        ASSERT_TRUE(next);
+        offset = *next;
+        registration._records.push_back(std::move(record));
+      }
+      const std::array<std::uint64_t, 10> process{7, 20, 3, 111, 42, 100, 7, 0, 10, 50};
+      const std::array<std::uint64_t, 10> thread{2, 10, 1, 111, 43, 120, 3, 7, 3, 0};
+      for (const auto& [target, values] : std::array{
+               std::pair{task_state(), process}, std::pair{task_state() + 256, thread}})
+      {
+        auto command = write_word(target, 0);
+        command._payload.resize(80);
+        for (std::size_t word = 0; word != values.size(); ++word)
+        {
+          put_integer(command._payload, word * 8, values[word]);
+        }
+        registration._commands.push_back(std::move(command));
+      }
+      require_value(access._journal.execute(access._guard, registration));
+      const auto before = require_value(access._journal.snapshot(access._guard));
+      mapped::TransactionPlan replacement;
+      replacement._base = before;
+      replacement._newRevision = before._revision;
+      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, task_state(), std::vector<std::byte>(16)};
+      put_integer(release._payload, 0, 7);
+      put_integer(release._payload, 8, 200);
+      replacement._commands.push_back(std::move(release));
+      auto attached = write_word(task_state(), 0);
+      attached._payload.resize(80);
+      const std::array<std::uint64_t, 10> successor{8, 0, 4, 222, 44, 200, 7, 0, 0, 200};
+      for (std::size_t word = 0; word != successor.size(); ++word)
+      {
+        put_integer(attached._payload, word * 8, successor[word]);
+      }
+      replacement._commands.push_back(std::move(attached));
+      injector._active = true;
+      require_value(access._journal.execute(access._guard, replacement));
+      EXPECT_TRUE(injector._fired);
+      for (std::size_t word = 0; word != successor.size(); ++word)
+      {
+        EXPECT_EQ(access.word(task_state() + word * 8), successor[word]);
+      }
+      EXPECT_EQ(access.word(task_state() + 256 + 48), 6u);
+      EXPECT_EQ(access.word(task_state() + 256 + 56), 7u);
+      EXPECT_EQ(access.word(task_state() + 256 + 72), 200u);
+      const auto after = require_value(access._journal.snapshot(access._guard));
+      EXPECT_EQ(after._tail, before._tail);
+      EXPECT_EQ(after._accounted, before._accounted);
+      EXPECT_EQ(after._fileBytes, before._fileBytes);
+      EXPECT_EQ(after._generation, before._generation + 1);
+      const auto settled = access.image();
+      require_value(access._journal.recover(access._guard));
+      EXPECT_EQ(access.image(), settled);
+    }
   }
 
   TEST_F(MutationJournalTest, UnfinishedPostcommitRepairReportsOutcomeUnknownUntilRecoverySucceeds)

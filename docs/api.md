@@ -73,6 +73,10 @@ Draft ownership adoption and source assignment are explicit Registry operations.
 
 Session and Task handles are movable. Writer and Queue Set handles are movable and retain their backing session and Task claim. The claim remains held while its Task, actor-bound Registry views, or endpoints retain it. Source handle closure releases an unacknowledged delivery, and process termination follows the configured recovery policy.
 
+Step 2.5 implements programmatic Session creation/attachment, Session identity/options/metadata, Task attachment/claim/Registry access, publication-ID issuance, and Task Registry lookup/description/metadata/status. The creator consumes Task ID 1 and its initial Registry revision is 1. General registration and endpoints follow their implementation steps; TOML factories follow step 2.10. See the [native lifecycle contract](native-storage.md#public-session-and-task-lifetimes).
+
+An operation returning `Result<T>` reports an empty/moved-from handle as InvalidState and inherited-process or wrong-thread Task use as WrongOwner. The plain-value `Session::identity()`, `Session::registry()`, `Task::claim()`, and `Task::registry()` methods throw `std::logic_error` for invalid ownership or an empty/moved-from handle. Applications must exec before using inherited native library state after fork, as specified by the native contract.
+
 A Task may open writers for its queues, Source Queue Sets it owns, and Publishing Queue Sets it owns. A second open Source handle for the same set and live claim returns `OwnershipBusy`. The single in-flight slot applies to the set. The issuance generation survives closing and reopening its Source handle within the claim.
 
 The application serializes sends touching a common queue and operations on a common Source Queue Set. A thread Task attaches on its current thread while its parent process claim is held by that process. The thread Task and its endpoints retain the parent claim until they close. A process Task supports the application's coordinated sending threads.
