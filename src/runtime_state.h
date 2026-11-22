@@ -69,7 +69,8 @@ namespace angaria::detail
   class RuntimeAccess
   {
   public:
-    explicit RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady = true);
+    explicit RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady = true,
+                           mapped::JournalFaultInjector* injector = nullptr);
     std::vector<std::uint64_t> read_words(std::uint64_t offset, std::size_t count) const;
     std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length) const;
     const mapped::RecordEnvelope& record_envelope(std::uint64_t reference, std::uint16_t kind) const;
@@ -106,6 +107,8 @@ namespace angaria::detail
   mapped::SessionDefinition runtime_session_definition(RuntimeAccess& access);
   void runtime_validate_options(const SessionOptions& options, ErrorCode invalidCode);
   void runtime_check_task(const std::shared_ptr<TaskState>& task);
+  void runtime_check_task_owner(const std::shared_ptr<TaskState>& task);
+  void runtime_check_task(RuntimeAccess& access, const std::shared_ptr<TaskState>& task);
 
   // Private qualification seam. The public attachment path has no observer;
   // tests can pause after native acquisition while the mutation gate is held.
@@ -115,6 +118,21 @@ namespace angaria::detail
     virtual ~TaskAttachmentObserver() = default;
     virtual OperationResult after_native_claim() = 0;
   };
+
+  // Private qualification seam for stable coordination setup before journal
+  // preparation. Public registration never supplies an observer or injector.
+  class TaskRegistrationObserver
+  {
+  public:
+    virtual ~TaskRegistrationObserver() = default;
+    virtual OperationResult claim_file_ready(TaskId task) = 0;
+  };
+
+  Result<TaskId> runtime_register_task(std::shared_ptr<SessionState> session,
+                                       std::shared_ptr<TaskState> actor,
+                                       const TaskDescriptor& descriptor,
+                                       mapped::JournalFaultInjector* injector = nullptr,
+                                       TaskRegistrationObserver* observer = nullptr);
 
   Result<std::shared_ptr<TaskState>> attach_runtime_task(std::shared_ptr<SessionState> session,
                                                         TaskId task, bool bootstrap = false,

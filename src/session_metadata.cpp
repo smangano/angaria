@@ -306,28 +306,48 @@ namespace angaria::detail::mapped
       check_text(metadata._creatorUser, true, true, code, "session.creator_user");
     }
 
-    void check_task(const TaskDefinition& definition, ErrorCode code)
+    void check_task_descriptor(const TaskDescriptor& descriptor, ErrorCode code)
     {
-      require(definition._id != TaskId::Invalid, code, "task.id", "Task identity is zero");
-      require(definition._registration._createdBy != TaskId::Invalid && definition._registration._revision != 0,
-              code, "task.registration", "Task creator and registration revision must be nonzero");
-      check_text(definition._descriptor._name, true, true, code, "task.name");
-      check_text(definition._descriptor._doc, false, false, code, "task.doc");
-      switch (definition._descriptor._kind)
+      check_text(descriptor._name, true, true, code, "task.name");
+      check_text(descriptor._doc, false, false, code, "task.doc");
+      switch (descriptor._kind)
       {
       case TaskKind::Process:
-        require(!definition._descriptor._process, code, "task.process", "A process Task cannot have a parent");
+        require(!descriptor._process, code, "task.process", "A process Task cannot have a parent");
         break;
       case TaskKind::Thread:
-        require(definition._descriptor._process && *definition._descriptor._process != TaskId::Invalid &&
-                    *definition._descriptor._process != definition._id,
-                code, "task.process", "A thread Task needs a distinct nonzero parent Process Task");
+        require(descriptor._process && *descriptor._process != TaskId::Invalid,
+                code, "task.process", "A thread Task needs a nonzero parent Process Task");
         break;
       default:
         fail(code, "task.kind", "Unknown Task kind");
       }
     }
+
+    void check_task(const TaskDefinition& definition, ErrorCode code)
+    {
+      require(definition._id != TaskId::Invalid, code, "task.id", "Task identity is zero");
+      require(definition._registration._createdBy != TaskId::Invalid && definition._registration._revision != 0,
+              code, "task.registration", "Task creator and registration revision must be nonzero");
+      check_task_descriptor(definition._descriptor, code);
+      require(definition._descriptor._kind != TaskKind::Thread ||
+                  definition._descriptor._process != definition._id,
+              code, "task.process", "A thread Task needs a distinct parent Process Task");
+    }
   } // namespace
+
+  OperationResult validate_task_descriptor(const TaskDescriptor& descriptor)
+  {
+    try
+    {
+      check_task_descriptor(descriptor, ErrorCode::InvalidArgument);
+      return std::monostate{};
+    }
+    catch (const MetadataFailure& failure)
+    {
+      return failure._error;
+    }
+  }
 
   Result<std::vector<std::byte>> encode_session_definition(const SessionDefinition& definition,
                                                            std::uint64_t recordOffset)

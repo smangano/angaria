@@ -39,7 +39,7 @@ Milestone 2 integrates configuration loading and semantic validation with the Re
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation, attachment, creator Task inspection, claims, and publication identity issuance are implemented. General Registry registration follows in the remaining [milestone 2 steps](docs/milestones/milestone-2.md).
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation/attachment, Task registration and inspection, claims, and publication identity issuance are implemented. Registration of the other Registry entity kinds follows in the remaining [milestone 2 steps](docs/milestones/milestone-2.md).
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Publication, delivery, and notification behavior follow in their implementation milestones.
 
@@ -51,7 +51,9 @@ Step 2.3 adds the shared [session controller, mutation guards, Task leases, and 
 
 Step 2.4 adds the private [mutation journal](docs/native-storage.md#journal-transactions-and-recovery): inline fixed-state transactions, append batches with manifests, stale-plan rejection, and repeatable rollback/redo for two-plane storage. Tests terminate independent processes at real write/recovery boundaries and inject I/O failures.
 
-Step 2.5 integrates [public Session creation and attachment](docs/native-storage.md#public-session-and-task-lifetimes), persisted options/metadata, the creator Process Task, Task inspection, and fixed-state attachment/incarnation/publication-ID operations. Creation publishes a completely initialized directory exclusively; attachment validates and recovers existing state. Claim replacement, including cleanup of a dead Process Task's thread Tasks, works with no append space. TOML factories, general registration, and messaging operations follow their roadmap steps.
+Step 2.5 integrates [public Session creation and attachment](docs/native-storage.md#public-session-and-task-lifetimes), persisted options/metadata, the creator Process Task, Task inspection, and fixed-state attachment/incarnation/publication-ID operations. Creation publishes a completely initialized directory exclusively; attachment validates and recovers existing state. Claim replacement, including cleanup of a dead Process Task's thread Tasks, works with no append space.
+
+Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registration) through a live Task's Registry. Exact descriptors return the existing identity without writing; conflicting descriptors, exhausted capacities, and insufficient log space preserve existing registrations. Process and Thread Tasks can be registered before attachment, and each successful new registration commits one immutable definition and Registry revision. Tests cover concurrent registrars, independent discovery, and interrupted registration/recovery. TOML factories, other Registry entities, and messaging operations follow their roadmap steps.
 
 ## Run the restart walkthrough
 

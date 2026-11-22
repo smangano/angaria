@@ -112,6 +112,8 @@ namespace angaria
   class Registry
   {
   public:
+    // Register an immutable logical Task through a live actor-bound Registry.
+    // An exact descriptor returns its existing ID; registration does not attach it.
     Result<TaskId> register_task(const TaskDescriptor& descriptor);
     Result<SourceQueueSetId> register_source_set(const SourceQueueSetDescriptor& descriptor);
     Result<QueueId> register_queue(const QueueDescriptor& descriptor);

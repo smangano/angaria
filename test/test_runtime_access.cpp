@@ -1,6 +1,7 @@
-// Private lookup qualification beneath Session/Registry inspection. Public Task
-// registration follows step 2.6; these fixtures append definitions directly so
-// record lookup and parent validation can be exercised independently of that API.
+// Private lookup qualification beneath Session/Registry inspection. These
+// fixtures append definitions directly to control batch geometry and exercise
+// record lookup independently of public registration; usage examples live in
+// test_task_registration.cpp.
 
 #include "runtime_state.h"
 

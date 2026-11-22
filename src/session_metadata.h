@@ -34,6 +34,9 @@ namespace angaria::detail::mapped
                                                        const SuperblockConfiguration& configuration);
   Result<std::vector<std::byte>> encode_task_definition(const TaskDefinition& definition,
                                                         std::uint64_t recordOffset);
+  // Shared programmatic/configuration preflight without serializing or copying
+  // descriptor strings. Parent existence and actor ownership belong to runtime.
+  OperationResult validate_task_descriptor(const TaskDescriptor& descriptor);
   Result<TaskDefinition> decode_task_definition(std::span<const std::byte> immutableBody,
                                                  std::uint64_t recordOffset);
 } // namespace angaria::detail::mapped

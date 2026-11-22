@@ -1,25 +1,27 @@
 # Reading the tests
 
-Start with [test_runtime_session.cpp](test_runtime_session.cpp) for the implemented public format-2 API. Its test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
+Start with [test_runtime_session.cpp](test_runtime_session.cpp) for Session creation/lifetimes and [test_task_registration.cpp](test_task_registration.cpp) for the implemented public Task Registry API. Their test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
 
 A useful reading order is:
 
 1. `CreationRecordsCreatorEffectiveOptionsAndFrameworkMetadata`: create a Session, use its returned creator Task, and inspect options and Registry metadata.
-2. `ActorRegistryRetainsItsTaskWhileReadOnlyViewsDoNot`: see which views retain a Task claim and when another owner can attach.
-3. `PublicationIdsPersistWithinAClaimAndResetOnlyWithANewIncarnation`: issue IDs and observe the identity boundary at Task replacement. This does not send a publication.
-4. `ThreadTasksRequireAndRetainTheirParentAndRejectOtherThreads`: understand parent retention and thread affinity. The fixture seeds registration through private machinery until public Task registration is implemented in step 2.6.
-5. The coordinated replacement/status, termination, full-log, and malformed-state scenarios: understand recovery and rejection guarantees after learning normal use.
+2. `RegistersOfflineParticipantsBeforeTheyAttach` and `ExactRegistrationIsAnUnchangedLookupIncludingTheCreator`: register logical Tasks through the creator's Registry, inspect attribution, and retry without creating another identity.
+3. `ActorRegistryRetainsItsTaskWhileReadOnlyViewsDoNot`: see which views retain a Task claim and when another owner can attach.
+4. `PublicationIdsPersistWithinAClaimAndResetOnlyWithANewIncarnation`: issue IDs and observe the identity boundary at Task replacement. This does not send a publication.
+5. `ThreadTasksRequireAndRetainTheirParentAndRejectOtherThreads`: register children through the creator's public Registry, then understand parent retention and attaching-thread affinity.
+6. The concurrent registration, coordinated replacement/status, termination, full-log, and malformed-state scenarios: understand recovery and rejection guarantees after learning normal use.
 
-Build instructions are in the [project README](../README.md). Run just the public Session examples with:
+Build instructions are in the [project README](../README.md). Run just the public Session and Task registration examples with:
 
 ```sh
-ctest --test-dir build -R '^RuntimeSessionTest\.' --output-on-failure
+ctest --test-dir build -R '^(RuntimeSessionTest|TaskRegistrationTest)\.' --output-on-failure
 ```
 
 The rest of the suite explains the supporting contracts:
 
 | Tests | What readers should learn |
 | --- | --- |
+| [Task registration](test_task_registration.cpp), [process/recovery scenarios](test_task_registration_recovery.cpp) | Logical registration versus native attachment, exact retry, attribution/history, concurrent registrars, stable claim resources, and interrupted outcomes. Fault hooks and sparse-record fixtures are test-only setup. |
 | [API values](test_api_contract.cpp), [identities](test_identities.cpp), [Fields](test_field.cpp) | Descriptor defaults and capacity setters, distinct IDs, result alternatives, and basic Field serialization. Value construction alone does not exercise delivery or endpoint operations. |
 | [TOML example](test_configuration.cpp) | How the trading configuration is represented and parsed with cpptoml. Semantic loading into a Session follows step 2.10. |
 | [Layout](test_mapped_format.cpp), [superblock](test_mapped_superblock.cpp), [Session/Task bodies](test_session_metadata.cpp), [record lookup](test_runtime_access.cpp) | Capacity accounting, explicit portable encoding, and reuse of validated record boundaries within an operation. Hand-authored byte fixtures check format compatibility independently of production encoders. |
