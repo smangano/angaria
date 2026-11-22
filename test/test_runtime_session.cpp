@@ -6,7 +6,6 @@
 #include "angaria/runtime.h"
 #include "mutation_journal.h"
 #include "native_atomic.h"
-#include "session_metadata.h"
 
 #include <gtest/gtest.h>
 
@@ -448,43 +447,21 @@ namespace
       return {std::move(session), live};
     }
 
-    static void add_thread_tasks(const fs::path& directory, unsigned count = 1)
+    static void add_thread_tasks(Task& creator, unsigned count = 1)
     {
-      // General registration arrives in step 2.6. Seed committed Thread Task
-      // definitions through private journal fixtures so these tests can exercise
-      // public attachment now; this is not a supported registration recipe.
-      RuntimeFile access(directory);
+      // Register logical children through the live creator's public Registry.
+      // Registration records the parent relationship without attaching children;
+      // each child later acquires its own claim on the thread that will use it.
+      auto registry = creator.registry();
+      const auto parent = creator.claim()._task;
       for (unsigned child = 0; child != count; ++child)
       {
-        auto base = require_value(access._journal.snapshot(access._guard));
-        mapped::TaskDefinition definition;
-        definition._id = static_cast<TaskId>(child + 2);
-        definition._descriptor._name = "Worker" + std::to_string(child);
-        definition._descriptor._kind = TaskKind::Thread;
-        definition._descriptor._process = TaskId{1};
-        definition._descriptor._doc = "Thread fixture for the attachment contract";
-        definition._registration._createdBy = TaskId{1};
-        definition._registration._createdAt = UtcTimestamp{std::chrono::nanoseconds{123}};
-        definition._registration._revision = base._revision + 1;
-        mapped::JournalRecord record;
-        record._kind = 2;
-        record._immutable = require_value(mapped::encode_task_definition(definition, base._tail));
-        mapped::TransactionPlan plan;
-        plan._base = base;
-        plan._kind = mapped::JournalKind::Append;
-        plan._actor = TaskId{1};
-        plan._actorIncarnation = access.word(access.section(mapped::SectionKind::TaskState));
-        plan._newRevision = base._revision + 1;
-        plan._records.push_back(std::move(record));
-        mapped::RedoCommand index;
-        index._target = access.section(mapped::SectionKind::TaskIndex) + (child + 1) * mapped::index_entry_bytes;
-        index._payload.resize(32);
-        put_word(index._payload, 0, child + 2);
-        put_word(index._payload, 8, base._tail);
-        put_word(index._payload, 16, plan._newRevision);
-        plan._commands.push_back(std::move(index));
-        require_value(access._journal.execute(access._guard, plan));
-        require_value(access._controller->create_task_claim_file(access._guard, definition._id));
+        TaskDescriptor descriptor;
+        descriptor._name = "Worker" + std::to_string(child);
+        descriptor._kind = TaskKind::Thread;
+        descriptor._process = parent;
+        descriptor._doc = "Thread fixture for the attachment contract";
+        EXPECT_EQ(require_value(registry.register_task(descriptor)), static_cast<TaskId>(child + 2));
       }
     }
 
@@ -958,7 +935,7 @@ namespace
   TEST_F(RuntimeSessionTest, ThreadTasksRequireAndRetainTheirParentAndRejectOtherThreads)
   {
     auto created = create();
-    add_thread_tasks(_directory);
+    add_thread_tasks(created._creator);
     auto session = std::move(created._session);
     std::optional<Task> child;
     std::optional<Registry> retained_child;
@@ -1044,13 +1021,13 @@ namespace
     std::uint64_t required{};
     {
       auto created = require_value(Session::create(configured, creator()));
-      add_thread_tasks(_directory, child_count);
+      add_thread_tasks(created._creator, child_count);
       required = fs::file_size(_directory / "session.ang");
     }
     fs::remove_all(_directory);
     configured._maxLogBytes = required;
     auto created = require_value(Session::create(configured, creator()));
-    add_thread_tasks(_directory, child_count);
+    add_thread_tasks(created._creator, child_count);
     auto session = std::move(created._session);
     {
       auto closing = std::move(created._creator);

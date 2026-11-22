@@ -75,6 +75,8 @@ Each `[[tasks]]` entry has a required `name`. Its `kind` defaults to `process` a
 
 A thread Task also specifies `process`, naming its parent process Task. A process Task omits that key. Runtime process and thread identifiers are recorded when a Task attaches. Configuration names logical participants.
 
+Programmatic Task registration is implemented in step 2.6. Its descriptor uses the parent's typed Task ID, and the parent must already be a registered Process Task; it need not be attached yet. Exact re-registration compares name, kind, parent, and documentation, preserving the original registration metadata. A different descriptor under that name returns `Conflict`. TOML loading and file-based Session factories follow in step 2.10.
+
 A Task may produce and consume. Applications coordinate sending threads that share a producer endpoint, including overlapping publishing destinations.
 
 ## Source Queue Sets

@@ -257,12 +257,27 @@ namespace angaria::detail
     }
   }
 
-  void runtime_check_task(const std::shared_ptr<TaskState>& task)
+  void runtime_check_task_owner(const std::shared_ptr<TaskState>& task)
   {
     check_native(task);
-    RuntimeAccess access(task->_session);
+  }
+
+  void runtime_check_task(RuntimeAccess& access, const std::shared_ptr<TaskState>& task)
+  {
+    check_native(task);
+    if (task->_session->_controller.get() != access._session->_controller.get())
+    {
+      runtime_fail(ErrorCode::WrongOwner, "task.claim", "Acting Task belongs to another Session controller");
+    }
     const auto loaded = runtime_task(access, task->_claim._task);
     check_with_access(access, task, loaded);
+  }
+
+  void runtime_check_task(const std::shared_ptr<TaskState>& task)
+  {
+    runtime_check_task_owner(task);
+    RuntimeAccess access(task->_session);
+    runtime_check_task(access, task);
   }
 
   Result<std::shared_ptr<TaskState>> attach_runtime_task(std::shared_ptr<SessionState> session,
