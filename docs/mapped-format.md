@@ -33,6 +33,8 @@ Committed entity IDs and schema versions are not reused during a session. Field 
 
 A schema record contains its exact type/version, ordered **32-bit** Field IDs, name, documentation, and registration metadata. Field order and repetitions are preserved. Its array length is `u64`, bounded by the containing record and available log bytes; this introduces no undocumented 16-bit field-count limit. Publications retain a reference to this immutable schema as well as its type/version. Schema and Field records required by any retained publication remain available even after all its deliveries terminate.
 
+`0xEE000000` is a valid Field identity: the all-zero raw ID is invalid, but the effective 24-bit portion may be zero. Field IDs and schema type/version values are application identities, not allocation-slot numbers. Message types retain a one-to-one name pairing across their versions. Numeric schema versions need not be registered in ascending order.
+
 ## Time
 
 Stored timestamps are signed 64-bit UTC nanoseconds since the Unix epoch, matching `UtcTimestamp`. Epoch zero is a valid time. Optional values have explicit presence flags. Out-of-range conversions fail before committing; native `time_t` and the prototype's seconds/nanoseconds structs are never copied into records.
@@ -145,6 +147,10 @@ Entity definitions start with a common 64-byte body: `key:u64`, `created_by:u16`
 | Publishing set | `owner:u16`, `acceptance:u16`, four reserved bytes, `destinations:ArraySlice` of `u16` Queue IDs, `topology_revision:u64`. |
 | Field | `base_type:u16`, `flags:u16`, `declared_size:u32`, `attributes:ByteSlice`. Attributes are empty for the initial scalar definitions; later required encodings need feature/version negotiation. |
 | Message schema | `message_type:u16`, two reserved bytes, `schema_version:u32`, `fields:ArraySlice` of full `u32` Field IDs. |
+
+Step 2.7's Field and schema bodies each have 88 fixed bytes. Field flags and attributes are zero/empty; its name and documentation follow the fixed body in order. A schema places its encoded Field array immediately after the fixed body, followed by name and documentation. Array order and repetitions are preserved. An empty array has zero offset and count; optional empty documentation likewise uses a zero slice. Short zero padding completes the record allocation. Portable codecs recognize all stable base codes, while the native implementation currently enforces fixed scalar byte widths (1 for char/byte, 2 for 16-bit integers, 4 for 32-bit integers/floats, 8 for 64-bit integers/floats). Later representations require their specified encodings and feature negotiation.
+
+Immutable Field definitions have zero envelope predecessor. A new schema version links to the latest retained definition for its message type in registration order, independently of numeric version or allocation-slot order. Definitions in one atomic Registry Append may share a revision; logical record order distinguishes their predecessor chain. Readers require matching body/index/envelope identities and revisions, registered creators, a consistent type/name pairing, and Field references that existed by the schema's registration revision. All versions retain their index entries and original definitions.
 
 Resolved policies, priorities, capacities, and generated seeds are persisted. Inspection reconstructs owning descriptors from them. Each definition owns its variable bytes inside its immutable record. Registry names/docs and ordered schema Field arrays consume arena/log bytes, **not** the application string pool. New definitions and topology revisions append records and advance index roots through one Registry transaction; existing publications continue to reference their original definitions.
 

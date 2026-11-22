@@ -118,6 +118,8 @@ namespace angaria
     Result<SourceQueueSetId> register_source_set(const SourceQueueSetDescriptor& descriptor);
     Result<QueueId> register_queue(const QueueDescriptor& descriptor);
     Result<PublishingQueueSetId> register_publishing_set(const PublishingQueueSetDescriptor& descriptor);
+    // Definitions are immutable. Exact descriptors return their existing IDs;
+    // a message schema preserves its ordered, possibly repeated Field IDs.
     Result<FieldId> register_field(const FieldDescriptor& descriptor);
     Result<SchemaId> register_message(const MessageDescriptor& descriptor);
 

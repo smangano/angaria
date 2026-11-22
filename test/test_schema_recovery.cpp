@@ -1,0 +1,718 @@
+// Public registration across independent processes, followed by qualification of
+// the private hooks used by that same implementation. Application code registers
+// through a live Task Registry; raw snapshots and fault callbacks below are test
+// infrastructure. SIGKILL covers a running local host, not power-loss durability.
+
+#include "angaria/runtime.h"
+#include "runtime_state.h"
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#ifndef ANGARIA_NATIVE_SCHEMA_WORKER
+#error ANGARIA_NATIVE_SCHEMA_WORKER must name the independent registration worker
+#endif
+
+extern char** environ;
+
+namespace
+{
+  using namespace angaria;
+  namespace runtime = angaria::detail;
+  namespace mapped = angaria::detail::mapped;
+  namespace fs = std::filesystem;
+  using namespace std::chrono_literals;
+
+  template <typename T>
+  T require_value(Result<T> result)
+  {
+    if (const auto* error = std::get_if<Error>(&result))
+    {
+      throw std::runtime_error(error->_path + ": " + error->_message);
+    }
+    return std::get<T>(std::move(result));
+  }
+
+  template <typename T>
+  bool has_error(const Result<T>& result, ErrorCode code)
+  {
+    const auto* error = std::get_if<Error>(&result);
+    return error && error->_code == code;
+  }
+
+  struct Outcome
+  {
+    char _marker{};
+    std::uint64_t _value{};
+  };
+
+  // Pipe reports establish exact process boundaries; no sleep decides when a
+  // registration has committed. Every assertion path closes/reaps the worker,
+  // and a deadline makes a missing checkpoint fail rather than hang the suite.
+  class SchemaWorker
+  {
+  public:
+    SchemaWorker(const fs::path& directory, const std::string& mode, bool isField,
+                 unsigned actor = 1, std::uint64_t raw = 0, std::uint32_t version = 1,
+                 const std::string& name = "Registered", const std::string& doc = "durable metadata",
+                 mapped::JournalCheckpoint point = mapped::JournalCheckpoint::Prepared,
+                 std::uint64_t index = 0)
+    {
+      std::array<int, 2> output{-1, -1};
+      std::array<int, 2> input{-1, -1};
+      if (::pipe(output.data()) == -1 || ::pipe(input.data()) == -1)
+      {
+        close_fds(output, input);
+        throw std::runtime_error("registration worker pipe failed");
+      }
+      int error{};
+      for (auto* pair : {&output, &input})
+      {
+        for (auto& fd : *pair)
+        {
+          // Keep spawn's sources distinct from stdin/stdout even when the
+          // invoking test environment left a standard descriptor closed.
+          if (fd <= STDERR_FILENO)
+          {
+            const auto replacement = ::fcntl(fd, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+            if (replacement == -1)
+            {
+              error = errno;
+              break;
+            }
+            ::close(fd);
+            fd = replacement;
+          }
+          else if (::fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
+          {
+            error = errno;
+            break;
+          }
+        }
+        if (error != 0)
+        {
+          break;
+        }
+      }
+      posix_spawn_file_actions_t actions;
+      if (error == 0)
+      {
+        error = ::posix_spawn_file_actions_init(&actions);
+        if (error == 0)
+        {
+          error = ::posix_spawn_file_actions_adddup2(&actions, output[1], STDOUT_FILENO);
+          error = error == 0 ? ::posix_spawn_file_actions_adddup2(&actions, input[0], STDIN_FILENO) : error;
+          for (const auto fd : {output[0], output[1], input[0], input[1]})
+          {
+            error = error == 0 ? ::posix_spawn_file_actions_addclose(&actions, fd) : error;
+          }
+          const std::array<std::string, 11> values{
+              ANGARIA_NATIVE_SCHEMA_WORKER, mode, directory.string(), std::to_string(actor),
+              isField ? "field" : "schema", std::to_string(raw == 0 ? (isField ? 0xee000010ull : 1ull) : raw),
+              std::to_string(version), name, doc,
+              std::to_string(static_cast<unsigned>(point)), std::to_string(index)};
+          std::array<char*, 12> arguments{};
+          for (std::size_t position = 0; position != values.size(); ++position)
+          {
+            arguments[position] = const_cast<char*>(values[position].c_str());
+          }
+          error = error == 0 ? ::posix_spawn(&_pid, values[0].c_str(), &actions, nullptr,
+                                            arguments.data(), environ) : error;
+          ::posix_spawn_file_actions_destroy(&actions);
+        }
+      }
+      if (error != 0)
+      {
+        close_fds(output, input);
+        throw std::system_error(error, std::generic_category(), "spawn registration worker");
+      }
+      ::close(output[1]);
+      ::close(input[0]);
+      _output = output[0];
+      _input = input[1];
+    }
+
+    ~SchemaWorker()
+    {
+      release();
+      if (_pid > 0)
+      {
+        ::kill(_pid, SIGKILL);
+        int status{};
+        while (::waitpid(_pid, &status, 0) == -1 && errno == EINTR)
+        {
+        }
+      }
+      if (_output != -1)
+      {
+        ::close(_output);
+      }
+    }
+
+    SchemaWorker(const SchemaWorker&) = delete;
+    SchemaWorker& operator=(const SchemaWorker&) = delete;
+
+    char receive()
+    {
+      char value{};
+      receive_exact(&value, sizeof(value));
+      return value;
+    }
+
+    std::uint64_t receive_number()
+    {
+      std::uint64_t value{};
+      receive_exact(&value, sizeof(value));
+      return value;
+    }
+
+    Outcome receive_outcome()
+    {
+      return Outcome{receive(), receive_number()};
+    }
+
+    void proceed()
+    {
+      const char continuation = 'C';
+      ssize_t count;
+      do
+      {
+        count = ::write(_input, &continuation, 1);
+      } while (count == -1 && errno == EINTR);
+      if (count != 1)
+      {
+        throw std::runtime_error("registration worker continuation failed");
+      }
+    }
+
+    void terminate_at_checkpoint()
+    {
+      if (receive() != 'R')
+      {
+        throw std::runtime_error("registration worker reached an unexpected checkpoint");
+      }
+      terminate();
+    }
+
+    void terminate()
+    {
+      if (::kill(_pid, SIGKILL) == -1)
+      {
+        throw std::runtime_error("registration worker termination failed");
+      }
+      const auto status = wait_for_exit();
+      if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL)
+      {
+        throw std::runtime_error("registration worker did not stop at SIGKILL");
+      }
+    }
+
+    int finish()
+    {
+      release();
+      const auto status = wait_for_exit();
+      return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+    }
+
+  private:
+    static void close_fds(const std::array<int, 2>& output, const std::array<int, 2>& input)
+    {
+      for (const auto fd : {output[0], output[1], input[0], input[1]})
+      {
+        if (fd != -1)
+        {
+          ::close(fd);
+        }
+      }
+    }
+
+    void release()
+    {
+      if (_input != -1)
+      {
+        ::close(std::exchange(_input, -1));
+      }
+    }
+
+    void receive_exact(void* data, std::size_t length)
+    {
+      auto* bytes = static_cast<char*>(data);
+      const auto deadline = std::chrono::steady_clock::now() + 3s;
+      while (length != 0)
+      {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now()).count();
+        if (remaining <= 0)
+        {
+          throw std::runtime_error("registration worker report deadline expired");
+        }
+        pollfd event{_output, POLLIN, 0};
+        const auto ready = ::poll(&event, 1, static_cast<int>(remaining));
+        if (ready == -1 && errno == EINTR)
+        {
+          continue;
+        }
+        if (ready <= 0)
+        {
+          throw std::runtime_error("registration worker did not report");
+        }
+        const auto count = ::read(_output, bytes, length);
+        if (count > 0)
+        {
+          bytes += count;
+          length -= static_cast<std::size_t>(count);
+        }
+        else if (count != -1 || errno != EINTR)
+        {
+          throw std::runtime_error("registration worker exited without its report");
+        }
+      }
+    }
+
+    int wait_for_exit()
+    {
+      const auto deadline = std::chrono::steady_clock::now() + 3s;
+      for (;;)
+      {
+        int status{};
+        const auto result = ::waitpid(_pid, &status, WNOHANG);
+        if (result == _pid)
+        {
+          _pid = -1;
+          return status;
+        }
+        if (result == -1 && errno != EINTR)
+        {
+          throw std::runtime_error("registration worker wait failed");
+        }
+        if (std::chrono::steady_clock::now() >= deadline)
+        {
+          throw std::runtime_error("registration worker exit deadline expired");
+        }
+        ::poll(nullptr, 0, 1);
+      }
+    }
+
+    pid_t _pid{-1};
+    int _output{-1};
+    int _input{-1};
+  };
+
+  class SchemaRecoveryTest : public testing::Test
+  {
+  protected:
+    void SetUp() override
+    {
+      auto pattern = (fs::temp_directory_path() / "angaria-schema-processes-XXXXXX").string();
+      ASSERT_NE(::mkdtemp(pattern.data()), nullptr);
+      _root = pattern;
+    }
+
+    void TearDown() override
+    {
+      std::error_code ignored;
+      fs::remove_all(_root, ignored);
+    }
+
+    static FieldDescriptor field(std::uint32_t raw = 0xee000010, std::string name = "Registered",
+                                 std::string doc = "durable metadata")
+    {
+      FieldDescriptor result;
+      result._id = static_cast<FieldId>(raw);
+      result._name = std::move(name);
+      result._base = EFieldBase::BASE_INT64;
+      result._size = 8;
+      result._doc = std::move(doc);
+      return result;
+    }
+
+    static MessageDescriptor schema(std::uint16_t type = 1, std::string name = "Registered",
+                                     std::string doc = "durable metadata")
+    {
+      MessageDescriptor result;
+      result._schema = SchemaId{static_cast<MessageType>(type), 1};
+      result._name = std::move(name);
+      result._doc = std::move(doc);
+      result._fields = {static_cast<FieldId>(0xee000001), static_cast<FieldId>(0xee000001)};
+      return result;
+    }
+
+    static std::uint64_t identity(bool isField, unsigned ordinal = 0)
+    {
+      return isField ? 0xee000010ull + ordinal : (std::uint64_t{1 + ordinal} << 32) | 1;
+    }
+
+    CreatedSession create(const fs::path& directory, bool otherActor = false)
+    {
+      SessionOptions options;
+      options._name = "Schema processes";
+      options._directory = directory;
+      options._maxLogBytes = 2097152;
+      options._limits = CapacityLimits::empty().tasks(4).fields(16).message_schemas(8);
+      TaskDescriptor creator;
+      creator._name = "Creator";
+      auto created = require_value(Session::create(options, creator));
+      auto registry = created._creator.registry();
+      require_value(registry.register_field(field(0xee000001, "Price", "Price in ticks")));
+      if (otherActor)
+      {
+        TaskDescriptor other;
+        other._name = "OtherActor";
+        if (require_value(registry.register_task(other)) != TaskId{2})
+        {
+          throw std::runtime_error("fixture did not allocate its second actor");
+        }
+      }
+      return created;
+    }
+
+    Session create_detached(const fs::path& directory)
+    {
+      auto created = create(directory);
+      auto session = std::move(created._session);
+      {
+        auto closing = std::move(created._creator);
+      }
+      return session;
+    }
+
+    static std::shared_ptr<runtime::SessionState> state(const fs::path& directory)
+    {
+      auto result = std::make_shared<runtime::SessionState>();
+      result->_directory = fs::canonical(directory);
+      result->_controller = require_value(mapped::SessionController::open_existing(directory));
+      return result;
+    }
+
+    static mapped::JournalSnapshot snapshot(const fs::path& directory)
+    {
+      runtime::RuntimeAccess access(state(directory));
+      return access._snapshot;
+    }
+
+    static std::vector<std::uint64_t> image(const fs::path& directory)
+    {
+      runtime::RuntimeAccess access(state(directory));
+      return access.read_words(0, static_cast<std::size_t>(access._snapshot._fileBytes / 8));
+    }
+
+    static std::vector<std::string> claims(const fs::path& directory)
+    {
+      std::vector<std::string> result;
+      for (const auto& entry : fs::directory_iterator(directory / "claims"))
+      {
+        result.push_back(entry.path().filename().string());
+      }
+      std::sort(result.begin(), result.end());
+      return result;
+    }
+
+    static Result<std::uint64_t> find(Registry registry, bool isField, const std::string& name = "Registered")
+    {
+      if (isField)
+      {
+        const auto result = registry.find_field(name);
+        if (const auto* error = std::get_if<Error>(&result))
+        {
+          return *error;
+        }
+        return static_cast<std::uint64_t>(std::get<FieldId>(result));
+      }
+      const auto result = registry.find_message(name, 1);
+      if (const auto* error = std::get_if<Error>(&result))
+      {
+        return *error;
+      }
+      const auto id = std::get<SchemaId>(result);
+      return (static_cast<std::uint64_t>(id._type) << 32) | id._version;
+    }
+
+    static RegistrationMetadata metadata(Registry registry, bool isField, unsigned ordinal = 0)
+    {
+      return isField ? require_value(registry.metadata(static_cast<FieldId>(identity(true, ordinal)))) :
+          require_value(registry.metadata(SchemaId{static_cast<MessageType>(1 + ordinal), 1}));
+    }
+
+    static std::uint64_t retry(Registry registry, bool isField)
+    {
+      if (isField)
+      {
+        return static_cast<std::uint64_t>(require_value(registry.register_field(field())));
+      }
+      const auto id = require_value(registry.register_message(schema()));
+      return (static_cast<std::uint64_t>(id._type) << 32) | id._version;
+    }
+
+    static void inspect_report(SchemaWorker& worker, std::uint64_t expected, std::uint64_t revision,
+                               std::uint64_t count)
+    {
+      ASSERT_EQ(worker.receive(), 'I');
+      EXPECT_EQ(worker.receive_number(), expected);
+      EXPECT_EQ(worker.receive_number(), 1u);
+      EXPECT_EQ(worker.receive_number(), revision);
+      EXPECT_EQ(worker.receive_number(), count);
+      EXPECT_EQ(worker.finish(), 0);
+    }
+
+    fs::path _root;
+  };
+
+  // Readers in new executables reconstruct exact typed definitions and their
+  // attribution without inheriting any process-local descriptor cache. Fields
+  // and schemas remain metadata rather than native Task claims.
+  TEST_F(SchemaRecoveryTest, IndependentProcessesDiscoverExactFieldAndSchemaMetadata)
+  {
+    const auto directory = _root / "discovery";
+    auto created = create(directory);
+    auto registry = created._creator.registry();
+    require_value(registry.register_field(field()));
+    require_value(registry.register_message(schema()));
+    SchemaWorker field_reader(directory, "inspect", true);
+    inspect_report(field_reader, identity(true), 3, 8);
+    SchemaWorker schema_reader(directory, "inspect", false);
+    inspect_report(schema_reader, identity(false), 4, 2);
+    EXPECT_EQ(claims(directory).size(), 1u);
+  }
+
+  // Release two different live actors against one closed mutation gate. Equal
+  // descriptors converge on one identity, conflicting meanings choose one winner,
+  // and distinct identities each advance the Registry revision exactly once.
+  TEST_F(SchemaRecoveryTest, ConcurrentActorsSerializeFieldAndSchemaRegistration)
+  {
+    for (const auto isField : {true, false})
+    {
+      for (unsigned scenario = 0; scenario < 3; ++scenario)
+      {
+        SCOPED_TRACE(isField);
+        SCOPED_TRACE(scenario);
+        const auto directory = _root / (std::to_string(isField) + "-race-" + std::to_string(scenario));
+        auto created = create(directory, true);
+        auto session = std::move(created._session);
+        {
+          auto closing = std::move(created._creator);
+        }
+        const auto initial_claims = claims(directory);
+        const auto first_name = scenario == 2 ? "First" : "Shared";
+        const auto second_name = scenario == 2 ? "Second" : "Shared";
+        const auto first_raw = isField ? 0xee000010ull : 1ull;
+        const auto second_raw = first_raw + (scenario == 2 ? 1 : 0);
+        SchemaWorker first(directory, "register", isField, 1, first_raw, 1, first_name, "same");
+        SchemaWorker second(directory, "register", isField, 2, second_raw, 1, second_name,
+                             scenario == 1 ? "different" : "same");
+        ASSERT_EQ(first.receive(), 'R');
+        ASSERT_EQ(second.receive(), 'R');
+        {
+          runtime::RuntimeAccess closed_gate(state(directory));
+          EXPECT_EQ(closed_gate._snapshot._revision, 3u);
+          first.proceed();
+          second.proceed();
+          EXPECT_EQ(first.receive(), 'B');
+          EXPECT_EQ(second.receive(), 'B');
+        }
+        const auto first_result = first.receive_outcome();
+        const auto second_result = second.receive_outcome();
+        if (scenario == 0)
+        {
+          EXPECT_EQ(first_result._marker, 'A');
+          EXPECT_EQ(second_result._marker, 'A');
+          EXPECT_EQ(first_result._value, identity(isField));
+          EXPECT_EQ(second_result._value, identity(isField));
+          const auto creator = metadata(session.registry(), isField)._createdBy;
+          EXPECT_TRUE(creator == TaskId{1} || creator == TaskId{2});
+        }
+        else if (scenario == 1)
+        {
+          const auto first_won = first_result._marker == 'A';
+          const auto& accepted = first_won ? first_result : second_result;
+          const auto& rejected = first_won ? second_result : first_result;
+          EXPECT_EQ(accepted._marker, 'A');
+          EXPECT_EQ(accepted._value, identity(isField));
+          EXPECT_EQ(rejected._marker, 'E');
+          EXPECT_EQ(rejected._value, static_cast<std::uint64_t>(
+              isField ? ErrorCode::Conflict : ErrorCode::SchemaConflict));
+          EXPECT_EQ(metadata(session.registry(), isField)._createdBy, first_won ? TaskId{1} : TaskId{2});
+        }
+        else
+        {
+          EXPECT_EQ(first_result._marker, 'A');
+          EXPECT_EQ(second_result._marker, 'A');
+          EXPECT_EQ(first_result._value, identity(isField, 0));
+          EXPECT_EQ(second_result._value, identity(isField, 1));
+          EXPECT_EQ(metadata(session.registry(), isField, 0)._createdBy, TaskId{1});
+          EXPECT_EQ(metadata(session.registry(), isField, 1)._createdBy, TaskId{2});
+        }
+        EXPECT_EQ(snapshot(directory)._revision, scenario == 2 ? 5u : 4u);
+        EXPECT_EQ(first.finish(), 0);
+        EXPECT_EQ(second.finish(), 0);
+        EXPECT_EQ(claims(directory), initial_claims);
+      }
+    }
+  }
+
+  // Stop actual append preparation, materialization, acceptance, index redo, and
+  // final-root installation. Recovery exposes either the old Registry or one full
+  // definition; retry resolves the same identity without allocating another version.
+  TEST_F(SchemaRecoveryTest, CrashCutsPreserveOnlyOldOrAcceptedDefinitions)
+  {
+    struct Cut
+    {
+      mapped::JournalCheckpoint _point;
+      std::uint64_t _index;
+      bool _accepted;
+    };
+    const std::array<Cut, 10> cuts{{
+        {mapped::JournalCheckpoint::JournalBodyWord, 0, false},
+        {mapped::JournalCheckpoint::Prepared, 0, false},
+        {mapped::JournalCheckpoint::FileGrowth, 0, false},
+        {mapped::JournalCheckpoint::RecordBodyWord, 0, false},
+        {mapped::JournalCheckpoint::RecordReady, 0, false},
+        {mapped::JournalCheckpoint::Committed, 0, true},
+        {mapped::JournalCheckpoint::RedoWord, 0, true},
+        {mapped::JournalCheckpoint::RedoWord, 1, true},
+        {mapped::JournalCheckpoint::EpilogueWord, 2, true},
+        {mapped::JournalCheckpoint::Idle, 0, true},
+    }};
+    for (const auto isField : {true, false})
+    {
+      for (std::size_t cut = 0; cut < cuts.size(); ++cut)
+      {
+        SCOPED_TRACE(isField);
+        SCOPED_TRACE(cut);
+        const auto directory = _root / (std::to_string(isField) + "-crash-" + std::to_string(cut));
+        auto session = create_detached(directory);
+        const auto base = snapshot(directory);
+        const auto claim_files = claims(directory);
+        const auto& point = cuts[cut];
+        SchemaWorker writer(directory, "crash", isField, 1, 0, 1, "Registered", "durable metadata",
+                             point._point, point._index);
+        writer.terminate_at_checkpoint();
+        const auto found = find(session.registry(), isField);
+        if (point._accepted)
+        {
+          EXPECT_EQ(require_value(found), identity(isField));
+        }
+        else
+        {
+          EXPECT_TRUE(has_error(found, ErrorCode::NotFound));
+        }
+        const auto recovered = snapshot(directory);
+        EXPECT_EQ(recovered._revision, base._revision + (point._accepted ? 1 : 0));
+        EXPECT_EQ(recovered._tail == base._tail, !point._accepted);
+        auto actor = require_value(session.attach_task(TaskId{1}));
+        const auto before_retry = snapshot(directory);
+        EXPECT_EQ(retry(actor.registry(), isField), identity(isField));
+        EXPECT_EQ(snapshot(directory)._revision, 3u);
+        if (point._accepted)
+        {
+          EXPECT_EQ(snapshot(directory), before_retry);
+        }
+        EXPECT_EQ(claims(directory), claim_files);
+        SchemaWorker reader(directory, "inspect", isField);
+        inspect_report(reader, identity(isField), 3, isField ? 8 : 2);
+      }
+    }
+  }
+
+  // Repair itself can fail after partial index redo. Repeated workers must
+  // finish the same accepted record and revision, retaining both the earlier
+  // Field definition and the exact schema's version identity.
+  TEST_F(SchemaRecoveryTest, InterruptedRecoveryCanRepeatWithoutDuplicatingDefinitions)
+  {
+    for (const auto isField : {true, false})
+    {
+      const auto directory = _root / (isField ? "field-repair" : "schema-repair");
+      auto session = create_detached(directory);
+      SchemaWorker writer(directory, "crash", isField, 1, 0, 1, "Registered", "durable metadata",
+                           mapped::JournalCheckpoint::Committed);
+      writer.terminate_at_checkpoint();
+      SchemaWorker first_repair(directory, "recover", isField, 1, 0, 1, "Registered", "durable metadata",
+                                 mapped::JournalCheckpoint::RedoWord, 1);
+      first_repair.terminate_at_checkpoint();
+      SchemaWorker second_repair(directory, "recover", isField, 1, 0, 1, "Registered", "durable metadata",
+                                  mapped::JournalCheckpoint::RecordCommitted, 0);
+      second_repair.terminate_at_checkpoint();
+      EXPECT_EQ(require_value(find(session.registry(), isField)), identity(isField));
+      EXPECT_EQ(snapshot(directory)._revision, 3u);
+      auto actor = require_value(session.attach_task(TaskId{1}));
+      const auto before = snapshot(directory);
+      EXPECT_EQ(retry(actor.registry(), isField), identity(isField));
+      EXPECT_EQ(snapshot(directory), before);
+      EXPECT_EQ(require_value(session.registry().describe_field(static_cast<FieldId>(0xee000001)))._name, "Price");
+    }
+  }
+
+  // A precommit I/O failure can prove rollback; accepted repair can return
+  // success, or OutcomeUnknown while repair remains obstructed. Name/version
+  // lookup and an exact retry settle that uncertainty without a second definition.
+  TEST_F(SchemaRecoveryTest, IoOutcomesResolveThroughExactFieldAndVersionLookup)
+  {
+    for (const auto isField : {true, false})
+    {
+      for (const auto& mode : {std::string{"io_before"}, std::string{"io_after"}, std::string{"io_unknown"}})
+      {
+        SCOPED_TRACE(isField);
+        SCOPED_TRACE(mode);
+        const auto directory = _root / (std::to_string(isField) + mode);
+        auto session = create_detached(directory);
+        SchemaWorker writer(directory, mode, isField);
+        const auto first = writer.receive_outcome();
+        const bool accepted = mode != "io_before";
+        if (mode == "io_after")
+        {
+          EXPECT_EQ(first._marker, 'A');
+          EXPECT_EQ(first._value, identity(isField));
+        }
+        else
+        {
+          EXPECT_EQ(first._marker, 'E');
+          EXPECT_EQ(first._value, static_cast<std::uint64_t>(
+              accepted ? ErrorCode::OutcomeUnknown : ErrorCode::IoError));
+        }
+        const auto found = find(session.registry(), isField);
+        if (accepted)
+        {
+          EXPECT_EQ(require_value(found), identity(isField));
+        }
+        else
+        {
+          EXPECT_TRUE(has_error(found, ErrorCode::NotFound));
+        }
+        EXPECT_EQ(snapshot(directory)._revision, accepted ? 3u : 2u);
+        const auto before_retry = image(directory);
+        writer.proceed();
+        const auto retry = writer.receive_outcome();
+        EXPECT_EQ(retry._marker, 'A');
+        EXPECT_EQ(retry._value, identity(isField));
+        EXPECT_EQ(snapshot(directory)._revision, 3u);
+        if (accepted)
+        {
+          EXPECT_EQ(image(directory), before_retry);
+        }
+        EXPECT_EQ(writer.finish(), 0);
+      }
+    }
+  }
+} // namespace

@@ -336,6 +336,20 @@ namespace angaria::detail::mapped
     }
   } // namespace
 
+  OperationResult validate_metadata_text(std::string_view text, bool required, bool noNull,
+                                         const char* path, ErrorCode code)
+  {
+    try
+    {
+      check_text(text, required, noNull, code, path);
+      return std::monostate{};
+    }
+    catch (const MetadataFailure& failure)
+    {
+      return failure._error;
+    }
+  }
+
   OperationResult validate_task_descriptor(const TaskDescriptor& descriptor)
   {
     try

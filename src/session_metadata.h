@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace angaria::detail::mapped
@@ -37,6 +38,8 @@ namespace angaria::detail::mapped
   // Shared programmatic/configuration preflight without serializing or copying
   // descriptor strings. Parent existence and actor ownership belong to runtime.
   OperationResult validate_task_descriptor(const TaskDescriptor& descriptor);
+  OperationResult validate_metadata_text(std::string_view text, bool required, bool noNull,
+                                         const char* path, ErrorCode code = ErrorCode::InvalidArgument);
   Result<TaskDefinition> decode_task_definition(std::span<const std::byte> immutableBody,
                                                  std::uint64_t recordOffset);
 } // namespace angaria::detail::mapped

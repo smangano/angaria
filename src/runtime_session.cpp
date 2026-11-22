@@ -332,6 +332,7 @@ namespace angaria
       {
         RuntimeAccess access(state);
         (void)runtime_session_definition(access);
+        (void)runtime_schemas(access);
       }
       return Session{std::move(state)};
     }

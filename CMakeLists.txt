@@ -31,6 +31,9 @@ add_library(angaria STATIC
   src/task_runtime.cpp
   src/task_claim_redo.cpp
   src/task_registry.cpp
+  src/schema_metadata.cpp
+  src/schema_runtime.cpp
+  src/schema_registry.cpp
 )
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(angaria PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -77,6 +80,10 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_registration_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_registration_worker PRIVATE angaria)
 
+  add_executable(angaria_native_schema_worker test/native_schema_worker.cpp)
+  target_include_directories(angaria_native_schema_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_schema_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
@@ -98,6 +105,9 @@ if(BUILD_TESTING)
     test/test_runtime_access.cpp
     test/test_task_registration.cpp
     test/test_task_registration_recovery.cpp
+    test/test_schema_metadata.cpp
+    test/test_schema_registry.cpp
+    test/test_schema_recovery.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
   target_compile_definitions(
@@ -109,11 +119,12 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_JOURNAL_WORKER="$<TARGET_FILE:angaria_native_journal_worker>"
     ANGARIA_NATIVE_SESSION_WORKER="$<TARGET_FILE:angaria_native_session_worker>"
     ANGARIA_NATIVE_REGISTRATION_WORKER="$<TARGET_FILE:angaria_native_registration_worker>"
+    ANGARIA_NATIVE_SCHEMA_WORKER="$<TARGET_FILE:angaria_native_schema_worker>"
     ANGARIA_TEST_VERSION="${PROJECT_VERSION}"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
-  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_registration_worker)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_registration_worker angaria_native_schema_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests PROPERTIES TIMEOUT 10)
