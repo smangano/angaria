@@ -141,6 +141,29 @@ namespace angaria::detail
       runtime_fail(ErrorCode::IoError, "topology.reference", "Historical relationship names an entity absent at that revision");
     }
 
+    template <typename Definition, typename Check>
+    void each_committed_revision(const History<Definition>& history, Check check)
+    {
+      for (const auto& group : history._byId)
+      {
+        const auto& indexes = group.second;
+        const Definition* previous{};
+        for (std::size_t position = 0; position < indexes.size(); ++position)
+        {
+          const auto& definition = history._records[indexes[position]]._definition;
+          if (position + 1 < indexes.size() &&
+              history._records[indexes[position + 1]]._definition._registration._revision == definition._registration._revision)
+          {
+            continue;
+          }
+          // Several retained records can belong to one atomic batch. Compare
+          // only its final definition with the preceding committed revision.
+          check(definition, previous);
+          previous = &definition;
+        }
+      }
+    }
+
     template <typename Loaded, typename Definition>
     std::vector<Loaded> current_definitions(RuntimeAccess& access, const History<Definition>& history,
                                             mapped::SectionKind indexKind, mapped::SectionKind stateKind,
@@ -398,6 +421,38 @@ namespace angaria::detail
         }
       }
     }
+    // A later restoration cannot make an earlier omission consistent. At every
+    // Source change, removed members must also be unassigned (or reassigned) in
+    // the Queue definition effective at that same committed revision.
+    each_committed_revision(sources, [&](const auto& definition, const auto* previous)
+    {
+      if (previous)
+      {
+        const auto& members = historicalMembers.at(&definition);
+        for (const auto removed : previous->_members)
+        {
+          if (!members.contains(removed) &&
+              definition_at(queues, removed, definition._registration._revision)._descriptor._sourceSet == definition._id)
+          {
+            runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source removed a Queue still assigned to it");
+          }
+        }
+      }
+    });
+    // The converse transition matters too: changing a Queue must remove it
+    // from its old Source immediately, rather than in some later revision.
+    each_committed_revision(queues, [&](const auto& definition, const auto* previous)
+    {
+      if (previous && previous->_descriptor._sourceSet != SourceQueueSetId::Invalid &&
+          previous->_descriptor._sourceSet != definition._descriptor._sourceSet)
+      {
+        const auto& source = definition_at(sources, previous->_descriptor._sourceSet, definition._registration._revision);
+        if (historicalMembers.at(&source).contains(definition._id))
+        {
+          runtime_fail(ErrorCode::IoError, "queue.source_set", "Historical Queue remains listed in its former Source");
+        }
+      }
+    });
     for (const auto& entry : publishing._records)
     {
       const auto& definition = entry._definition;

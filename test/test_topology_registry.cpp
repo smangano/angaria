@@ -1039,6 +1039,175 @@ namespace
     EXPECT_EQ(raw_image(), evidence);
   }
 
+  // Begin with a valid public registration, then omit its assigned Queue from
+  // one retained Source revision and restore it in the next. The unchanged
+  // Queue and valid latest graph must not hide the inconsistent middle revision.
+  TEST_F(TopologyRegistryTest, RestoredSourceMembershipCannotHideHistoricalOmission)
+  {
+    auto created = create();
+    const auto claim = created._creator.claim();
+    auto actor = created._creator.registry();
+    const auto inputs = require_value(actor.register_source_set(source()));
+    const auto feed = require_value(actor.register_queue(queue("Feed", TaskId{1}, inputs)));
+    const auto previous = index_row(mapped::SectionKind::SourceIndex, static_cast<std::uint16_t>(inputs)).second;
+    mapped::SourceDefinition changed;
+    changed._id = inputs;
+    changed._descriptor = require_value(actor.describe_source_set(inputs));
+    changed._registration = require_value(actor.metadata(inputs));
+    std::uint64_t omitted{};
+    {
+      runtime::RuntimeAccess access(state());
+      TopologyBatch batch(access, claim);
+      omitted = batch.add_source(changed, 0, previous);
+      batch.commit();
+    }
+    changed._members = {feed};
+    {
+      runtime::RuntimeAccess access(state());
+      TopologyBatch batch(access, claim);
+      batch.add_source(changed, 0, omitted);
+      batch.commit();
+    }
+    const auto evidence = raw_image();
+    expect_error(Session::attach(_directory), ErrorCode::IoError);
+    expect_error(actor.find_source_set("Inputs"), ErrorCode::IoError);
+    expect_error(actor.source_members(inputs), ErrorCode::IoError);
+    expect_error(actor.describe_queue(feed), ErrorCode::IoError);
+    expect_error(actor.register_queue(queue("New")), ErrorCode::IoError);
+    EXPECT_EQ(raw_image(), evidence);
+  }
+
+  // The inverse direction matters at Queue revisions too. Unassigning a Queue
+  // while its Source still lists it is inconsistent even if a later Source
+  // revision finally removes it. Raw batches expose that forbidden history.
+  TEST_F(TopologyRegistryTest, LaterSourceCleanupCannotHideHistoricalStaleMembership)
+  {
+    auto created = create();
+    const auto claim = created._creator.claim();
+    auto actor = created._creator.registry();
+    const auto inputs = require_value(actor.register_source_set(source()));
+    const auto feed = require_value(actor.register_queue(queue("Feed", TaskId{1}, inputs)));
+    const auto source_previous = index_row(mapped::SectionKind::SourceIndex, static_cast<std::uint16_t>(inputs)).second;
+    const auto queue_previous = index_row(mapped::SectionKind::QueueIndex, static_cast<std::uint16_t>(feed)).second;
+    mapped::SourceDefinition changed_source;
+    changed_source._id = inputs;
+    changed_source._descriptor = require_value(actor.describe_source_set(inputs));
+    changed_source._registration = require_value(actor.metadata(inputs));
+    mapped::QueueDefinition changed_queue;
+    changed_queue._id = feed;
+    changed_queue._descriptor = require_value(actor.describe_queue(feed));
+    changed_queue._descriptor._sourceSet = SourceQueueSetId::Invalid;
+    changed_queue._registration = require_value(actor.metadata(feed));
+    {
+      runtime::RuntimeAccess access(state());
+      TopologyBatch batch(access, claim);
+      batch.add_queue(changed_queue, 0, queue_previous);
+      batch.commit();
+    }
+    {
+      runtime::RuntimeAccess access(state());
+      TopologyBatch batch(access, claim);
+      batch.add_source(changed_source, 0, source_previous);
+      batch.commit();
+    }
+    const auto evidence = raw_image();
+    expect_error(Session::attach(_directory), ErrorCode::IoError);
+    expect_error(actor.find_queue("Feed"), ErrorCode::IoError);
+    expect_error(actor.source_members(inputs), ErrorCode::IoError);
+    expect_error(actor.describe_queue(feed), ErrorCode::IoError);
+    expect_error(actor.register_queue(queue("New")), ErrorCode::IoError);
+    EXPECT_EQ(raw_image(), evidence);
+  }
+
+  // Source removal and Queue unassignment are one atomic topology change, not
+  // two observable revisions. The private fixture models a complete batch in
+  // either physical record order; both final definitions must remain readable.
+  TEST_F(TopologyRegistryTest, AtomicSourceRemovalAndQueueUnassignmentAllowEitherRecordOrder)
+  {
+    for (const auto source_first : {false, true})
+    {
+      SCOPED_TRACE(source_first);
+      {
+        auto created = create();
+        const auto claim = created._creator.claim();
+        auto actor = created._creator.registry();
+        const auto inputs = require_value(actor.register_source_set(source()));
+        const auto feed = require_value(actor.register_queue(queue("Feed", TaskId{1}, inputs)));
+        const auto source_previous = index_row(mapped::SectionKind::SourceIndex, static_cast<std::uint16_t>(inputs)).second;
+        const auto queue_previous = index_row(mapped::SectionKind::QueueIndex, static_cast<std::uint16_t>(feed)).second;
+        mapped::SourceDefinition changed_source;
+        changed_source._id = inputs;
+        changed_source._descriptor = require_value(actor.describe_source_set(inputs));
+        changed_source._registration = require_value(actor.metadata(inputs));
+        mapped::QueueDefinition changed_queue;
+        changed_queue._id = feed;
+        changed_queue._descriptor = require_value(actor.describe_queue(feed));
+        changed_queue._descriptor._sourceSet = SourceQueueSetId::Invalid;
+        changed_queue._registration = require_value(actor.metadata(feed));
+        {
+          runtime::RuntimeAccess access(state());
+          TopologyBatch batch(access, claim);
+          if (source_first)
+          {
+            batch.add_source(changed_source, 0, source_previous);
+            batch.add_queue(changed_queue, 0, queue_previous);
+          }
+          else
+          {
+            batch.add_queue(changed_queue, 0, queue_previous);
+            batch.add_source(changed_source, 0, source_previous);
+          }
+          batch.commit();
+        }
+        const auto before = observe();
+        auto attached = require_value(Session::attach(_directory));
+        auto reader = attached.registry();
+        EXPECT_TRUE(require_value(reader.source_members(inputs)).empty());
+        EXPECT_EQ(require_value(reader.describe_queue(feed))._sourceSet, SourceQueueSetId::Invalid);
+        EXPECT_EQ(require_value(reader.metadata(inputs))._revision, changed_source._registration._revision + 1);
+        EXPECT_EQ(require_value(reader.metadata(feed))._revision, changed_queue._registration._revision + 1);
+        EXPECT_EQ(require_value(reader.metadata(inputs))._createdAt, changed_source._registration._createdAt);
+        EXPECT_EQ(require_value(reader.metadata(feed))._createdAt, changed_queue._registration._createdAt);
+        EXPECT_EQ(require_value(actor.register_queue(changed_queue._descriptor)), feed);
+        EXPECT_EQ(observe(), before);
+      }
+      fs::remove_all(_directory);
+    }
+  }
+
+  // Multiple retained definitions may belong to one committed batch. Only the
+  // final Source definition at that Registry revision is externally visible;
+  // an intermediate omission restored within that batch is not a lost member.
+  TEST_F(TopologyRegistryTest, SameRevisionSourceRestorationPreservesVisibleMembership)
+  {
+    auto created = create();
+    const auto claim = created._creator.claim();
+    auto actor = created._creator.registry();
+    const auto inputs = require_value(actor.register_source_set(source()));
+    const auto feed = require_value(actor.register_queue(queue("Feed", TaskId{1}, inputs)));
+    const auto previous = index_row(mapped::SectionKind::SourceIndex, static_cast<std::uint16_t>(inputs)).second;
+    mapped::SourceDefinition changed;
+    changed._id = inputs;
+    changed._descriptor = require_value(actor.describe_source_set(inputs));
+    changed._registration = require_value(actor.metadata(inputs));
+    const auto queue_metadata = require_value(actor.metadata(feed));
+    {
+      runtime::RuntimeAccess access(state());
+      TopologyBatch batch(access, claim);
+      const auto omitted = batch.add_source(changed, 0, previous);
+      changed._members = {feed};
+      batch.add_source(changed, 0, omitted);
+      batch.commit();
+    }
+    const auto before = observe();
+    auto attached = require_value(Session::attach(_directory));
+    EXPECT_EQ(require_value(attached.registry().source_members(inputs)), std::vector<QueueId>{feed});
+    EXPECT_EQ(require_value(attached.registry().describe_queue(feed))._sourceSet, inputs);
+    EXPECT_EQ(require_value(attached.registry().metadata(inputs))._revision, changed._registration._revision + 1);
+    EXPECT_EQ(require_value(attached.registry().metadata(feed))._revision, queue_metadata._revision);
+    EXPECT_EQ(observe(), before);
+  }
+
   // Reserved membership capacity binds every retained revision, not just the
   // currently indexed definition. Private journal batches create an oversized
   // older list and a smaller valid current graph, preserving all other chains,
