@@ -124,6 +124,8 @@ Optional `[[messages]]` declarations have required `name`, `type`, `version`, an
 
 A message schema is identified by its type and version. Multiple immutable versions may share a message type and name. Conflicting names for a type, conflicting types for a name, and repeated type/version declarations are errors. Every referenced Field must resolve.
 
+Step 2.7 implements the equivalent programmatic Field/schema registrations and inspections. Field IDs use the complete `0xEE000000`–`0xEEFFFFFF` range; table capacity counts entries rather than the numeric ID. Programmatic exact re-registration is idempotent, while conflicting Field IDs/names return Conflict and conflicting schema identities/type-name pairings return SchemaConflict. Message Field order and repetition are meaningful, and an empty array is valid. The initial native Field types are fixed-width char/byte, 16-/32-/64-bit signed/unsigned integers, and 32-/64-bit floats; their declared sizes are bytes, independent of native C++ object sizes. Other representations and their encoding features follow milestones 3 and 9. TOML parsing into this common registration path remains step 2.10.
+
 Applications may register definitions programmatically within the same reserved capacities. TOML declarations supply initial registrations.
 
 ## Registration and activation

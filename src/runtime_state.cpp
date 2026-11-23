@@ -233,6 +233,19 @@ namespace angaria::detail
     return read_bytes(reference + mapped::record_envelope_bytes, envelope._immutableBytes);
   }
 
+  std::vector<std::uint64_t> RuntimeAccess::record_references(std::uint16_t kind) const
+  {
+    std::vector<std::uint64_t> references;
+    for (const auto& record : _recordBoundaries)
+    {
+      if (record._envelope._kind == kind)
+      {
+        references.push_back(record._offset);
+      }
+    }
+    return references;
+  }
+
   std::uint64_t RuntimeAccess::section_offset(mapped::SectionKind kind) const
   {
     const auto layout = mapped::make_fixed_layout(_session->_controller->configuration()._limits);

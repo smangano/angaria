@@ -3,6 +3,7 @@
 #include "angaria/runtime.h"
 #include "mutation_journal.h"
 #include "session_metadata.h"
+#include "schema_metadata.h"
 
 #include <atomic>
 #include <cstddef>
@@ -75,6 +76,7 @@ namespace angaria::detail
     std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length) const;
     const mapped::RecordEnvelope& record_envelope(std::uint64_t reference, std::uint16_t kind) const;
     std::vector<std::byte> immutable_record(std::uint64_t reference, std::uint16_t kind) const;
+    std::vector<std::uint64_t> record_references(std::uint16_t kind) const;
     std::uint64_t section_offset(mapped::SectionKind kind) const;
 
     std::shared_ptr<SessionState> _session;
@@ -101,9 +103,30 @@ namespace angaria::detail
     std::uint64_t _stateOffset{};
   };
 
+  struct LoadedField
+  {
+    mapped::FieldDefinition _definition;
+    std::uint64_t _reference{};
+    std::uint64_t _indexOffset{};
+  };
+
+  struct LoadedSchema
+  {
+    mapped::SchemaDefinition _definition;
+    std::uint64_t _reference{};
+    std::uint64_t _indexOffset{};
+  };
+
   std::vector<LoadedTask> runtime_tasks(RuntimeAccess& access);
   void runtime_validate_task_state(std::span<const std::uint64_t> words, TaskKind kind);
   LoadedTask runtime_task(RuntimeAccess& access, TaskId task);
+  std::vector<LoadedField> runtime_fields(RuntimeAccess& access);
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access);
+  // Reuse Fields already validated under this access's held mutation gate.
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields);
+  LoadedField runtime_field(RuntimeAccess& access, FieldId field);
+  LoadedSchema runtime_schema(RuntimeAccess& access, SchemaId schema);
+  void runtime_validate_field_policy(const FieldDescriptor& descriptor, ErrorCode invalidCode);
   mapped::SessionDefinition runtime_session_definition(RuntimeAccess& access);
   void runtime_validate_options(const SessionOptions& options, ErrorCode invalidCode);
   void runtime_check_task(const std::shared_ptr<TaskState>& task);
@@ -133,6 +156,14 @@ namespace angaria::detail
                                        const TaskDescriptor& descriptor,
                                        mapped::JournalFaultInjector* injector = nullptr,
                                        TaskRegistrationObserver* observer = nullptr);
+  Result<FieldId> runtime_register_field(std::shared_ptr<SessionState> session,
+                                         std::shared_ptr<TaskState> actor,
+                                         const FieldDescriptor& descriptor,
+                                         mapped::JournalFaultInjector* injector = nullptr);
+  Result<SchemaId> runtime_register_message(std::shared_ptr<SessionState> session,
+                                            std::shared_ptr<TaskState> actor,
+                                            const MessageDescriptor& descriptor,
+                                            mapped::JournalFaultInjector* injector = nullptr);
 
   Result<std::shared_ptr<TaskState>> attach_runtime_task(std::shared_ptr<SessionState> session,
                                                         TaskId task, bool bootstrap = false,
