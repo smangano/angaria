@@ -62,6 +62,21 @@ namespace angaria::detail
         }
         indexes.push_back(DefinitionIndex{begin + slot * mapped::index_entry_bytes, row[0], row[1], row[2]});
       }
+      // These immutable entity kinds have no edit or deletion operation: every
+      // retained definition must have exactly one index row. Inspect the cached
+      // boundaries once, including definitions hidden by an all-zero index row.
+      std::vector<std::uint64_t> references;
+      references.reserve(indexes.size());
+      for (const auto& index : indexes)
+      {
+        references.push_back(index._reference);
+      }
+      std::sort(references.begin(), references.end());
+      const std::uint16_t recordKind = kind == mapped::SectionKind::FieldIndex ? 6 : 7;
+      if (references != access.record_references(recordKind))
+      {
+        runtime_fail(ErrorCode::IoError, "registry.index", "Retained definitions and index references disagree");
+      }
       return indexes;
     }
 
@@ -165,8 +180,13 @@ namespace angaria::detail
 
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access)
   {
-    const auto actors = creators(access);
     const auto fields = runtime_fields(access);
+    return runtime_schemas(access, fields);
+  }
+
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields)
+  {
+    const auto actors = creators(access);
     std::map<FieldId, const LoadedField*> fieldIds;
     for (const auto& field : fields)
     {

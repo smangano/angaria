@@ -147,7 +147,23 @@ namespace
       require_value(mapped::AtomicWord::bind(require_value(region.writable_bytes()), 0)).store_release(value);
     }
 
-    std::uint64_t reference(mapped::SectionKind kind, std::uint64_t key) const
+    // Read deliberately corrupted images without asking the Registry to decode
+    // them. This preserves independent evidence of a rejected operation's writes.
+    std::vector<std::uint64_t> read_image() const
+    {
+      auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang", mapped::FileAccess::ReadWrite));
+      const auto length = require_value(file.size());
+      auto region = require_value(file.map_read_write(0, length));
+      const auto bytes = require_value(region.writable_bytes());
+      std::vector<std::uint64_t> words(static_cast<std::size_t>(length / 8));
+      for (std::size_t index = 0; index < words.size(); ++index)
+      {
+        words[index] = require_value(mapped::AtomicWord::bind(bytes, index * 8)).load_acquire();
+      }
+      return words;
+    }
+
+    std::pair<std::uint64_t, std::uint64_t> index_row(mapped::SectionKind kind, std::uint64_t key) const
     {
       runtime::RuntimeAccess access(state());
       const auto layout = *mapped::make_fixed_layout(access._session->_controller->configuration()._limits);
@@ -162,11 +178,16 @@ namespace
         {
           if (rows[row] == key)
           {
-            return rows[row + 1];
+            return {section._offset + row * 8, rows[row + 1]};
           }
         }
       }
       throw std::runtime_error("Fixture could not find its registered definition");
+    }
+
+    std::uint64_t reference(mapped::SectionKind kind, std::uint64_t key) const
+    {
+      return index_row(kind, key).second;
     }
 
     static std::uint64_t key(SchemaId id)
@@ -672,19 +693,6 @@ namespace
       field_index = access.section_offset(mapped::SectionKind::FieldIndex);
       schema_index = access.section_offset(mapped::SectionKind::SchemaIndex);
     }
-    auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang", mapped::FileAccess::ReadWrite));
-    const auto length = require_value(file.size());
-    const auto read_image = [&]
-    {
-      auto region = require_value(file.map_read_write(0, length));
-      const auto bytes = require_value(region.writable_bytes());
-      std::vector<std::uint64_t> words(static_cast<std::size_t>(length / 8));
-      for (std::size_t index = 0; index < words.size(); ++index)
-      {
-        words[index] = require_value(mapped::AtomicWord::bind(bytes, index * 8)).load_acquire();
-      }
-      return words;
-    };
     for (const auto target : {field_index + 32, field_index + 64 + 8,
                               field_reference + 64, field_reference + 64 + 72,
                               schema_index + 32, schema_reference + 64 + 72,
@@ -698,6 +706,88 @@ namespace
       expect_error(Session::attach(_directory), ErrorCode::IoError);
       EXPECT_EQ(read_image(), evidence);
       set_word(target, old);
+    }
+  }
+
+  // An unused row and a deleted row look identical in the fixed table. Retained
+  // committed definitions distinguish them: clearing even an unreferenced
+  // Field's entire row must not hide its immutable identity or allow its reuse.
+  TEST_F(SchemaRegistryTest, MissingFieldIndexRejectsAttachmentLookupAndRegistrationWithoutWrites)
+  {
+    auto created = create();
+    auto actor = created._creator.registry();
+    auto reader = created._session.registry();
+    const auto descriptor = field();
+    const auto id = require_value(actor.register_field(descriptor));
+    const auto row = index_row(mapped::SectionKind::FieldIndex, static_cast<std::uint32_t>(id)).first;
+    const auto original = read_image();
+    for (std::uint64_t word = 0; word < mapped::index_entry_bytes / 8; ++word)
+    {
+      set_word(row + word * 8, 0);
+    }
+    const auto evidence = read_image();
+    expect_error(Session::attach(_directory), ErrorCode::IoError);
+    expect_error(reader.find_field(descriptor._name), ErrorCode::IoError);
+    expect_error(reader.describe_field(id), ErrorCode::IoError);
+    expect_error(reader.metadata(id), ErrorCode::IoError);
+    expect_error(actor.register_field(descriptor), ErrorCode::IoError);
+    auto changed = descriptor;
+    changed._doc = "A hidden identity must not accept a replacement descriptor";
+    expect_error(actor.register_field(changed), ErrorCode::IoError);
+    EXPECT_EQ(read_image(), evidence);
+    for (std::uint64_t word = 0; word < mapped::index_entry_bytes / 8; ++word)
+    {
+      set_word(row + word * 8, original[static_cast<std::size_t>(row / 8 + word)]);
+    }
+    EXPECT_EQ(require_value(reader.find_field(descriptor._name)), id);
+    EXPECT_EQ(require_value(reader.describe_field(id))._doc, descriptor._doc);
+    EXPECT_EQ(read_image(), original);
+  }
+
+  // Removing the newest version leaves every indexed predecessor relationship
+  // intact. Validate retained definitions against the complete index as well,
+  // so neither the only version nor the newest of several can silently vanish.
+  // Numeric versions deliberately run backwards; "newest" means registration.
+  TEST_F(SchemaRegistryTest, MissingSchemaIndexRejectsAttachmentLookupAndRegistrationWithoutWrites)
+  {
+    for (const auto previous : {false, true})
+    {
+      SCOPED_TRACE(previous);
+      {
+        auto created = create();
+        auto actor = created._creator.registry();
+        auto reader = created._session.registry();
+        if (previous)
+        {
+          require_value(actor.register_message(message(1, 8)));
+        }
+        const auto descriptor = message(1, 1);
+        const auto id = require_value(actor.register_message(descriptor));
+        const auto row = index_row(mapped::SectionKind::SchemaIndex, key(id)).first;
+        const auto original = read_image();
+        for (std::uint64_t word = 0; word < mapped::index_entry_bytes / 8; ++word)
+        {
+          set_word(row + word * 8, 0);
+        }
+        const auto evidence = read_image();
+        expect_error(Session::attach(_directory), ErrorCode::IoError);
+        expect_error(reader.find_message(descriptor._name, id._version), ErrorCode::IoError);
+        expect_error(reader.describe_message(id), ErrorCode::IoError);
+        expect_error(reader.metadata(id), ErrorCode::IoError);
+        expect_error(actor.register_message(descriptor), ErrorCode::IoError);
+        auto changed = descriptor;
+        changed._doc = "A hidden version must not accept a replacement descriptor";
+        expect_error(actor.register_message(changed), ErrorCode::IoError);
+        EXPECT_EQ(read_image(), evidence);
+        for (std::uint64_t word = 0; word < mapped::index_entry_bytes / 8; ++word)
+        {
+          set_word(row + word * 8, original[static_cast<std::size_t>(row / 8 + word)]);
+        }
+        EXPECT_EQ(require_value(reader.find_message(descriptor._name, id._version)), id);
+        EXPECT_EQ(require_value(reader.describe_message(id))._doc, descriptor._doc);
+        EXPECT_EQ(read_image(), original);
+      }
+      fs::remove_all(_directory);
     }
   }
 } // namespace

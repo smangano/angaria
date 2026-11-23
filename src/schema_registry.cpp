@@ -208,7 +208,8 @@ namespace angaria::detail
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_message_descriptor(descriptor));
-      const auto schemas = runtime_schemas(access);
+      const auto fields = runtime_fields(access);
+      const auto schemas = runtime_schemas(access, fields);
       std::uint64_t previous{};
       std::uint64_t previousRevision{};
       for (const auto& schema : schemas)
@@ -235,7 +236,6 @@ namespace angaria::detail
         }
       }
 
-      const auto fields = runtime_fields(access);
       std::set<FieldId> knownFields;
       for (const auto& field : fields)
       {
