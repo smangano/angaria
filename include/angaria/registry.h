@@ -115,6 +115,8 @@ namespace angaria
     // Register an immutable logical Task through a live actor-bound Registry.
     // An exact descriptor returns its existing ID; registration does not attach it.
     Result<TaskId> register_task(const TaskDescriptor& descriptor);
+    // Register draft topology. A Queue's Source membership commits with it;
+    // policy inspection returns resolved values, and exact retries are no-ops.
     Result<SourceQueueSetId> register_source_set(const SourceQueueSetDescriptor& descriptor);
     Result<QueueId> register_queue(const QueueDescriptor& descriptor);
     Result<PublishingQueueSetId> register_publishing_set(const PublishingQueueSetDescriptor& descriptor);

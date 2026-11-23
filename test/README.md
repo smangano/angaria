@@ -15,7 +15,7 @@ A useful reading order is:
 Build instructions are in the [project README](../README.md). Run just the public Session and registration examples with:
 
 ```sh
-ctest --test-dir build -R '^(RuntimeSessionTest|TaskRegistrationTest|SchemaRegistryTest)\.' --output-on-failure
+ctest --test-dir build -R '^(RuntimeSessionTest|TaskRegistrationTest|SchemaRegistryTest|TopologyRegistryTest)\.' --output-on-failure
 ```
 
 The rest of the suite explains the supporting contracts:
@@ -24,6 +24,7 @@ The rest of the suite explains the supporting contracts:
 | --- | --- |
 | [Task registration](test_task_registration.cpp), [process/recovery scenarios](test_task_registration_recovery.cpp) | Logical registration versus native attachment, exact retry, attribution/history, concurrent registrars, stable claim resources, and interrupted outcomes. Fault hooks and sparse-record fixtures are test-only setup. |
 | [Field/schema registration](test_schema_registry.cpp), [process/recovery scenarios](test_schema_recovery.cpp), [portable definitions](test_schema_metadata.cpp) | Full-width application IDs, fixed scalar sizes, immutable version families, ordered Field lists, exact byte budgets, and retained history. Format recognition does not implement payload encoding or unsupported Field representations. |
+| [Draft topology](test_topology_registry.cpp), [process/recovery scenarios](test_topology_recovery.cpp), [portable definitions](test_topology_metadata.cpp) | Register and inspect Queues and both Queue Set kinds, resolve policies, preserve typed shared identities, and commit Source membership atomically. Draft metadata permits Task restart; activation and endpoints remain later work. |
 | [API values](test_api_contract.cpp), [identities](test_identities.cpp), [Fields](test_field.cpp) | Descriptor defaults and capacity setters, distinct IDs, result alternatives, and basic Field serialization. Value construction alone does not exercise delivery or endpoint operations. |
 | [TOML example](test_configuration.cpp) | How the trading configuration is represented and parsed with cpptoml. Semantic loading into a Session follows step 2.10. |
 | [Layout](test_mapped_format.cpp), [superblock](test_mapped_superblock.cpp), [Session/Task bodies](test_session_metadata.cpp), [record lookup](test_runtime_access.cpp) | Capacity accounting, explicit portable encoding, and reuse of validated record boundaries within an operation. Hand-authored byte fixtures check format compatibility independently of production encoders. |

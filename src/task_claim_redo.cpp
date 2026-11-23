@@ -61,6 +61,10 @@ namespace angaria::detail::mapped
 
     std::vector<std::uint64_t> read_words(NativeFile& file, std::uint64_t offset, std::size_t count)
     {
+      if (count == 0)
+      {
+        return {};
+      }
       auto mapping = take(file.map_read_write(offset, count * 8));
       auto bytes = take(mapping.writable_bytes());
       std::vector<std::uint64_t> result;
@@ -85,20 +89,88 @@ namespace angaria::detail::mapped
       return *found;
     }
 
-    bool any_words(NativeFile& file, const SectionLayout& section)
+    bool any_words(std::span<const std::uint64_t> words)
     {
-      for (std::uint64_t row = 0; row != section._count; ++row)
+      return std::any_of(words.begin(), words.end(), [](auto word)
       {
-        const auto words = read_words(file, section._offset + row * section._stride, section._stride / 8);
-        if (std::any_of(words.begin(), words.end(), [](auto word)
-            {
-              return word != 0;
-            }))
+        return word != 0;
+      });
+    }
+
+    void check_draft_topology(NativeFile& file, const FixedLayout& layout, ErrorCode code)
+    {
+      const auto unsupported = code == ErrorCode::IoError ? code : ErrorCode::UnsupportedPolicy;
+      const auto& membership = section(layout, SectionKind::MembershipState, code);
+      const auto membershipWords = read_words(file, membership._offset, membership._byteLength / 8);
+      const auto sets = section(layout, SectionKind::SourceIndex, code)._count +
+                        section(layout, SectionKind::PublishingIndex, code)._count;
+      const auto perSet = sets == 0 ? 0 : membership._count / sets;
+      std::uint64_t group{};
+      for (const auto kind : {SectionKind::QueueIndex, SectionKind::SourceIndex, SectionKind::PublishingIndex})
+      {
+        const auto& index = section(layout, kind, code);
+        const auto stateKind = kind == SectionKind::QueueIndex ? SectionKind::QueueState :
+            kind == SectionKind::SourceIndex ? SectionKind::SourceState : SectionKind::PublishingState;
+        const auto& state = section(layout, stateKind, code);
+        const auto indexes = read_words(file, index._offset, index._byteLength / 8);
+        const auto states = read_words(file, state._offset, state._byteLength / 8);
+        for (std::uint64_t slot = 0; slot != index._count; ++slot)
         {
-          return true;
+          const auto entry = std::span{indexes}.subspan(slot * index._stride / 8, index._stride / 8);
+          const auto words = std::span{states}.subspan(slot * state._stride / 8, state._stride / 8);
+          if (entry[0] == 0)
+          {
+            if (any_words(entry) || any_words(words))
+            {
+              fail(code, "Empty topology slot contains index or runtime state");
+            }
+          }
+          else
+          {
+            if (entry[3] != 1)
+            {
+              fail(unsupported, "Task-only cleanup requires draft topology");
+            }
+            if (entry[0] > 65535 || entry[1] == 0 || entry[2] == 0 ||
+                any_words(std::span{entry}.subspan(4)))
+            {
+              fail(code, "Draft topology index is malformed");
+            }
+            if (kind == SectionKind::PublishingIndex)
+            {
+              if (words[0] == 0 || words[0] > entry[2] || words[1] != entry[1] ||
+                  any_words(std::span{words}.subspan(2)))
+              {
+                fail(unsupported, "Publishing state requires delivery cleanup");
+              }
+            }
+            else if (any_words(words))
+            {
+              fail(unsupported, "Queue or Source state requires delivery cleanup");
+            }
+          }
+          if (kind != SectionKind::QueueIndex)
+          {
+            for (std::uint64_t member = 0; member != perSet; ++member)
+            {
+              const auto row = std::span{membershipWords}.subspan((group * perSet + member) * 4, 4);
+              if (row[0] == 0)
+              {
+                if (any_words(row))
+                {
+                  fail(code, "Empty membership contains state");
+                }
+              }
+              else if (entry[0] == 0 || row[0] > 0xffffff || (row[0] & 0xffff) == 0 || row[1] == 0 ||
+                       row[2] != 0 || row[3] != 0)
+              {
+                fail(unsupported, "Membership contains scheduling or delivery state");
+              }
+            }
+            ++group;
+          }
         }
       }
-      return false;
     }
 
     struct TaskRow
@@ -226,6 +298,23 @@ namespace angaria::detail::mapped
     }
   } // namespace
 
+  OperationResult validate_task_only_topology(NativeFile& file, const FixedLayout& layout, ErrorCode errorCode)
+  {
+    try
+    {
+      check_draft_topology(file, layout, errorCode);
+      return std::monostate{};
+    }
+    catch (const Failure& failure)
+    {
+      return failure._error;
+    }
+    catch (...)
+    {
+      return Error{ErrorCode::IoError, "Unable to inspect draft Task cleanup state", "journal.claims"};
+    }
+  }
+
   Result<std::vector<RedoCommand>> expand_task_claim_commands(
       NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records,
@@ -299,7 +388,8 @@ namespace angaria::detail::mapped
           }
         }
         for (const auto kind : {SectionKind::QueueIndex, SectionKind::SourceIndex,
-                                SectionKind::PublishingIndex, SectionKind::SourceState})
+                                SectionKind::PublishingIndex, SectionKind::QueueState, SectionKind::SourceState,
+                                SectionKind::PublishingState, SectionKind::MembershipState})
         {
           const auto& delivery = section(layout, kind, errorCode);
           if (command._opcode == RedoOpcode::WriteRange && delivery._byteLength != 0 &&
@@ -309,17 +399,10 @@ namespace angaria::detail::mapped
           }
         }
       }
-      for (const auto kind : {SectionKind::QueueIndex, SectionKind::SourceIndex,
-                              SectionKind::PublishingIndex, SectionKind::SourceState})
-      {
-        if (any_words(file, section(layout, kind, errorCode)))
-        {
-          fail(unsupported, "ReleaseClaim delivery cleanup is not implemented for queue or Source state");
-        }
-      }
+      check_draft_topology(file, layout, errorCode);
       if (std::any_of(records.begin(), records.end(), [](const auto& record)
           {
-            return record._envelope._kind == 9;
+            return record._envelope._kind == 8 || record._envelope._kind == 9 || record._envelope._kind == 10;
           }))
       {
         fail(unsupported, "ReleaseClaim receipt cleanup is not implemented");

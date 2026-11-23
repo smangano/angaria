@@ -93,6 +93,8 @@ Each `[[source_sets]]` entry contains the following keys.
 
 Queue declarations provide membership and priority. The loader checks those relationships together. A set owns at most one in-flight delivery under this initial contract, and its owner must acknowledge or release it before receiving another delivery. Separate Source Queue Sets have independent in-flight state.
 
+Step 2.8 implements programmatic draft Queue/Queue Set registration, effective policy inspection, and membership discovery. Source and Publishing names/IDs share one namespace. Creating a Queue in a Source commits both definitions and membership together. Exact retries compare resolved policy values, and a Source retry remains idempotent after Queues join it. The native profile currently accepts strict selection, spin waiting, recovery from log, and all-destination acceptance. Other known policies remain UnsupportedPolicy until their implementation milestones. Drafts may be incomplete for later adoption/source assignment; TOML declarations still require the complete references shown here. Activation follows step 2.9 and the TOML loader remains step 2.10.
+
 ## Queues
 
 Each `[[queues]]` entry contains the following keys.

@@ -1,4 +1,5 @@
 #include "runtime_state.h"
+#include "topology_state.h"
 
 #include "build_version.h"
 #include "native_atomic.h"
@@ -333,6 +334,7 @@ namespace angaria
         RuntimeAccess access(state);
         (void)runtime_session_definition(access);
         (void)runtime_schemas(access);
+        (void)runtime_topology(access);
       }
       return Session{std::move(state)};
     }

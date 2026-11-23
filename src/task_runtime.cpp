@@ -1,4 +1,5 @@
 #include "runtime_state.h"
+#include "task_claim_redo.h"
 
 #include <algorithm>
 #include <array>
@@ -164,40 +165,13 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::IoError, "task.cleanup", "Session has no valid fixed layout");
       }
-      for (const auto& section : layout->_sections)
+      runtime_value(mapped::validate_task_only_topology(*access._file, *layout));
+      for (const auto kind : {8, 9, 10})
       {
-        if (section._kind != mapped::SectionKind::QueueIndex && section._kind != mapped::SectionKind::SourceIndex &&
-            section._kind != mapped::SectionKind::PublishingIndex && section._kind != mapped::SectionKind::SourceState)
+        if (!access.record_references(static_cast<std::uint16_t>(kind)).empty())
         {
-          continue;
+          runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Active ring or publication cleanup is not implemented yet");
         }
-        for (std::uint64_t slot = 0; slot != section._count; ++slot)
-        {
-          const auto words = access.read_words(section._offset + slot * section._stride, section._stride / 8);
-          if (std::any_of(words.begin(), words.end(), [](auto word)
-              {
-                return word != 0;
-              }))
-          {
-            runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Task delivery cleanup is not implemented yet");
-          }
-        }
-      }
-      for (auto offset = layout->_arenaBegin; offset < access._snapshot._tail;)
-      {
-        // The recovered journal already validated these record boundaries. Use
-        // atomic reads for the envelope because its readiness word is live.
-        const auto envelope = access.read_words(offset, 8);
-        if ((envelope[0] & 0xffff) == 9)
-        {
-          runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Task publication receipt cleanup is not implemented yet");
-        }
-        if (envelope[1] < mapped::record_envelope_bytes || envelope[1] % mapped::section_alignment != 0 ||
-            !mapped::contains_range(access._snapshot._tail, offset, envelope[1]))
-        {
-          runtime_fail(ErrorCode::IoError, "task.cleanup", "Invalid committed record boundary");
-        }
-        offset += envelope[1];
       }
     }
 
