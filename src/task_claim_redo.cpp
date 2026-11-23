@@ -2,6 +2,7 @@
 
 #include "native_atomic.h"
 #include "session_metadata.h"
+#include "topology_metadata.h"
 
 #include <algorithm>
 #include <array>
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -97,9 +99,24 @@ namespace angaria::detail::mapped
       });
     }
 
-    void check_draft_topology(NativeFile& file, const FixedLayout& layout, ErrorCode code)
+    void check_idle_topology(NativeFile& file, const FixedLayout& layout,
+                              std::span<const JournalRecordRange> records, ErrorCode code)
     {
       const auto unsupported = code == ErrorCode::IoError ? code : ErrorCode::UnsupportedPolicy;
+      std::map<std::uint64_t, const JournalRecordRange*> rings;
+      std::map<std::uint64_t, const JournalRecordRange*> queueDefinitions;
+      for (const auto& record : records)
+      {
+        if (record._envelope._kind == 8 && !rings.emplace(record._offset, &record).second)
+        {
+          fail(code, "Duplicate ring record boundary");
+        }
+        if (record._envelope._kind == 3)
+        {
+          queueDefinitions.emplace(record._offset, &record);
+        }
+      }
+      std::set<std::uint64_t> ownedRings;
       const auto& membership = section(layout, SectionKind::MembershipState, code);
       const auto membershipWords = read_words(file, membership._offset, membership._byteLength / 8);
       const auto sets = section(layout, SectionKind::SourceIndex, code)._count +
@@ -127,16 +144,59 @@ namespace angaria::detail::mapped
           }
           else
           {
-            if (entry[3] != 1)
+            if (entry[3] != 1 && entry[3] != 2)
             {
-              fail(unsupported, "Task-only cleanup requires draft topology");
+              fail(unsupported, "Task-only cleanup requires known topology state");
             }
             if (entry[0] > 65535 || entry[1] == 0 || entry[2] == 0 ||
                 any_words(std::span{entry}.subspan(4)))
             {
-              fail(code, "Draft topology index is malformed");
+              fail(code, "Topology index is malformed");
             }
-            if (kind == SectionKind::PublishingIndex)
+            std::optional<std::uint64_t> queueCapacity;
+            if (kind == SectionKind::QueueIndex)
+            {
+              const auto record = queueDefinitions.find(entry[1]);
+              if (record == queueDefinitions.end())
+              {
+                fail(code, "Queue index does not reference its committed definition");
+              }
+              std::vector<std::byte> body(static_cast<std::size_t>(record->second->_envelope._immutableBytes));
+              take(file.read_exact(entry[1] + record_envelope_bytes, body));
+              const auto definition = take(decode_queue_definition(body, entry[1]));
+              if (static_cast<std::uint16_t>(definition._id) != entry[0] ||
+                  definition._registration._revision != entry[2] ||
+                  (definition._state == EntityState::Draft ? 1u : 2u) != entry[3])
+              {
+                fail(code, "Queue definition and index disagree during Task cleanup");
+              }
+              queueCapacity = definition._descriptor._ringCapacity;
+            }
+            if (kind == SectionKind::QueueIndex && entry[3] == 2)
+            {
+              const auto ring = rings.find(words[2]);
+              const auto required = ring_storage_bytes(words[3]);
+              if (any_words(words.first(2)) || any_words(words.subspan(4)) ||
+                  ring == rings.end() || !required || queueCapacity != words[3] || !ownedRings.insert(words[2]).second ||
+                  ring->second->_envelope._immutableBytes != 0 ||
+                  ring->second->_envelope._encoding != 1 || ring->second->_envelope._previous != 0 ||
+                  ring->second->_envelope._totalBytes != *required)
+              {
+                fail(unsupported, "Active Queue contains invalid ring geometry or delivery progress");
+              }
+              // Check mutable slots atomically in bounded chunks, including
+              // allocation padding, without allocating a copy of the ring.
+              for (auto offset = words[2] + record_envelope_bytes; offset < words[2] + *required;)
+              {
+                const auto count = std::min<std::uint64_t>(512, (words[2] + *required - offset) / 8);
+                if (any_words(read_words(file, offset, count)))
+                {
+                  fail(unsupported, "Active Queue ring contains delivery state");
+                }
+                offset += count * 8;
+              }
+            }
+            else if (kind == SectionKind::PublishingIndex)
             {
               if (words[0] == 0 || words[0] > entry[2] || words[1] != entry[1] ||
                   any_words(std::span{words}.subspan(2)))
@@ -170,6 +230,10 @@ namespace angaria::detail::mapped
             ++group;
           }
         }
+      }
+      if (ownedRings.size() != rings.size())
+      {
+        fail(unsupported, "A retained ring has no Active Queue owner");
       }
     }
 
@@ -298,11 +362,12 @@ namespace angaria::detail::mapped
     }
   } // namespace
 
-  OperationResult validate_task_only_topology(NativeFile& file, const FixedLayout& layout, ErrorCode errorCode)
+  OperationResult validate_task_only_topology(NativeFile& file, const FixedLayout& layout,
+                                               std::span<const JournalRecordRange> records, ErrorCode errorCode)
   {
     try
     {
-      check_draft_topology(file, layout, errorCode);
+      check_idle_topology(file, layout, records, errorCode);
       return std::monostate{};
     }
     catch (const Failure& failure)
@@ -398,11 +463,19 @@ namespace angaria::detail::mapped
             fail(unsupported, "ReleaseClaim cannot introduce delivery state before its cleanup is implemented");
           }
         }
+        for (const auto& record : records)
+        {
+          if (command._opcode == RedoOpcode::WriteRange && record._envelope._kind == 8 &&
+              command._target < record._offset + record._envelope._totalBytes && *end > record._offset)
+          {
+            fail(unsupported, "Task-only ReleaseClaim cannot change ring slots");
+          }
+        }
       }
-      check_draft_topology(file, layout, errorCode);
+      check_idle_topology(file, layout, records, errorCode);
       if (std::any_of(records.begin(), records.end(), [](const auto& record)
           {
-            return record._envelope._kind == 8 || record._envelope._kind == 9 || record._envelope._kind == 10;
+            return record._envelope._kind == 9 || record._envelope._kind == 10;
           }))
       {
         fail(unsupported, "ReleaseClaim receipt cleanup is not implemented");

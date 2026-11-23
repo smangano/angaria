@@ -8,9 +8,10 @@
 
 namespace angaria::detail::mapped
 {
-  // Draft topology has no deliveries to release. Its reserved progress rows
-  // must still be empty before Task-only cleanup can change a claim.
+  // Topology with no deliveries needs only Task cleanup. Active Queue rings
+  // may exist, but their slots and all reserved delivery progress must be zero.
   OperationResult validate_task_only_topology(NativeFile& file, const FixedLayout& layout,
+                                               std::span<const JournalRecordRange> records,
                                                ErrorCode errorCode = ErrorCode::IoError);
 
   // Expands the Task-only ReleaseClaim subset without changing mapped storage.

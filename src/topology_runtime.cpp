@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
+#include <limits>
 #include <map>
 #include <set>
 #include <span>
@@ -39,7 +39,6 @@ namespace angaria::detail
       std::vector<HistoricalDefinition<Definition>> _records;
       std::map<std::uint16_t, std::size_t> _latest;
       std::map<std::uint16_t, std::uint64_t> _firstRevision;
-      std::map<std::uint16_t, std::vector<std::size_t>> _byId;
     };
 
     void check_policy(const mapped::QueueDefinition& definition)
@@ -72,6 +71,51 @@ namespace angaria::detail
       }
     }
 
+    void check_transition(const mapped::QueueDefinition& old, const mapped::QueueDefinition& definition)
+    {
+      if (old._state == EntityState::Active &&
+          (definition._state != EntityState::Active ||
+           old._descriptor._producer != definition._descriptor._producer ||
+           old._descriptor._sourceSet != definition._descriptor._sourceSet ||
+           old._descriptor._priority != definition._descriptor._priority ||
+           old._descriptor._delivery != definition._descriptor._delivery ||
+           old._descriptor._ringCapacity != definition._descriptor._ringCapacity))
+      {
+        runtime_fail(ErrorCode::IoError, "queue.history", "An active Queue changed its fixed ownership or policy");
+      }
+    }
+
+    void check_transition(const mapped::SourceDefinition& old, const mapped::SourceDefinition& definition)
+    {
+      if (old._state == EntityState::Active &&
+          (definition._state != EntityState::Active ||
+           old._descriptor._owner != definition._descriptor._owner ||
+           old._descriptor._selection != definition._descriptor._selection ||
+           old._descriptor._wait != definition._descriptor._wait ||
+           old._descriptor._randomSeed != definition._descriptor._randomSeed))
+      {
+        runtime_fail(ErrorCode::IoError, "source_set.history", "An active Source changed its fixed ownership or policy");
+      }
+    }
+
+    void check_transition(const mapped::PublishingDefinition& old, const mapped::PublishingDefinition& definition)
+    {
+      if (old._state == EntityState::Active &&
+          (definition._state != EntityState::Active ||
+           old._descriptor._owner != definition._descriptor._owner ||
+           old._descriptor._acceptance != definition._descriptor._acceptance))
+      {
+        runtime_fail(ErrorCode::IoError, "publishing_set.history", "An active Publishing set changed its fixed ownership or policy");
+      }
+      const bool changed = old._descriptor._destinations != definition._descriptor._destinations;
+      if ((changed && (old._topologyRevision == std::numeric_limits<std::uint64_t>::max() ||
+                       definition._topologyRevision != old._topologyRevision + 1)) ||
+          (!changed && definition._topologyRevision != old._topologyRevision))
+      {
+        runtime_fail(ErrorCode::IoError, "publishing_set.topology_revision", "Destination changes do not match the retained topology counter");
+      }
+    }
+
     template <typename Definition, typename Decoder>
     History<Definition> read_history(RuntimeAccess& access, std::uint16_t kind, Decoder decode,
                                       const std::map<TaskId, std::uint64_t>& tasks)
@@ -88,9 +132,9 @@ namespace angaria::detail
         const auto creator = tasks.find(registration._createdBy);
         if (registration._revision != envelope._registryRevision ||
             registration._revision > access._snapshot._revision || creator == tasks.end() ||
-            creator->second > registration._revision || definition._state != EntityState::Draft)
+            creator->second > registration._revision)
         {
-          runtime_fail(ErrorCode::IoError, "topology.definition", "Definition has inconsistent revision, creator, or draft state");
+          runtime_fail(ErrorCode::IoError, "topology.definition", "Definition has inconsistent revision or creator");
         }
         check_policy(definition);
         const auto previous = history._latest.find(id);
@@ -99,6 +143,13 @@ namespace angaria::detail
           if (envelope._previous != 0)
           {
             runtime_fail(ErrorCode::IoError, "topology.previous", "Initial definition has a predecessor");
+          }
+          if constexpr (std::is_same_v<Definition, mapped::PublishingDefinition>)
+          {
+            if (definition._topologyRevision != 1)
+            {
+              runtime_fail(ErrorCode::IoError, "publishing_set.topology_revision", "Initial Publishing topology revision is not one");
+            }
           }
           history._firstRevision.emplace(id, registration._revision);
         }
@@ -114,60 +165,19 @@ namespace angaria::detail
           {
             runtime_fail(ErrorCode::IoError, "topology.previous", "Retained definition chain or creation attribution is inconsistent");
           }
+          check_transition(old, definition);
         }
         history._latest[id] = history._records.size();
-        history._byId[id].push_back(history._records.size());
         history._records.push_back(HistoricalDefinition<Definition>{std::move(definition), reference});
       }
       return history;
     }
 
-    template <typename Definition, typename Id>
-    const Definition& definition_at(const History<Definition>& history, Id id, std::uint64_t revision)
-    {
-      const auto found = history._byId.find(static_cast<std::uint16_t>(id));
-      if (found != history._byId.end())
-      {
-        const auto after = std::upper_bound(found->second.begin(), found->second.end(), revision,
-                                            [&](std::uint64_t value, std::size_t index)
-                                            {
-                                              return value < history._records[index]._definition._registration._revision;
-                                            });
-        if (after != found->second.begin())
-        {
-          return history._records[*std::prev(after)]._definition;
-        }
-      }
-      runtime_fail(ErrorCode::IoError, "topology.reference", "Historical relationship names an entity absent at that revision");
-    }
-
-    template <typename Definition, typename Check>
-    void each_committed_revision(const History<Definition>& history, Check check)
-    {
-      for (const auto& group : history._byId)
-      {
-        const auto& indexes = group.second;
-        const Definition* previous{};
-        for (std::size_t position = 0; position < indexes.size(); ++position)
-        {
-          const auto& definition = history._records[indexes[position]]._definition;
-          if (position + 1 < indexes.size() &&
-              history._records[indexes[position + 1]]._definition._registration._revision == definition._registration._revision)
-          {
-            continue;
-          }
-          // Several retained records can belong to one atomic batch. Compare
-          // only its final definition with the preceding committed revision.
-          check(definition, previous);
-          previous = &definition;
-        }
-      }
-    }
-
     template <typename Loaded, typename Definition>
     std::vector<Loaded> current_definitions(RuntimeAccess& access, const History<Definition>& history,
                                             mapped::SectionKind indexKind, mapped::SectionKind stateKind,
-                                            std::uint64_t capacity, std::uint64_t stateBytes)
+                                            std::uint64_t capacity, std::uint64_t stateBytes,
+                                            std::map<QueueId, std::uint64_t>* ringReferences = nullptr)
     {
       const auto indexBegin = access.section_offset(indexKind);
       const auto stateBegin = access.section_offset(stateKind);
@@ -190,7 +200,7 @@ namespace angaria::detail
           continue;
         }
         if (row[0] > mapped::max_entity_id || row[1] == 0 || row[2] == 0 ||
-            row[2] > access._snapshot._revision || row[3] != 1 || !all_zero(row.subspan(4)))
+            row[2] > access._snapshot._revision || (row[3] != 1 && row[3] != 2) || !all_zero(row.subspan(4)))
         {
           runtime_fail(ErrorCode::IoError, "topology.index", "Invalid topology identity, revision, state, or reserved data");
         }
@@ -201,7 +211,8 @@ namespace angaria::detail
           runtime_fail(ErrorCode::IoError, "topology.index", "Duplicate or unknown topology identity");
         }
         const auto& latest = history._records[found->second];
-        if (row[1] != latest._reference || row[2] != latest._definition._registration._revision)
+        if (row[1] != latest._reference || row[2] != latest._definition._registration._revision ||
+            row[3] != (latest._definition._state == EntityState::Draft ? 1u : 2u))
         {
           runtime_fail(ErrorCode::IoError, "topology.index", "Topology index does not reference its latest retained definition");
         }
@@ -209,12 +220,31 @@ namespace angaria::detail
         {
           if (state[0] != latest._definition._topologyRevision || state[1] != latest._reference || !all_zero(state.subspan(2)))
           {
-            runtime_fail(ErrorCode::IoError, "publishing_set.state", "Draft Publishing snapshot state is inconsistent");
+            runtime_fail(ErrorCode::IoError, "publishing_set.state", "Publishing snapshot state is inconsistent");
+          }
+        }
+        else if constexpr (std::is_same_v<Definition, mapped::QueueDefinition>)
+        {
+          if (latest._definition._state == EntityState::Draft)
+          {
+            if (!all_zero(state))
+            {
+              runtime_fail(ErrorCode::IoError, "queue.state", "Draft Queue contains endpoint or ring state");
+            }
+          }
+          else
+          {
+            if (state[0] != 0 || state[1] != 0 || state[2] == 0 ||
+                state[3] != latest._definition._descriptor._ringCapacity || !all_zero(state.subspan(4)))
+            {
+              runtime_fail(ErrorCode::IoError, "queue.state", "Active Queue has invalid ring geometry or unsupported delivery state");
+            }
+            ringReferences->emplace(latest._definition._id, state[2]);
           }
         }
         else if (!all_zero(state))
         {
-          runtime_fail(ErrorCode::IoError, "topology.state", "Draft Queue or Source contains endpoint, ring, or scheduling state");
+          runtime_fail(ErrorCode::IoError, "source_set.state", "Source contains unsupported endpoint or scheduling state");
         }
         loaded.push_back(Loaded{latest._definition, latest._reference,
             indexBegin + slot * mapped::index_entry_bytes, stateBegin + slot * stateBytes, slot});
@@ -275,6 +305,258 @@ namespace angaria::detail
         }
       }
     }
+
+    template <typename Id, typename Definition>
+    const Definition& effective_definition(const std::map<Id, const Definition*>& definitions,
+                                            Id id, const char* path)
+    {
+      const auto found = definitions.find(id);
+      if (found == definitions.end())
+      {
+        runtime_fail(ErrorCode::IoError, path, "Historical relationship names an entity absent at that revision");
+      }
+      return *found->second;
+    }
+
+    struct RevisionChanges
+    {
+      std::map<QueueId, const mapped::QueueDefinition*> _queues;
+      std::map<SourceQueueSetId, const mapped::SourceDefinition*> _sources;
+      std::map<PublishingQueueSetId, const mapped::PublishingDefinition*> _publishing;
+    };
+
+    // Replay only definition changes, not every entity at every revision. Each
+    // batch installs its final per-entity definitions before checking references,
+    // so physical order and intermediate same-revision records are invisible.
+    std::map<QueueId, std::uint64_t> check_historical_topology(
+        const History<mapped::QueueDefinition>& queues,
+        const History<mapped::SourceDefinition>& sources,
+        const History<mapped::PublishingDefinition>& publishing,
+        const std::map<TaskId, std::uint64_t>& tasks, std::uint32_t capacity)
+    {
+      std::map<std::uint64_t, RevisionChanges> revisions;
+      std::unordered_map<const mapped::SourceDefinition*, std::unordered_set<QueueId>> members;
+      for (const auto& entry : queues._records)
+      {
+        const auto& definition = entry._definition;
+        const auto revision = definition._registration._revision;
+        check_task(definition._descriptor._producer, revision, tasks);
+        if (definition._descriptor._sourceSet != SourceQueueSetId::Invalid)
+        {
+          check_reference(definition._descriptor._sourceSet, revision, sources._firstRevision, "queue.source_set");
+        }
+        revisions[revision]._queues[definition._id] = &definition;
+      }
+      for (const auto& entry : sources._records)
+      {
+        const auto& definition = entry._definition;
+        const auto revision = definition._registration._revision;
+        check_task(definition._descriptor._owner, revision, tasks);
+        if (definition._members.size() > capacity)
+        {
+          runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source membership exceeds the session capacity");
+        }
+        for (const auto member : definition._members)
+        {
+          check_reference(member, revision, queues._firstRevision, "source_set.members");
+        }
+        members.emplace(&definition, std::unordered_set<QueueId>{definition._members.begin(), definition._members.end()});
+        revisions[revision]._sources[definition._id] = &definition;
+      }
+      for (const auto& entry : publishing._records)
+      {
+        const auto& definition = entry._definition;
+        const auto revision = definition._registration._revision;
+        check_task(definition._descriptor._owner, revision, tasks);
+        if (definition._descriptor._destinations.size() > capacity)
+        {
+          runtime_fail(ErrorCode::IoError, "publishing_set.destinations", "Historical Publishing membership exceeds the session capacity");
+        }
+        for (const auto member : definition._descriptor._destinations)
+        {
+          check_reference(member, revision, queues._firstRevision, "publishing_set.destinations");
+        }
+        revisions[revision]._publishing[definition._id] = &definition;
+      }
+
+      std::map<QueueId, const mapped::QueueDefinition*> effectiveQueues;
+      std::map<SourceQueueSetId, const mapped::SourceDefinition*> effectiveSources;
+      std::map<PublishingQueueSetId, const mapped::PublishingDefinition*> effectivePublishing;
+      std::map<QueueId, std::set<PublishingQueueSetId>> publishers;
+      std::map<QueueId, std::uint64_t> firstActivation;
+      const auto check_publishing = [&](const mapped::PublishingDefinition& definition)
+      {
+        for (const auto destination : definition._descriptor._destinations)
+        {
+          const auto& queue = effective_definition(effectiveQueues, destination, "publishing_set.destinations");
+          if (definition._descriptor._owner == TaskId::Invalid ||
+              queue._descriptor._producer != definition._descriptor._owner ||
+              (definition._state == EntityState::Active && queue._state != EntityState::Active))
+          {
+            runtime_fail(ErrorCode::IoError, "publishing_set.destinations", "Historical Publishing destination ownership or activation is inconsistent");
+          }
+        }
+      };
+      for (const auto& [revision, changes] : revisions)
+      {
+        const auto previousQueues = [&]
+        {
+          std::map<QueueId, const mapped::QueueDefinition*> previous;
+          for (const auto& [id, definition] : changes._queues)
+          {
+            const auto old = effectiveQueues.find(id);
+            previous.emplace(id, old == effectiveQueues.end() ? nullptr : old->second);
+            effectiveQueues[id] = definition;
+          }
+          return previous;
+        }();
+        const auto previousSources = [&]
+        {
+          std::map<SourceQueueSetId, const mapped::SourceDefinition*> previous;
+          for (const auto& [id, definition] : changes._sources)
+          {
+            const auto old = effectiveSources.find(id);
+            previous.emplace(id, old == effectiveSources.end() ? nullptr : old->second);
+            effectiveSources[id] = definition;
+          }
+          return previous;
+        }();
+        for (const auto& [id, definition] : changes._publishing)
+        {
+          const auto previous = effectivePublishing.find(id);
+          if (previous != effectivePublishing.end())
+          {
+            for (const auto destination : previous->second->_descriptor._destinations)
+            {
+              publishers[destination].erase(id);
+            }
+          }
+          effectivePublishing[id] = definition;
+          for (const auto destination : definition->_descriptor._destinations)
+          {
+            publishers[destination].insert(id);
+          }
+        }
+        for (const auto& [id, definition] : changes._sources)
+        {
+          for (const auto member : definition->_members)
+          {
+            const auto& queue = effective_definition(effectiveQueues, member, "source_set.members");
+            if (queue._descriptor._sourceSet != id ||
+                (definition->_state == EntityState::Active && queue._descriptor._producer == TaskId::Invalid))
+            {
+              runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source membership or active Queue completeness is inconsistent");
+            }
+          }
+          const auto* previous = previousSources.at(id);
+          if (previous)
+          {
+            const auto& currentMembers = members.at(definition);
+            for (const auto removed : previous->_members)
+            {
+              if (!currentMembers.contains(removed) &&
+                  effective_definition(effectiveQueues, removed, "source_set.members")._descriptor._sourceSet == id)
+              {
+                runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source removed a Queue still assigned to it");
+              }
+            }
+          }
+        }
+        for (const auto& [id, definition] : changes._queues)
+        {
+          const auto sourceId = definition->_descriptor._sourceSet;
+          if (sourceId != SourceQueueSetId::Invalid)
+          {
+            const auto& source = effective_definition(effectiveSources, sourceId, "queue.source_set");
+            if (!members.at(&source).contains(id) ||
+                (source._state == EntityState::Active && definition->_descriptor._producer == TaskId::Invalid) ||
+                (definition->_state == EntityState::Active && source._state != EntityState::Active))
+            {
+              runtime_fail(ErrorCode::IoError, "queue.source_set", "Historical Queue assignment or Source activation is inconsistent");
+            }
+          }
+          if (definition->_state == EntityState::Active)
+          {
+            // The portable decoder requires nonzero producer/source identities.
+            firstActivation.try_emplace(id, revision);
+          }
+          const auto* previous = previousQueues.at(id);
+          if (previous && previous->_descriptor._sourceSet != SourceQueueSetId::Invalid &&
+              previous->_descriptor._sourceSet != sourceId)
+          {
+            const auto& oldSource = effective_definition(effectiveSources, previous->_descriptor._sourceSet, "queue.source_set");
+            if (members.at(&oldSource).contains(id))
+            {
+              runtime_fail(ErrorCode::IoError, "queue.source_set", "Historical Queue remains listed in its former Source");
+            }
+          }
+          if (previous && previous->_descriptor._producer != definition->_descriptor._producer)
+          {
+            // A Queue owner change must also preserve every Publishing set
+            // currently referencing it, even when that set has no new record.
+            const auto references = publishers.find(id);
+            if (references != publishers.end())
+            {
+              for (const auto publisher : references->second)
+              {
+                const auto& set = effective_definition(effectivePublishing, publisher, "publishing_set.destinations");
+                if (set._descriptor._owner == TaskId::Invalid || set._descriptor._owner != definition->_descriptor._producer)
+                {
+                  runtime_fail(ErrorCode::IoError, "queue.producer", "Historical Queue ownership invalidates a Publishing reference");
+                }
+              }
+            }
+          }
+        }
+        for (const auto& [id, definition] : changes._publishing)
+        {
+          (void)id;
+          check_publishing(*definition);
+        }
+      }
+      return firstActivation;
+    }
+
+    void check_rings(RuntimeAccess& access, const TopologySnapshot& topology,
+                       const std::map<QueueId, std::uint64_t>& references,
+                       const std::map<QueueId, std::uint64_t>& firstActivation)
+    {
+      std::set<std::uint64_t> owned;
+      for (const auto& queue : topology._queues)
+      {
+        if (queue._definition._state != EntityState::Active)
+        {
+          continue;
+        }
+        const auto reference = references.at(queue._definition._id);
+        const auto& envelope = access.record_envelope(reference, 8);
+        const auto expected = mapped::ring_storage_bytes(*queue._definition._descriptor._ringCapacity);
+        if (!owned.insert(reference).second || envelope._encoding != 1 || envelope._immutableBytes != 0 ||
+            envelope._previous != 0 || !expected || envelope._totalBytes != *expected ||
+            envelope._registryRevision != firstActivation.at(queue._definition._id))
+        {
+          runtime_fail(ErrorCode::IoError, "queue.ring", "Active Queue ring ownership, geometry, or activation revision is inconsistent");
+        }
+        // Ring slots and allocation padding are mutable words. Read bounded
+        // batches atomically under the gate, without a mapping per word.
+        const auto words = (envelope._totalBytes - mapped::record_envelope_bytes) / 8;
+        for (std::uint64_t offset = 0; offset < words;)
+        {
+          const auto count = std::min<std::uint64_t>(words - offset, 4096);
+          if (!all_zero(access.read_words(reference + mapped::record_envelope_bytes + offset * 8,
+                                           static_cast<std::size_t>(count))))
+          {
+            runtime_fail(ErrorCode::IoError, "queue.ring", "Ring contains unsupported delivery state");
+          }
+          offset += count;
+        }
+      }
+      const auto retained = access.record_references(8);
+      if (std::vector<std::uint64_t>{owned.begin(), owned.end()} != retained)
+      {
+        runtime_fail(ErrorCode::IoError, "queue.ring", "Retained ring storage has no unique active Queue owner");
+      }
+    }
   } // namespace
 
   TopologySnapshot runtime_topology(RuntimeAccess& access)
@@ -290,8 +572,13 @@ namespace angaria::detail
     const auto sources = read_history<mapped::SourceDefinition>(access, 4, mapped::decode_source_definition, tasks);
     const auto publishing = read_history<mapped::PublishingDefinition>(access, 5, mapped::decode_publishing_definition, tasks);
     const auto& limits = access._session->_controller->configuration()._limits;
+    if (!access.record_references(9).empty() || !access.record_references(10).empty())
+    {
+      runtime_fail(ErrorCode::UnsupportedPolicy, "topology.delivery", "Publication and retry delivery state are not implemented by this native profile");
+    }
+    std::map<QueueId, std::uint64_t> ringReferences;
     topology._queues = current_definitions<LoadedQueue>(access, queues, mapped::SectionKind::QueueIndex,
-        mapped::SectionKind::QueueState, limits._queues, mapped::queue_state_bytes);
+        mapped::SectionKind::QueueState, limits._queues, mapped::queue_state_bytes, &ringReferences);
     topology._sources = current_definitions<LoadedSource>(access, sources, mapped::SectionKind::SourceIndex,
         mapped::SectionKind::SourceState, limits._sourceSets, mapped::source_state_bytes);
     topology._publishing = current_definitions<LoadedPublishing>(access, publishing, mapped::SectionKind::PublishingIndex,
@@ -379,98 +666,8 @@ namespace angaria::detail
       }
     }
 
-    // Validate references in retained revisions as well as the latest roots.
-    // Equal Registry revisions allow logically atomic batches in either record
-    // order; a reference need only exist by that batch's registration revision.
-    std::unordered_map<const mapped::SourceDefinition*, std::unordered_set<QueueId>> historicalMembers;
-    for (const auto& entry : sources._records)
-    {
-      const auto& definition = entry._definition;
-      if (definition._members.size() > limits._membershipsPerSet)
-      {
-        runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source membership exceeds the session capacity");
-      }
-      historicalMembers.emplace(&definition,
-          std::unordered_set<QueueId>{definition._members.begin(), definition._members.end()});
-    }
-    for (const auto& entry : queues._records)
-    {
-      const auto& definition = entry._definition;
-      check_task(definition._descriptor._producer, definition._registration._revision, tasks);
-      if (definition._descriptor._sourceSet != SourceQueueSetId::Invalid)
-      {
-        check_reference(definition._descriptor._sourceSet, definition._registration._revision,
-                        sources._firstRevision, "queue.source_set");
-        const auto& source = definition_at(sources, definition._descriptor._sourceSet, definition._registration._revision);
-        if (!historicalMembers.at(&source).contains(definition._id))
-        {
-          runtime_fail(ErrorCode::IoError, "queue.source_set", "Historical Queue assignment has no matching Source membership");
-        }
-      }
-    }
-    for (const auto& entry : sources._records)
-    {
-      const auto& definition = entry._definition;
-      check_task(definition._descriptor._owner, definition._registration._revision, tasks);
-      for (const auto member : definition._members)
-      {
-        check_reference(member, definition._registration._revision, queues._firstRevision, "source_set.members");
-        if (definition_at(queues, member, definition._registration._revision)._descriptor._sourceSet != definition._id)
-        {
-          runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source membership disagrees with its Queue assignment");
-        }
-      }
-    }
-    // A later restoration cannot make an earlier omission consistent. At every
-    // Source change, removed members must also be unassigned (or reassigned) in
-    // the Queue definition effective at that same committed revision.
-    each_committed_revision(sources, [&](const auto& definition, const auto* previous)
-    {
-      if (previous)
-      {
-        const auto& members = historicalMembers.at(&definition);
-        for (const auto removed : previous->_members)
-        {
-          if (!members.contains(removed) &&
-              definition_at(queues, removed, definition._registration._revision)._descriptor._sourceSet == definition._id)
-          {
-            runtime_fail(ErrorCode::IoError, "source_set.members", "Historical Source removed a Queue still assigned to it");
-          }
-        }
-      }
-    });
-    // The converse transition matters too: changing a Queue must remove it
-    // from its old Source immediately, rather than in some later revision.
-    each_committed_revision(queues, [&](const auto& definition, const auto* previous)
-    {
-      if (previous && previous->_descriptor._sourceSet != SourceQueueSetId::Invalid &&
-          previous->_descriptor._sourceSet != definition._descriptor._sourceSet)
-      {
-        const auto& source = definition_at(sources, previous->_descriptor._sourceSet, definition._registration._revision);
-        if (historicalMembers.at(&source).contains(definition._id))
-        {
-          runtime_fail(ErrorCode::IoError, "queue.source_set", "Historical Queue remains listed in its former Source");
-        }
-      }
-    });
-    for (const auto& entry : publishing._records)
-    {
-      const auto& definition = entry._definition;
-      if (definition._descriptor._destinations.size() > limits._membershipsPerSet)
-      {
-        runtime_fail(ErrorCode::IoError, "publishing_set.destinations", "Historical Publishing membership exceeds the session capacity");
-      }
-      check_task(definition._descriptor._owner, definition._registration._revision, tasks);
-      for (const auto member : definition._descriptor._destinations)
-      {
-        check_reference(member, definition._registration._revision, queues._firstRevision, "publishing_set.destinations");
-        if (definition._descriptor._owner == TaskId::Invalid ||
-            definition_at(queues, member, definition._registration._revision)._descriptor._producer != definition._descriptor._owner)
-        {
-          runtime_fail(ErrorCode::IoError, "publishing_set.destinations", "Historical Publishing destination ownership is inconsistent");
-        }
-      }
-    }
+    const auto firstActivation = check_historical_topology(queues, sources, publishing, tasks, limits._membershipsPerSet);
+    check_rings(access, topology, ringReferences, firstActivation);
     for (const auto& queue : topology._queues)
     {
       const auto sourceId = queue._definition._descriptor._sourceSet;

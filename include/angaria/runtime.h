@@ -92,6 +92,8 @@ namespace angaria
 
     TaskClaim claim() const;
     Registry registry() const;
+    // Open identity/ownership handles for Active entities. Handles retain this
+    // Task's claim; Source openings are exclusive within the claim.
     Result<QueueWriter> open_writer(QueueId queue);
     Result<SourceQueueSet> open_source_set(SourceQueueSetId source);
     Result<PublishingQueueSet> open_publishing_set(PublishingQueueSetId publisher);

@@ -41,7 +41,7 @@ Milestone 2 integrates configuration loading and semantic validation with the Re
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, Task claims, and publication identity issuance are implemented. Queues and Queue Sets currently remain draft; activation follows in the remaining [milestone 2 steps](docs/milestones/milestone-2.md).
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, and publication identity issuance are implemented. Message delivery and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Publication, delivery, and notification behavior follow in their implementation milestones.
 
@@ -60,6 +60,8 @@ Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registratio
 Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; payload encoding, other Field representations, and TOML loading follow their roadmap steps.
 
 Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-and-queue-sets), shared typed Queue Set identities, ownership checks, and atomic Source membership registration. Independent-process tests exercise discovery, concurrent registration, and interrupted multi-record updates. Activation, ring allocation, and endpoints follow their roadmap steps.
+
+Step 2.9 adds [adoption, topology changes, and activation](docs/native-storage.md#topology-changes-and-activation). Queue activation reserves a zeroed ring atomically with its Active definition. Endpoint handles expose identities and retain Task ownership; a Source opening is exclusive within that claim. Sending, receiving, acknowledgment, and publishing follow their implementation milestones.
 
 ## Run the restart walkthrough
 

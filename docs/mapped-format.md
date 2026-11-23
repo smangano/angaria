@@ -182,6 +182,8 @@ The 32-byte symbol row reserves ID (`u32`), flags (`u32`), value reference (`u64
 
 A two-plane ring allocation has a 64-byte record envelope followed by `ring_capacity` slots of 32 bytes, rounded up to 64 bytes. Each slot contains `queue_sequence:u64`, `delivery_link:u64`, `publication_ref:u64`, and `generation/state:u64`. A ring slot is an index into retained history. Its overwrite is neither an acknowledgment nor permission to reclaim a pinned payload. Recover-from-log queues reconstruct missing entries from retained delivery links and receipts. Allow-loss queues use overwritten sequence ranges while preserving an already issued pin.
 
+Step 2.9 allocates the initial ring in the Queue activation batch. Its immutable body is empty, predecessor is zero, and associated Registry revision is the Queue's first Active definition revision. The Queue state row stores its reference at byte 16 and resolved capacity at byte 24; every other word remains zero. Ring slots and allocation padding are zero until delivery is implemented. Each retained ring has exactly one Active Queue owner. Source runtime rows remain zero, and Publishing rows retain only topology revision/current definition reference. Active state uses wire code 2 in both definition and index; all creation attribution stays unchanged across revisions.
+
 Segmented storage has no ring-overwrite boundary. Under this initial contract it grows until the session byte cap, where new publications return `LogFull`; `allow_loss` does not introduce implicit eviction. Both delivery policies preserve pending deliveries in that mapping. A future eviction policy would need an explicit boundary, gap semantics, and feature negotiation.
 
 A Publication's immutable region starts with a 128-byte body:

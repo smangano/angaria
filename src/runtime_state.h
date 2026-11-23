@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <set>
 #include <span>
 #include <string>
 #include <thread>
@@ -58,6 +60,8 @@ namespace angaria::detail
     TaskKind _kind{TaskKind::Process};
     std::thread::id _thread;
     std::atomic<bool> _attached{false};
+    std::mutex _endpointMutex;
+    std::set<SourceQueueSetId> _openSources;
   };
 
   inline constexpr std::uint64_t session_ready_flag = 1;

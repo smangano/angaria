@@ -10,12 +10,13 @@ A useful reading order is:
 4. `PublicationIdsPersistWithinAClaimAndResetOnlyWithANewIncarnation`: issue IDs and observe the identity boundary at Task replacement. This does not send a publication.
 5. `ThreadTasksRequireAndRetainTheirParentAndRejectOtherThreads`: register children through the creator's public Registry, then understand parent retention and attaching-thread affinity.
 6. `RegistersScalarFieldsWithFullWidthApplicationIdentities` and `RetainsExactVersionsOrderedRepetitionsAndEmptyControlSchemas`: register fixed-width Fields and exact schema versions without confusing IDs, versions, and index slots. `LargeFieldListsPreserveEveryFullWidthReference` demonstrates the count/identity widths independently.
-7. The concurrent registration, coordinated replacement/status, termination, full-log, and malformed-state scenarios: understand recovery and rejection guarantees after learning normal use.
+7. [Topology activation](test_topology_activation.cpp) and [endpoint lifetimes](test_endpoint_runtime.cpp): complete drafts, activate Source/Queue/Publishing resources in order, and understand which handles retain ownership. These examples stop at identity handles, before payload delivery.
+8. The concurrent registration, coordinated replacement/status, termination, full-log, and malformed-state scenarios: understand recovery and rejection guarantees after learning normal use.
 
 Build instructions are in the [project README](../README.md). Run just the public Session and registration examples with:
 
 ```sh
-ctest --test-dir build -R '^(RuntimeSessionTest|TaskRegistrationTest|SchemaRegistryTest|TopologyRegistryTest)\.' --output-on-failure
+ctest --test-dir build -R '^(RuntimeSessionTest|TaskRegistrationTest|SchemaRegistryTest|TopologyRegistryTest|TopologyActivationTest|EndpointRuntimeTest)\.' --output-on-failure
 ```
 
 The rest of the suite explains the supporting contracts:
@@ -25,6 +26,7 @@ The rest of the suite explains the supporting contracts:
 | [Task registration](test_task_registration.cpp), [process/recovery scenarios](test_task_registration_recovery.cpp) | Logical registration versus native attachment, exact retry, attribution/history, concurrent registrars, stable claim resources, and interrupted outcomes. Fault hooks and sparse-record fixtures are test-only setup. |
 | [Field/schema registration](test_schema_registry.cpp), [process/recovery scenarios](test_schema_recovery.cpp), [portable definitions](test_schema_metadata.cpp) | Full-width application IDs, fixed scalar sizes, immutable version families, ordered Field lists, exact byte budgets, and retained history. Format recognition does not implement payload encoding or unsupported Field representations. |
 | [Draft topology](test_topology_registry.cpp), [process/recovery scenarios](test_topology_recovery.cpp), [portable definitions](test_topology_metadata.cpp) | Register and inspect Queues and both Queue Set kinds, resolve policies, preserve typed shared identities, and commit Source membership atomically. Draft metadata permits Task restart; activation and endpoints remain later work. |
+| [Activation and updates](test_topology_activation.cpp), [endpoint ownership](test_endpoint_runtime.cpp), [process/recovery scenarios](test_activation_recovery.cpp) | Complete draft topology, activate resources atomically, preserve history and active ownership, and retain Task claims through endpoint identity handles. These tests do not send or receive payloads. |
 | [API values](test_api_contract.cpp), [identities](test_identities.cpp), [Fields](test_field.cpp) | Descriptor defaults and capacity setters, distinct IDs, result alternatives, and basic Field serialization. Value construction alone does not exercise delivery or endpoint operations. |
 | [TOML example](test_configuration.cpp) | How the trading configuration is represented and parsed with cpptoml. Semantic loading into a Session follows step 2.10. |
 | [Layout](test_mapped_format.cpp), [superblock](test_mapped_superblock.cpp), [Session/Task bodies](test_session_metadata.cpp), [record lookup](test_runtime_access.cpp) | Capacity accounting, explicit portable encoding, and reuse of validated record boundaries within an operation. Hand-authored byte fixtures check format compatibility independently of production encoders. |
