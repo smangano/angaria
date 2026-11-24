@@ -89,7 +89,7 @@ Completion requires a reviewed public API example for a bounded multi-process ap
 
 ## 2 Shared persistent Registry
 
-Under implementation. The [milestone 2 review plan](docs/milestones/milestone-2.md) divides the work into eleven focused step PRs targeting `milestone-2`, beginning with the format-2 binary foundation in step 2.1.
+The final qualification step is under review. The [milestone 2 review plan](docs/milestones/milestone-2.md) divides the work into eleven focused step PRs targeting `milestone-2`, from the format-2 foundation through consistent historical snapshots and the [independent-process Registry walkthrough](docs/registry-walkthrough.md). After step 2.11 merges, a separate PR integrates the milestone into `main`.
 
 - Implement the live Registry in shared mapped memory and place its persisted representation at the start of message logs.
 - Implement registration and lookup for Tasks, Queues, Source Queue Sets, Publishing Queue Sets, Messages, schema versions, and Fields.

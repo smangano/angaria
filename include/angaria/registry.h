@@ -5,7 +5,9 @@
 #include "angaria/descriptors.h"
 #include "angaria/results.h"
 #include <boost/interprocess/sync/named_mutex.hpp>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <span>
@@ -139,6 +141,13 @@ namespace angaria
     Result<FieldDescriptor> describe_field(FieldId id) const;
     Result<MessageDescriptor> describe_message(SchemaId id) const;
     Result<std::vector<QueueId>> source_members(SourceQueueSetId id) const;
+
+    // Copy one coherent catalog under the mutation gate. Omission selects the
+    // current revision; 1..current select retained final definitions at that
+    // Registry revision. Zero is InvalidArgument and a future cut is NotFound.
+    // Session views may inspect without claiming a Task. Validation/recovery
+    // can still write the Session; this is not a read-only file-open operation.
+    Result<RegistrySnapshot> snapshot(std::optional<std::uint64_t> revision = std::nullopt) const;
 
     Result<RegistrationMetadata> metadata(TaskId id) const;
     Result<RegistrationMetadata> metadata(QueueId id) const;

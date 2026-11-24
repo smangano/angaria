@@ -1,0 +1,55 @@
+name: Native profile qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native-profile:
+    name: ${{ matrix.profile }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: Linux ARM64
+            runner: ubuntu-24.04-arm
+            architecture: aarch64
+          - profile: macOS ARM64
+            runner: macos-15
+            architecture: arm64
+          - profile: macOS x86_64
+            runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check native architecture
+        env:
+          ANGARIA_EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          uname -sm
+          test "$(uname -m)" = "$ANGARIA_EXPECTED_ARCH"
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libboost-dev libgtest-dev python3
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install boost googletest
+      - name: Configure Linux
+        if: runner.os == 'Linux'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Configure macOS
+        if: runner.os == 'macOS'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+      - name: Build
+        run: cmake --build build --parallel 3
+      - name: Run native tests and walkthroughs
+        run: ctest --test-dir build --output-on-failure

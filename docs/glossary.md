@@ -52,6 +52,8 @@ The [native storage contract](native-storage.md) defines file/mapping ownership,
 | Term | Meaning in Angaria |
 | --- | --- |
 | **Task claim** | An exclusive attachment to a logical Task, retained by its Task handle and dependent endpoints or actor-bound Registry views. OS ownership and a recorded incarnation distinguish a live owner from an earlier attachment. |
+| **Registry snapshot** | An owning copy of every entity definition at one committed Registry revision, captured under one mutation gate. It includes topology states and relationships, but not historical Task attachment diagnostics. |
+| **Historical cut** | The final Registry definitions visible at a chosen committed revision. All changes within that revision's atomic batch appear together; later registrations and revisions are absent. |
 | **Bootstrap** | Initializing a new session's storage, creator Task, metadata, and starting state before making the session available for use. |
 | **Incarnation** | The generation of a Task attachment. Reattachment advances it so identities and tokens from an older claim remain distinguishable. |
 | **Session bootstrap** | Creation of the initial Session definition, creator Task registration, and creator claim before the initialized session directory becomes visible at the requested path. The Session flags word records completion. |

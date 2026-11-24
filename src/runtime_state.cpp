@@ -299,6 +299,7 @@ namespace angaria::detail
     std::vector<LoadedTask> tasks;
     std::map<TaskId, TaskKind> kinds;
     std::set<std::string> names;
+    std::set<std::uint64_t> definitions;
     for (std::size_t slot = 0; slot < capacity; ++slot)
     {
       const auto row = std::span{words}.subspan(slot * 8, 8);
@@ -329,27 +330,46 @@ namespace angaria::detail
       auto definition = runtime_value(mapped::decode_task_definition(access.immutable_record(row[1], 2), row[1]));
       if (static_cast<std::uint16_t>(definition._id) != row[0] || definition._registration._revision != row[2] ||
           access.record_envelope(row[1], 2)._registryRevision != row[2] ||
+          access.record_envelope(row[1], 2)._previous != 0 ||
           !kinds.emplace(definition._id, definition._descriptor._kind).second ||
-          !names.insert(definition._descriptor._name).second)
+          !names.insert(definition._descriptor._name).second || !definitions.insert(row[1]).second)
       {
         runtime_fail(ErrorCode::IoError, "task.index", "Task index disagrees with unique registered definitions");
       }
       runtime_validate_task_state(state, definition._descriptor._kind);
       tasks.push_back(LoadedTask{std::move(definition), row[1], states + slot * mapped::task_state_bytes});
     }
+    // Task definitions are immutable and never reclaimed. Every committed
+    // definition must still have its unique index row, including at old cuts.
+    const auto retained = access.record_references(2);
+    if (retained.size() != definitions.size() ||
+        std::any_of(retained.begin(), retained.end(), [&](auto reference)
+        {
+          return !definitions.contains(reference);
+        }))
+    {
+      runtime_fail(ErrorCode::IoError, "task.index", "Task index does not cover every retained definition");
+    }
+    std::map<TaskId, std::uint64_t> registered;
+    for (const auto& task : tasks)
+    {
+      registered.emplace(task._definition._id, task._definition._registration._revision);
+    }
     for (const auto& task : tasks)
     {
       const auto& definition = task._definition;
-      if (!kinds.contains(definition._registration._createdBy))
+      const auto creator = registered.find(definition._registration._createdBy);
+      if (creator == registered.end() || creator->second > definition._registration._revision)
       {
-        runtime_fail(ErrorCode::IoError, "task.created_by", "Task registration names an unknown creator");
+        runtime_fail(ErrorCode::IoError, "task.created_by", "Task creator did not exist at its registration revision");
       }
       if (definition._descriptor._kind == TaskKind::Thread)
       {
         const auto parent = kinds.find(*definition._descriptor._process);
-        if (parent == kinds.end() || parent->second != TaskKind::Process)
+        if (parent == kinds.end() || parent->second != TaskKind::Process ||
+            registered.at(parent->first) > definition._registration._revision)
         {
-          runtime_fail(ErrorCode::IoError, "task.process", "Thread Task parent is not a registered Process Task");
+          runtime_fail(ErrorCode::IoError, "task.process", "Thread parent was not a Process Task at its registration revision");
         }
       }
     }

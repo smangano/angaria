@@ -12,7 +12,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through seven runnable programs, from creating a Session to configuring fan-out, opening endpoints in separate processes, and loading TOML. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through eight runnable programs, from creating a Session to configuring fan-out, loading TOML, and inspecting Registry history across processes. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -26,6 +26,17 @@ ctest --test-dir build --output-on-failure
 ```
 
 For usage examples, start with the [test reading guide](test/README.md). Test comments explain the demonstrated scenarios and distinguish public Session usage from private fixtures, recovery checks, the protocol model, and the earlier prototype.
+
+On macOS, install the test dependencies with Homebrew and use its prefix when configuring:
+
+```sh
+brew install cmake boost googletest python
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+cmake --build build --parallel 3
+ctest --test-dir build --output-on-failure
+```
+
+Hosted CI exercises Linux and macOS on both x86_64 and ARM64. The [native qualification contract](docs/native-storage.md#registry-qualification-and-native-profiles) defines what those runs cover.
 
 ## Configuration contract
 
@@ -66,6 +77,14 @@ Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-
 Step 2.9 adds [adoption, topology changes, and activation](docs/native-storage.md#topology-changes-and-activation). Queue activation reserves a zeroed ring atomically with its Active definition. Endpoint handles expose identities and retain Task ownership; a Source opening is exclusive within that claim. Sending, receiving, acknowledgment, and publishing follow their implementation milestones.
 
 Step 2.10 adds [TOML Session factories](docs/native-storage.md#toml-session-factories), complete semantic preflight, shared programmatic policy validation, initial registration/activation, and exact effective-setting checks on file-based attachment. The [primer](docs/primer.md#7-move-setup-into-a-toml-file) and automated examples demonstrate the public file API.
+
+Step 2.11 adds [consistent current and historical Registry snapshots](docs/api.md#current-and-historical-registry-snapshots) and mixed independent-process qualification. The [Registry walkthrough](docs/registry-walkthrough.md) shows every entity kind, concurrent registration, ownership replacement, and inspection after application shutdown:
+
+```sh
+python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/primer/configuration.toml
+```
+
+The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities; message encoding and delivery follow their roadmap milestones.
 
 ## Run the restart walkthrough
 
