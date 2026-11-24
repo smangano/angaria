@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 
-// Parse the documented trading TOML with cpptoml to keep the example and value
-// contracts consistent. These tests do not call the planned Session TOML loader
-// or demonstrate semantic validation/registration, which follow in step 2.10.
+// Parse the documented trading TOML with the pinned cpptoml parser to keep its
+// syntax and scalar values visible. Public loading, semantic validation, and
+// resulting Registry behavior are demonstrated in test_file_configuration.cpp.
 namespace
 {
   class ConfigurationExampleTest : public testing::Test
@@ -50,7 +50,7 @@ namespace
     const auto queues = _configuration->get_table_array("queues");
     ASSERT_NE(queues, nullptr);
     ASSERT_EQ(queues->get().size(), 3u);
-    EXPECT_EQ(queues->get()[0]->get_as<std::string>("delivery").value_or(""), "allow_loss");
+    EXPECT_EQ(queues->get()[0]->get_as<std::string>("delivery").value_or(""), "recover_from_log");
     EXPECT_EQ(queues->get()[2]->get_as<std::int64_t>("priority").value_or(0), 200);
   }
 
@@ -83,8 +83,8 @@ namespace
   }
 
   // Field IDs use their full 32-bit values, and array order is meaningful for
-  // message fields and destination snapshots. Parsing must preserve both before
-  // a future loader resolves the referenced Registry names.
+  // message fields and destination snapshots. Parsing preserves both before
+  // the Session loader resolves the referenced Registry names.
   TEST_F(ConfigurationExampleTest, PreservesWideFieldIdsAndOrderedReferences)
   {
     const auto fields = _configuration->get_table_array("fields");

@@ -1,5 +1,6 @@
 #include "runtime_state.h"
 #include "topology_state.h"
+#include "configuration_runtime.h"
 
 #include "build_version.h"
 #include "native_atomic.h"
@@ -223,6 +224,26 @@ namespace angaria
 
   Result<CreatedSession> Session::create(const SessionOptions& options, const TaskDescriptor& creator)
   {
+    return create_configured(options, creator, nullptr);
+  }
+
+  Result<CreatedSession> Session::create_from_file(const fs::path& configuration, std::string_view creator)
+  {
+    try
+    {
+      runtime_value(mapped::validate_metadata_text(creator, true, true, "creator", ErrorCode::InvalidConfiguration));
+      auto plan = runtime_value(load_configuration(configuration, creator));
+      return create_configured(plan._options, plan._tasks.front()._descriptor, &plan);
+    }
+    catch (...)
+    {
+      return runtime_caught_error();
+    }
+  }
+
+  Result<CreatedSession> Session::create_configured(const SessionOptions& options, const TaskDescriptor& creator,
+                                                     const ConfigurationPlan* initialConfiguration)
+  {
     try
     {
       runtime_validate_options(options, ErrorCode::InvalidConfiguration);
@@ -270,9 +291,14 @@ namespace angaria
       manifest._records = {sessionOffset, taskOffset};
       manifest._commands = {runtime_write_words(72, root), runtime_write_words(indexOffset, index)};
       const auto manifestBody = configuration_value(mapped::encode_manifest_body(manifest, manifestOffset));
-      if (record_end(manifestOffset, manifestBody.size()) > options._maxLogBytes)
+      const auto bootstrapTail = record_end(manifestOffset, manifestBody.size());
+      if (bootstrapTail > options._maxLogBytes)
       {
         runtime_fail(ErrorCode::LogFull, "session.max_log_bytes", "Complete Session bootstrap exceeds the log byte ceiling");
+      }
+      if (initialConfiguration)
+      {
+        preflight_configuration(*initialConfiguration, bootstrapTail);
       }
       const auto prefix = runtime_value(mapped::encode_initial_superblock(configuration));
 
@@ -310,6 +336,12 @@ namespace angaria
       auto taskState = runtime_value(attach_runtime_task(state, TaskId{1}, true, std::move(creatorLease)));
       // Prepare every owning return object before the final publication syscall.
       CreatedSession result{Session{std::move(state)}, Task{std::move(taskState)}};
+      if (initialConfiguration)
+      {
+        // Only the creator can see this unpublished Session. Any registration,
+        // activation, or I/O failure destroys its handles before staging cleanup.
+        apply_configuration(result, *initialConfiguration);
+      }
       publish_directory(staging, target);
       return result;
     }
@@ -337,6 +369,31 @@ namespace angaria
         (void)runtime_topology(access);
       }
       return Session{std::move(state)};
+    }
+    catch (...)
+    {
+      return runtime_caught_error();
+    }
+  }
+
+  Result<Session> Session::attach_from_file(const fs::path& configuration)
+  {
+    try
+    {
+      const auto requested = runtime_value(load_configuration_options(configuration));
+      auto session = runtime_value(attach(requested._directory));
+      const auto recorded = runtime_value(session.options());
+      match_configuration_options(requested, recorded);
+      auto registry = session.registry();
+      const auto plan = runtime_value(load_configuration(configuration, {}, &registry));
+      // The second parse resolves references against the live Registry. Recheck
+      // its settings and location if another process replaced the TOML file.
+      match_configuration_options(plan._options, recorded);
+      if (fs::canonical(plan._options._directory) != session._state->_directory)
+      {
+        runtime_fail(ErrorCode::ConfigurationMismatch, "session.directory", "Configuration directory changed during attachment");
+      }
+      return session;
     }
     catch (...)
     {

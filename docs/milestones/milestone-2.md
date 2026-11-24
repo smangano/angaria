@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.9 are integrated into `milestone-2`. The [programmer primer](../primer.md) documents that implemented API with runnable examples before development continues to step 2.10. The primer PR uses framework version `0.2.11` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.9 and the [programmer primer](../primer.md) are integrated into `milestone-2`. Step 2.10 adds validated TOML loading and extends the primer with a file-configuration lesson. Its framework version is `0.2.12` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 
@@ -118,7 +118,17 @@ Source activation requires complete nonempty membership; Queue activation requir
 
 Task opening methods return Queue writer, Source, and Publishing identity/ownership handles. They retain claims across moves and closure of the original Task; a Source opening is exclusive within the claim. Task replacement remains possible with valid unused rings at LogFull. No delivery method is substituted with placeholder behavior: send/receive/publication/pin cleanup remain for their owning milestones.
 
-The [public activation examples](../../test/test_topology_activation.cpp), [endpoint examples](../../test/test_endpoint_runtime.cpp), and [process qualification](../../test/test_activation_recovery.cpp) cover activation order, ownership, atomic resource allocation, exact/one-byte-short budgets, retained history, corruption/no-write rejection, concurrency, SIGKILL, repeated recovery, and uncertain I/O outcomes. See the [native contract](../native-storage.md#topology-changes-and-activation). The next step, 2.10, integrates cpptoml TOML factories with this common validated path.
+The [public activation examples](../../test/test_topology_activation.cpp), [endpoint examples](../../test/test_endpoint_runtime.cpp), and [process qualification](../../test/test_activation_recovery.cpp) cover activation order, ownership, atomic resource allocation, exact/one-byte-short budgets, retained history, corruption/no-write rejection, concurrency, SIGKILL, repeated recovery, and uncertain I/O outcomes. See the [native contract](../native-storage.md#topology-changes-and-activation).
+
+## Step 2.10 TOML configuration and file-based factories
+
+The pinned cpptoml loader parses the documented schema with strict types and unknown-key rejection. Semantic preflight resolves forward references, creator and Thread-parent rules, Field/schema identities and families, ordered memberships, effective supported policies, and reserved capacities. It reuses the programmatic descriptor and policy validators rather than creating a separate set of native rules. Unsupported storage or policy choices are rejected without pretending that their runtime behavior exists.
+
+`Session::create_from_file` uses the declared Process creator, registers the complete configuration through the common Registry path, and activates complete nonempty Sources, Queues, and Publishing sets. Empty sets remain Draft. The Session directory is published exclusively after all setup succeeds; failure cannot expose a partial configured Session or overwrite an existing one.
+
+`Session::attach_from_file` resolves relative paths from the TOML file, checks persisted effective Session settings, and validates supplied declarations/references, including references to already registered entities. It applies no configuration updates and claims no Task. Supported runtime topology changes remain intact, and ordinary attachment recovery retains its normal write behavior. Relocated Session directories can be selected by the file without requiring the diagnostic creation path to match.
+
+The [file configuration tests](../../test/test_file_configuration.cpp) cover normal use and rejection boundaries. The [primer's seventh lesson](../primer.md#7-move-setup-into-a-toml-file) and its [runnable program](../../examples/primer/07_configuration.cpp) demonstrate configuration, discovery, creator closure, and compatible reattachment. Step 2.11 completes independent-process Registry qualification and its walkthrough.
 
 ## Registry implementation boundaries
 

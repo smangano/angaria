@@ -1,4 +1,5 @@
 #include "topology_append.h"
+#include "topology_policy.h"
 
 #include <algorithm>
 #include <array>
@@ -69,27 +70,6 @@ namespace angaria::detail
       return allocate_id(ids);
     }
 
-    struct QueuePolicy
-    {
-      std::uint64_t _capacity{};
-      DeliveryPolicy _delivery{};
-    };
-
-    QueuePolicy resolve_queue(const QueueDescriptor& descriptor, const SessionOptions& options)
-    {
-      const auto capacity = descriptor._ringCapacity.value_or(options._defaults._ringCapacity);
-      const auto delivery = descriptor._delivery.value_or(options._defaults._delivery);
-      if (!mapped::ring_storage_bytes(capacity))
-      {
-        runtime_fail(ErrorCode::InvalidArgument, "queue.ring_capacity", "Queue ring geometry exceeds format bounds");
-      }
-      if (delivery != DeliveryPolicy::RecoverFromLog)
-      {
-        runtime_fail(ErrorCode::UnsupportedPolicy, "queue.delivery", "Queue delivery policy is not implemented by this native profile");
-      }
-      return QueuePolicy{capacity, delivery};
-    }
-
     bool same_queue(const QueueDescriptor& left, const QueueDescriptor& right, QueuePolicy effective)
     {
       return left._name == right._name && left._producer == right._producer && left._sourceSet == right._sourceSet &&
@@ -97,42 +77,11 @@ namespace angaria::detail
              left._delivery == effective._delivery && left._doc == right._doc;
     }
 
-    struct SourcePolicy
-    {
-      SelectionPolicy _selection{};
-      WaitPolicy _wait{};
-    };
-
-    SourcePolicy resolve_source(const SourceQueueSetDescriptor& descriptor, const SessionOptions& options)
-    {
-      const auto selection = descriptor._selection.value_or(options._defaults._selection);
-      const auto wait = descriptor._wait.value_or(options._defaults._wait);
-      if (selection != SelectionPolicy::WeightedRandom && descriptor._randomSeed)
-      {
-        runtime_fail(ErrorCode::InvalidArgument, "source_set.random_seed", "A random seed requires weighted-random selection");
-      }
-      if (selection != SelectionPolicy::Strict || wait != WaitPolicy::Spin)
-      {
-        runtime_fail(ErrorCode::UnsupportedPolicy, "source_set.policy", "Source policy is not implemented by this native profile");
-      }
-      return SourcePolicy{selection, wait};
-    }
-
     bool same_source(const SourceQueueSetDescriptor& left, const SourceQueueSetDescriptor& right, SourcePolicy effective)
     {
       return left._name == right._name && left._owner == right._owner &&
              left._selection == effective._selection && left._wait == effective._wait &&
              left._randomSeed == right._randomSeed && left._doc == right._doc;
-    }
-
-    AcceptancePolicy resolve_publishing(const PublishingQueueSetDescriptor& descriptor, const SessionOptions& options)
-    {
-      const auto acceptance = descriptor._acceptance.value_or(options._defaults._acceptance);
-      if (acceptance != AcceptancePolicy::AllDestinations)
-      {
-        runtime_fail(ErrorCode::UnsupportedPolicy, "publishing_set.acceptance", "Publishing acceptance policy is not implemented by this native profile");
-      }
-      return acceptance;
     }
 
     bool same_publishing(const PublishingQueueSetDescriptor& left, const PublishingQueueSetDescriptor& right,

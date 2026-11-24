@@ -7,6 +7,7 @@ import argparse
 import os
 from pathlib import Path
 import selectors
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -142,9 +143,34 @@ def process_example(executable, session):
                 stream.close()
 
 
+def configuration_example(executable, fixture, workspace):
+    # Copy the documented file unchanged. Its relative Session directory must
+    # be resolved beside the copied TOML, independently of this script's cwd.
+    directory = workspace / "configuration"
+    directory.mkdir()
+    configuration = directory / "configuration.toml"
+    shutil.copyfile(fixture, configuration)
+    output = command(executable, configuration, "Setup")
+    for marker in (
+        "Created from TOML: Primer configuration",
+        "Creator: Setup",
+        "Source members: 1",
+        "Quote v1 Fields: 2",
+        "Connection active=yes",
+        "Reattached from TOML; creator attached=no",
+    ):
+        check(marker in output, f"TOML lesson did not demonstrate {marker!r}: {output!r}")
+    log = directory / "primer-session" / "session.ang"
+    original = log.read_bytes()
+    retry = command(executable, configuration, "Setup", succeeds=False)
+    check("Conflict" in retry, f"Repeated file-based creation did not report Conflict: {retry!r}")
+    check(log.read_bytes() == original, "TOML lesson changed an existing Session")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("examples", type=Path, nargs=6, help="primer executables in lesson order")
+    parser.add_argument("examples", type=Path, nargs=7, help="primer executables in lesson order")
+    parser.add_argument("configuration", type=Path, help="lesson 7 TOML fixture")
     arguments = parser.parse_args()
     executables = [path.resolve() for path in arguments.examples]
     try:
@@ -152,10 +178,11 @@ def main():
             workspace = Path(root)
             simple_examples(executables[:5], workspace)
             process_example(executables[5], workspace / "processes")
+            configuration_example(executables[6], arguments.configuration.resolve(), workspace)
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"primer_examples: {error}", file=sys.stderr)
         return 1
-    print("All six primer examples passed, including independent-process ownership and restart.")
+    print("All seven primer examples passed, including process ownership, restart, and TOML configuration.")
     return 0
 
 

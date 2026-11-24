@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 2, step 2.9**. The primer was introduced with framework version **0.2.11**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 2, step 2.10**, framework version **0.2.12**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, and claim producer and consumer endpoints. Sending, publishing, receiving, acknowledgment, and message encoding arrive in later milestones. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -30,9 +30,9 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 ## Build the examples
 
-Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers when tests are enabled; see the README for the offline override.
+Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-Use a checkout containing this primer and its example sources. For version 0.2.11, use its PR branch or `milestone-2` after that PR is merged. The work reaches `main` when the milestone is integrated.
+Use a checkout containing this primer and its example sources. For version 0.2.12, use the `milestone-2-10` PR branch or `milestone-2` after that PR is merged. The work reaches `main` when the milestone is integrated.
 
 Run these commands from the repository root:
 
@@ -49,7 +49,7 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The six targets are named `angaria_primer_01_session` through `angaria_primer_06_processes`, matching their source filenames.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The seven targets are named `angaria_primer_01_session` through `angaria_primer_07_configuration`, matching their source filenames.
 
 Each of the first five examples needs a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
@@ -258,6 +258,58 @@ The example intentionally lets the original Task variable close while endpoint h
 
 The producer reserves a publication identity, consisting of its claim and a sequence number. Reserving an identity does not publish a message. This walkthrough demonstrates separate processes sharing the Registry and enforcing endpoint ownership; actual producer-to-consumer delivery follows later milestones.
 
+## 7. Move setup into a TOML file
+
+So far, C++ code has supplied each definition. A configuration file lets you describe the same setup without changing and rebuilding that code. Angaria uses **TOML**, a text format with named values, tables such as `[session]`, and repeated tables such as `[[tasks]]`. The loader uses the pinned **cpptoml** library.
+
+Read [07_configuration.cpp](../examples/primer/07_configuration.cpp) and its [configuration file](../examples/primer/configuration.toml). This example defines `Setup`, `Feed`, and `Consumer`, the connection from lesson 4, and the two-Field `Quote` schema. It supplies every capacity limit explicitly. Omitted policy choices keep the supported defaults.
+
+Copy the configuration to a fresh directory before running it:
+
+```sh
+mkdir "$primer_workspace/07-configuration"
+cp examples/primer/configuration.toml "$primer_workspace/07-configuration/settings.toml"
+./build/angaria_primer_07_configuration "$primer_workspace/07-configuration/settings.toml" Setup
+```
+
+The file says `directory = "primer-session"`. A relative Session path starts from the **configuration file's parent directory**, so this creates `$primer_workspace/07-configuration/primer-session`. It does not depend on the shell's current directory. To repeat the lesson, use a new parent directory; creation refuses an existing Session.
+
+The main API sequence is short:
+
+```cpp
+{
+  auto created = primer::value(angaria::Session::create_from_file(argv[1], argv[2]));
+  auto registry = created._session.registry();
+  const auto queue = primer::value(registry.find_queue("FeedToConsumer"));
+  const auto state = primer::value(registry.state(queue));
+} // The creator claim closes when its last owning handle closes.
+
+auto attached = primer::value(angaria::Session::attach_from_file(argv[1]));
+```
+
+The second creation argument is the name of a **Process Task declared in the file**. Here it is `Setup`. The creator uses its declared Task entry; the loader does not add a hidden extra participant. All initial registrations are attributed to that creator. Other declared Tasks start offline.
+
+Creation checks types, ranges, names, references, supported policies, and capacity counts before applying the initial definitions. References can point forward in the file: a Thread may name a Process declared later, for example. Initial registrations and activation use the same rules as programmatic setup. Complete nonempty Sources, their Queues, and nonempty Publishing sets become Active; empty sets stay Draft. The completed Session becomes visible at its requested path only after setup succeeds.
+
+Expected output includes:
+
+```text
+Created from TOML: Primer configuration
+Creator: Setup
+Source members: 1
+Quote v1 Fields: 2
+Connection active=yes
+Reattached from TOML; creator attached=no
+```
+
+The program closes the creation handles before reattaching. `attach_from_file` finds the saved Session, checks its effective settings, and returns a Session handle. It does not rerun registrations, apply topology changes, or claim a Task. The Session name, application version, storage, log byte limit, capacities, and policy defaults must match; a disagreement returns `ConfigurationMismatch`. The resolved directory locates the Session and can differ from its original recorded location after relocation. Optional declarations are checked, and references can also name entities already registered in the Session. Supported runtime topology changes remain in place.
+
+As with ordinary attachment, validation may finish interrupted recovery and write to the underlying file. A read-only Registry view still means that the view cannot perform configuration updates.
+
+For an ordinary mistake, change `source_set = "ConsumerInputs"` in a copy to an unknown name. The error identifies the offending key path and reference. A misspelled key, a quoted number where an integer is required, or an out-of-range priority also fails explicitly. Syntax errors include the filename and the parser's line information where available. An unsuccessful creation does not publish a partially configured Session.
+
+Known policies can still be unavailable. For example, `delivery = "allow_loss"` is part of Angaria's design but currently returns `UnsupportedPolicy`. The runnable examples use `recover_from_log`. The [configuration contract](configuration.md) lists the complete schema and the current implementation boundary.
+
 ## Understand bounds and ordinary failures
 
 Angaria targets small, bounded systems. Capacities reserve room for Tasks, queues, both kinds of Queue Sets, memberships, Fields, and schema versions. Named setters make adjustments readable:
@@ -282,13 +334,13 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The next Registry work adds TOML loading through **cpptoml**, followed by the complete independent-process Registry walkthrough. Configuration files use TOML. Planned YAML, JSON, and XML converters will produce TOML for the same loader. The current examples use programmatic configuration because the file factories are not implemented through step 2.9.
+Step 2.10 adds TOML loading through **cpptoml** alongside programmatic configuration. The next Registry step completes the independent-process qualification and Registry walkthrough. Planned YAML, JSON, and XML converters will produce TOML for the same loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 2, remaining steps | Load validated TOML and walk through the complete persistent Registry. |
+| 2, remaining step | Complete the independent-process persistent Registry walkthrough and qualification. |
 | 3 | Build general messages, encode scalar Fields, and inspect exact schema versions. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |

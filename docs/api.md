@@ -6,7 +6,7 @@ Step 1.3 defines Angaria's process-local C++ types and the operations that subse
 cmake --build build --target angaria_api_contract
 ```
 
-The target checks the future runtime operation declarations. Registry and attachment implementation follows in milestone 2, general message implementation in milestone 3, mapped queues in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its existing implementation.
+The target checks declarations, including future delivery operations. The [programmer primer](primer.md) contains runnable examples of the implemented Session and Registry API. General message implementation follows in milestone 3, mapped queues in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its separate earlier implementation.
 
 ## Headers
 
@@ -39,6 +39,16 @@ The creator consumes one reserved Task entry. File-based creation uses its exist
 
 `Session::options()` exposes the effective settings and limits. Session metadata includes creator, creation time, framework/application versions, and creator user. Registry metadata exposes entity creator, registration time, and revision. Task runtime inspection supplies PID/thread diagnostics, incarnation, restart count, last attachment, and attachment state.
 
+## File-based Sessions
+
+Step 2.10 implements `Session::create_from_file(configuration, creator)` and `Session::attach_from_file(configuration)` through pinned cpptoml. The [configuration contract](configuration.md) specifies accepted keys, exact TOML types, reference resolution, defaults, capacity checks, and the supported native profile.
+
+Creation requires a declared Process creator, resolves forward references, validates the full configuration, and attributes its initial registrations to that creator. It uses the same descriptor, policy, registration, and activation rules as programmatic setup. Complete nonempty topology becomes Active in Source/Queue/Publishing order; empty sets remain Draft. Setup occurs in an exclusively created staging directory, and publication of the completed Session refuses to replace an existing target. Ordinary failure removes only that invocation's unpublished staging resources.
+
+A relative `session.directory` resolves from the TOML file's parent. File-based attachment checks the requested Session name, application version, log byte limit, storage settings, capacities, and policy defaults against persisted effective values, returning `ConfigurationMismatch` for disagreements. The actual canonical attachment directory can differ from the recorded creation location. Supplied declarations and references are validated, with already registered names available for reference resolution; the declaration list does not undo supported runtime topology changes. Attachment applies no configuration updates and claims no Task. Its normal validation and recovery can still write to the Session file.
+
+Malformed syntax and semantic configuration errors return `InvalidConfiguration` with filename/key-path diagnostics. Known unavailable native policies return `UnsupportedPolicy`. Capacity or complete log-allocation failures retain their specific error categories. The [seventh primer example](../examples/primer/07_configuration.cpp) demonstrates creation, inspection, closing the creator, and compatible reattachment.
+
 ## Capacity defaults and named setters
 
 `CapacityLimits{}` starts with the bounded [C++ default profile](configuration.md#capacity-limits). `SessionOptions::_limits` uses that profile. Override individual capacities through named setters:
@@ -59,7 +69,7 @@ Optional policy overrides in entity descriptors inherit the recorded session def
 
 Registration resolves omitted policy choices and generated random seeds before activation and records the effective settings. Descriptor inspection returns those resolved values. Session storage and capacities bind at creation. Active queue and Queue Set policy choices retain the configuration contract's fixed semantics.
 
-The optional application version is a process-local string in `SessionOptions` and the TOML `session.application_version` key. Its persisted representation follows step 1.4.
+The optional application version is supplied through `SessionOptions` or the TOML `session.application_version` key and persisted with the Session definition.
 
 ## Registration and activation
 
@@ -83,7 +93,7 @@ Step 2.9 also implements draft ownership adoption, source assignment, and Publis
 
 Session and Task handles are movable. Writer and Queue Set handles are movable and retain their backing session and Task claim. The claim remains held while its Task, actor-bound Registry views, or endpoints retain it. When receive is implemented, Source closure will release an unacknowledged delivery, and process termination will follow the configured recovery policy.
 
-Steps 2.5–2.9 implement programmatic Session creation/attachment, Session identity/options/metadata, Task registration and attachment/claim/Registry access, publication-ID issuance, Task runtime status, registration/inspection of every Registry entity kind, topology changes, activation, and endpoint identity/ownership handles. The creator consumes Task ID 1 and its initial Registry revision is 1. Delivery methods follow their implementation milestones; TOML factories follow step 2.10. See the [native lifecycle contract](native-storage.md#public-session-and-task-lifetimes).
+Steps 2.5–2.10 implement programmatic and file-based Session creation/attachment, Session identity/options/metadata, Task registration and attachment/claim/Registry access, publication-ID issuance, Task runtime status, registration/inspection of every Registry entity kind, topology changes, activation, and endpoint identity/ownership handles. The creator consumes Task ID 1 and its initial Registry revision is 1. Delivery methods follow their implementation milestones. See the [native lifecycle contract](native-storage.md#public-session-and-task-lifetimes).
 
 An operation returning `Result<T>` reports an empty/moved-from handle as InvalidState and inherited-process or wrong-thread Task use as WrongOwner. The plain-value `Session::identity()`, `Session::registry()`, `Task::claim()`, and `Task::registry()` methods throw `std::logic_error` for invalid ownership or an empty/moved-from handle. Applications must exec before using inherited native library state after fork, as specified by the native contract.
 

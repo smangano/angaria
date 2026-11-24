@@ -1,4 +1,4 @@
-# Proposed configuration schema for milestone 1.2.
+# Runnable configuration for the current native Registry profile.
 # Sizes illustrate a bounded deployment and can be tuned for an application.
 config_version = 1
 
@@ -61,7 +61,8 @@ name = "MarketDataToStrategy"
 producer = "MarketData"
 source_set = "StrategyInputs"
 priority = 100
-delivery = "allow_loss"
+# Stale quote loss will become configurable when allow_loss is implemented.
+delivery = "recover_from_log"
 
 [[queues]]
 name = "MarketDataToRisk"
