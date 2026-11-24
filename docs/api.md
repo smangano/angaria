@@ -6,7 +6,7 @@ Step 1.3 defines Angaria's process-local C++ types and the operations that subse
 cmake --build build --target angaria_api_contract
 ```
 
-The target checks the future runtime operation declarations. Registry and attachment implementation follows in milestone 2, general message implementation in milestone 3, mapped queues in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its existing implementation.
+The target checks declarations, including future delivery operations. The [programmer primer](primer.md) contains runnable examples of the implemented Session and Registry API. General message implementation follows in milestone 3, mapped queues in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its separate earlier implementation.
 
 ## Headers
 
@@ -39,6 +39,16 @@ The creator consumes one reserved Task entry. File-based creation uses its exist
 
 `Session::options()` exposes the effective settings and limits. Session metadata includes creator, creation time, framework/application versions, and creator user. Registry metadata exposes entity creator, registration time, and revision. Task runtime inspection supplies PID/thread diagnostics, incarnation, restart count, last attachment, and attachment state.
 
+## File-based Sessions
+
+Step 2.10 implements `Session::create_from_file(configuration, creator)` and `Session::attach_from_file(configuration)` through pinned cpptoml. The [configuration contract](configuration.md) specifies accepted keys, exact TOML types, reference resolution, defaults, capacity checks, and the supported native profile.
+
+Creation requires a declared Process creator, resolves forward references, validates the full configuration, and attributes its initial registrations to that creator. It uses the same descriptor, policy, registration, and activation rules as programmatic setup. Complete nonempty topology becomes Active in Source/Queue/Publishing order; empty sets remain Draft. Setup occurs in an exclusively created staging directory, and publication of the completed Session refuses to replace an existing target. Ordinary failure removes only that invocation's unpublished staging resources.
+
+A relative `session.directory` resolves from the TOML file's parent. File-based attachment checks the requested Session name, application version, log byte limit, storage settings, capacities, and policy defaults against persisted effective values, returning `ConfigurationMismatch` for disagreements. The actual canonical attachment directory can differ from the recorded creation location. Supplied declarations and references are validated, with already registered names available for reference resolution; the declaration list does not undo supported runtime topology changes. Attachment applies no configuration updates and claims no Task. Its normal validation and recovery can still write to the Session file.
+
+Malformed syntax and semantic configuration errors return `InvalidConfiguration` with filename/key-path diagnostics. Known unavailable native policies return `UnsupportedPolicy`. Capacity or complete log-allocation failures retain their specific error categories. The [seventh primer example](../examples/primer/07_configuration.cpp) demonstrates creation, inspection, closing the creator, and compatible reattachment.
+
 ## Capacity defaults and named setters
 
 `CapacityLimits{}` starts with the bounded [C++ default profile](configuration.md#capacity-limits). `SessionOptions::_limits` uses that profile. Override individual capacities through named setters:
@@ -59,21 +69,49 @@ Optional policy overrides in entity descriptors inherit the recorded session def
 
 Registration resolves omitted policy choices and generated random seeds before activation and records the effective settings. Descriptor inspection returns those resolved values. Session storage and capacities bind at creation. Active queue and Queue Set policy choices retain the configuration contract's fixed semantics.
 
-The optional application version is a process-local string in `SessionOptions` and the TOML `session.application_version` key. Its persisted representation follows step 1.4.
+The optional application version is supplied through `SessionOptions` or the TOML `session.application_version` key and persisted with the Session definition.
 
 ## Registration and activation
 
 The example registers Tasks, both Queue Set types, queues, Fields, and an immutable Quote schema. Typed lookups preserve each entity kind, and registration returns either its typed identity or an `Error`.
 
-Source activation checks complete ownership and nonempty membership, including fully configured draft queues. Queue activation requires its Source Queue Set to be active. Publishing activation requires active destination queues owned by the publishing Task. This ordering supports an initially offline consumer.
+Step 2.6 implements `Registry::register_task(TaskDescriptor)` on a live actor-bound Registry. Task names are case-sensitive, nonempty UTF-8 without NUL characters; documentation is length-delimited UTF-8 and may be empty or contain NUL. Name, kind, parent, and documentation together define exact re-registration: an identical descriptor returns its existing Task ID without changing metadata, revision, generation, log bytes, or claim files. Changing any descriptor field under an existing name returns `Conflict`. There is no implicit Task edit or Task deletion API.
 
-Draft ownership adoption and source assignment are explicit Registry operations. Publishing destination replacement is serialized against publication and commits a new topology revision. Existing publication snapshots preserve their original destinations.
+A Process Task omits its parent. A Thread Task names a registered Process Task, which can be offline and need not be the registrar. Registration describes a logical participant; it does not attach that Task or install native process/thread IDs. Attachment separately enforces the live local parent and thread-affinity rules. A new registration consumes one reserved entry, an unused Task ID, and log space for its immutable definition and transaction manifest. Its creator/time/revision record the acting claim's logical Task, current UTC time, and new Registry revision. See the [native registration contract](native-storage.md#public-task-registration) for coordination resources and interrupted outcomes.
+
+Step 2.7 adds `register_field` and `register_message`, plus Field/schema lookup, description, and registration metadata. A Field's full ID, name, base type, declared byte size, and documentation are immutable; exact re-registration returns its existing ID, while a conflicting ID or name returns `Conflict`. Valid Field IDs range from `0xEE000000` through `0xEEFFFFFF`, independently of the number of reserved Field entries. The current native implementation accepts char/byte, signed/unsigned 16-, 32-, and 64-bit integers, and 32-/64-bit floating-point Fields with their fixed encoded widths. Other known representations return `UnsupportedPolicy`; malformed IDs, unknown base types, and incorrect scalar sizes return `InvalidArgument`.
+
+A message type retains one name across a [schema family](glossary.md#ownership-and-recovery). Each nonzero 32-bit version identifies a separate immutable schema. Versions can be sparse or registered out of numeric order. Changing the type/name pairing or an existing schema's ordered Field list/documentation returns `SchemaConflict`; exact retry preserves its original attribution and revision. Every referenced Field must be registered. Order and repeated Field IDs are preserved, and an empty Field list is valid for a control-message definition. Schema capacity counts versions, while Field-list length is bounded by available log bytes rather than a hidden 16-bit limit. `find_message(name, version)` and `describe_message(SchemaId)` return the exact retained version, not a latest-version substitution. Registration establishes definitions, not payload encoding or publication behavior; see the [native schema contract](native-storage.md#fields-and-message-schemas).
+
+Step 2.8 adds draft Queue/Source/Publishing registration and typed lookup, description, metadata, state, and Source membership inspection. Queue Sets share IDs and names across their two kinds, while per-kind capacities remain separate. Registration resolves effective policies, returns exact retries without growth, and rejects changed descriptors with Conflict. Creating a Queue in a Source atomically adds its inverse membership and advances that Source's definition revision. Publishing destinations are unique, ordered Queues belonging to its nonzero producer owner. Incomplete drafts may omit ownership or a Queue's Source; every nonzero reference must resolve. See the [native draft-topology contract](native-storage.md#draft-queues-and-queue-sets) for supported policies and persisted validation.
+
+Step 2.9 implements activation: Source activation checks complete ownership and nonempty membership, including fully configured draft queues. Queue activation requires its Source Queue Set to be active and atomically allocates its zeroed ring. Publishing activation requires active destination queues owned by the publishing Task. Any live actor can activate configured entities for offline owners. This ordering supports an initially offline consumer.
+
+Step 2.9 also implements draft ownership adoption, source assignment, and Publishing destination replacement as explicit Registry operations. A zero Source ID in `assign_source` explicitly unassigns a draft Queue; moving it updates both inverse Source lists atomically. Source membership can gain fully configured draft Queues after Source activation, but an Active Source cannot become empty. Active Queue ownership, Source, and priority remain fixed. Active Publishing destination replacement requires its owning actor and nonempty Active destinations, commits a new topology revision, and uses the shared mutation gate. Existing publication snapshots preserve their original destinations when publication is implemented. See the [native update contract](native-storage.md#topology-changes-and-activation).
+
+## Current and historical Registry snapshots
+
+Step 2.11 adds `Registry::snapshot()` for listing all registered entity kinds in one consistent view. The result is an owning `RegistrySnapshot`, containing Tasks, Queues, Sources, Publishing sets, Fields, and exact message-schema versions. Each entry includes its descriptor and registration metadata; topology entries also include their state, Source membership, or Publishing topology revision as appropriate. Values remain usable after the originating handles close and retain no Task claim.
+
+The operation holds one mutation gate while recovering and validating the Session and copying the catalog. This avoids combining the Task list from one revision with membership from another during concurrent updates. Entries sort by typed ID, with message schemas sorted by type and version; member and destination order retain their recorded meaning.
+
+Pass a committed Registry revision, such as `registry.snapshot(12)`, to inspect the definitions at that revision. `_revision` identifies the requested cut, and `_currentRevision` records the latest committed revision observed by the same operation. An omitted argument selects that current revision. Revisions start at one; zero returns `InvalidArgument`, and a future revision returns `NotFound`, both at `registry.revision`. A historical cut contains the final state of each entity within an atomic batch and omits later registrations. It preserves older Source assignments, activation states, Publishing destinations, and schema versions. All Registry history is retained in this implementation.
+
+Task attachments, incarnations, and publication-ID issuance use separate fixed state. A Registry revision does not reconstruct their earlier values. Read `task_status()` separately for current diagnostics. A snapshot from a Session Registry can inspect without a Task claim, but cannot perform configuration mutations. Normal validation/recovery can still write to the backing file; this is not an offline foreign-format or physically read-only file reader. General log tooling follows milestone 10.
+
+The [Registry walkthrough](registry-walkthrough.md) and [primer](primer.md) demonstrate inspection, concurrent registration, retained history, and owner restart through independent executables.
 
 ## Endpoint ownership and lifetime
 
-Session and Task handles are movable. Writer and Queue Set handles are movable and retain their backing session and Task claim. The claim remains held while its Task, actor-bound Registry views, or endpoints retain it. Source handle closure releases an unacknowledged delivery, and process termination follows the configured recovery policy.
+Session and Task handles are movable. Writer and Queue Set handles are movable and retain their backing session and Task claim. The claim remains held while its Task, actor-bound Registry views, or endpoints retain it. When receive is implemented, Source closure will release an unacknowledged delivery, and process termination will follow the configured recovery policy.
+
+Steps 2.5–2.11 implement programmatic and file-based Session creation/attachment, Session identity/options/metadata, Task registration and attachment/claim/Registry access, publication-ID issuance, Task runtime status, registration/inspection of every Registry entity kind, current/historical snapshots, topology changes, activation, and endpoint identity/ownership handles. The creator consumes Task ID 1 and its initial Registry revision is 1. Delivery methods follow their implementation milestones. See the [native lifecycle contract](native-storage.md#public-session-and-task-lifetimes).
+
+An operation returning `Result<T>` reports an empty/moved-from handle as InvalidState and inherited-process or wrong-thread Task use as WrongOwner. The plain-value `Session::identity()`, `Session::registry()`, `Task::claim()`, and `Task::registry()` methods throw `std::logic_error` for invalid ownership or an empty/moved-from handle. Applications must exec before using inherited native library state after fork, as specified by the native contract.
 
 A Task may open writers for its queues, Source Queue Sets it owns, and Publishing Queue Sets it owns. A second open Source handle for the same set and live claim returns `OwnershipBusy`. The single in-flight slot applies to the set. The issuance generation survives closing and reopening its Source handle within the claim.
+
+Step 2.9 implements those three opening operations and each handle's `id()`. Opening requires an Active entity and the matching logical Task owner; other owners get WrongOwner and draft entities get NotActive. Handles retain their Task claim across moves and closure of the original Task variable. Source close/reopen currently changes only claim-local opening state and writes no persisted data; receive/acknowledgment/release and delivery pin cleanup arrive with delivery. A moved-from, inherited-process, or wrong-thread handle's plain `id()` throws `std::logic_error`, matching Task's plain-value ownership checks.
 
 The application serializes sends touching a common queue and operations on a common Source Queue Set. A thread Task attaches on its current thread while its parent process claim is held by that process. The thread Task and its endpoints retain the parent claim until they close. A process Task supports the application's coordinated sending threads.
 

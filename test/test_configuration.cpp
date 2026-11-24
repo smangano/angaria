@@ -10,6 +10,9 @@
 #include <utility>
 #include <vector>
 
+// Parse the documented trading TOML with the pinned cpptoml parser to keep its
+// syntax and scalar values visible. Public loading, semantic validation, and
+// resulting Registry behavior are demonstrated in test_file_configuration.cpp.
 namespace
 {
   class ConfigurationExampleTest : public testing::Test
@@ -23,6 +26,9 @@ namespace
     std::shared_ptr<cpptoml::table> _configuration;
   };
 
+  // TOML tables supply defaults, while an individual Queue can override its
+  // delivery policy. A Thread Task names its parent Process Task explicitly;
+  // parsing those names alone does not resolve or validate the relationship.
   TEST_F(ConfigurationExampleTest, ParsesNestedDefaultsAndTaskKinds)
   {
     EXPECT_EQ(_configuration->get_as<std::int64_t>("config_version").value_or(0), 1);
@@ -44,10 +50,12 @@ namespace
     const auto queues = _configuration->get_table_array("queues");
     ASSERT_NE(queues, nullptr);
     ASSERT_EQ(queues->get().size(), 3u);
-    EXPECT_EQ(queues->get()[0]->get_as<std::string>("delivery").value_or(""), "allow_loss");
+    EXPECT_EQ(queues->get()[0]->get_as<std::string>("delivery").value_or(""), "recover_from_log");
     EXPECT_EQ(queues->get()[2]->get_as<std::int64_t>("priority").value_or(0), 200);
   }
 
+  // The example spells out every capacity. Match those values to the C++ default
+  // profile so readers get the same reservation sizes through either description.
   TEST_F(ConfigurationExampleTest, DefaultCapacityProfileMatchesTradingExample)
   {
     const angaria::CapacityLimits defaults;
@@ -74,6 +82,9 @@ namespace
     }
   }
 
+  // Field IDs use their full 32-bit values, and array order is meaningful for
+  // message fields and destination snapshots. Parsing preserves both before
+  // the Session loader resolves the referenced Registry names.
   TEST_F(ConfigurationExampleTest, PreservesWideFieldIdsAndOrderedReferences)
   {
     const auto fields = _configuration->get_table_array("fields");

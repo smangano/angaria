@@ -19,6 +19,7 @@ namespace angaria
     class QueueWriterState;
     class SourceQueueSetState;
     class PublishingQueueSetState;
+    struct ConfigurationPlan;
   } // namespace detail
 
   struct CreatedSession;
@@ -92,6 +93,8 @@ namespace angaria
 
     TaskClaim claim() const;
     Registry registry() const;
+    // Open identity/ownership handles for Active entities. Handles retain this
+    // Task's claim; Source openings are exclusive within the claim.
     Result<QueueWriter> open_writer(QueueId queue);
     Result<SourceQueueSet> open_source_set(SourceQueueSetId source);
     Result<PublishingQueueSet> open_publishing_set(PublishingQueueSetId publisher);
@@ -125,6 +128,9 @@ namespace angaria
     Result<Task> attach_task(TaskId task);
 
   private:
+    static Result<CreatedSession> create_configured(const SessionOptions& options,
+                                                     const TaskDescriptor& creator,
+                                                     const detail::ConfigurationPlan* configuration);
     explicit Session(std::shared_ptr<detail::SessionState> state);
     std::shared_ptr<detail::SessionState> _state;
   };

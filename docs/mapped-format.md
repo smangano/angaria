@@ -4,6 +4,8 @@ Step 1.4 specifies the format for the shared Registry and future mapped queues. 
 
 The byte counts and checked capacity arithmetic are compile-checked in [mapped_format.h](../include/angaria/detail/mapped_format.h). Record encoding, mappings, and attachment validation arrive in the implementation milestones. The [step 1.5 concurrency contract](concurrency.md) assigns the journal, transaction, and recovery protocols, using the reserved space without changing the fixed reservation totals. A record's presence alone never establishes that it committed.
 
+The [terminology glossary](glossary.md) defines the storage, encoding, and recovery terms used here.
+
 ## Representation rules
 
 - Bytes have eight bits. Unsigned integers have the stated width; signed integers use two's complement. Multibyte values are little-endian.
@@ -31,6 +33,8 @@ Committed entity IDs and schema versions are not reused during a session. Field 
 
 A schema record contains its exact type/version, ordered **32-bit** Field IDs, name, documentation, and registration metadata. Field order and repetitions are preserved. Its array length is `u64`, bounded by the containing record and available log bytes; this introduces no undocumented 16-bit field-count limit. Publications retain a reference to this immutable schema as well as its type/version. Schema and Field records required by any retained publication remain available even after all its deliveries terminate.
 
+`0xEE000000` is a valid Field identity: the all-zero raw ID is invalid, but the effective 24-bit portion may be zero. Field IDs and schema type/version values are application identities, not allocation-slot numbers. Message types retain a one-to-one name pairing across their versions. Numeric schema versions need not be registered in ascending order.
+
 ## Time
 
 Stored timestamps are signed 64-bit UTC nanoseconds since the Unix epoch, matching `UtcTimestamp`. Epoch zero is a valid time. Optional values have explicit presence flags. Out-of-range conversions fail before committing; native `time_t` and the prototype's seconds/nanoseconds structs are never copied into records.
@@ -41,7 +45,7 @@ Timeouts and elapsed waits use a process-local monotonic clock. UTC clock adjust
 
 ## Session files and logical offsets
 
-`session.ang` contains a 4,096-byte superblock and all fixed sections. For `two_plane`, its variable arena follows those sections in the same file, so logical offsets are file offsets. Queue rings also occupy arena space. A reference never points into a directory name or a native virtual address.
+`session.ang` begins with the [superblock](#superblock), a fixed 4,096-byte session control area, followed by the fixed sections described by its directory. For `two_plane`, its variable arena follows those sections in the same file, so logical offsets are file offsets. Queue rings also occupy arena space. A reference never points into a directory name or a native virtual address.
 
 For `segmented`, the fixed sections stay in `session.ang`; immutable arena records and growing queue storage use extent files. Each extent has a 4,096-byte header recording magic, format, session identity, logical start, allocated length, and feature/ABI requirements. Its filename encodes its logical start. Extent logical intervals cannot overlap each other or the fixed sections. Translation is `file_offset = logical_offset - extent_logical_start`. The extent header occupies the first 4,096 bytes of that interval and is not a record target.
 
@@ -56,6 +60,10 @@ Offsets remain stable while their targets are retained. Initial implementations 
 Queue state reserves a retained-history floor sequence and link. Traversal stops at that link and never follows its immutable predecessor into a reclaimed prefix. A floor advances only when no recovery obligation or in-flight pin needs the prefix, and only alongside a recoverable retention checkpoint. Cross-destination and retry references can require retaining entire publications even when one queue has finished them. Milestone 8 implements this protocol; the initial no-reclamation implementation leaves its floors unchanged.
 
 ## Superblock
+
+In Angaria, the **superblock** is the fixed 4,096-byte session control area at byte offset zero of `session.ang`. It is the starting point for identifying the session, interpreting its format, and locating its other storage sections. It contains session identity, format and compatibility information, storage/capacity settings, the fixed-section directory, mutable roots/control values, and the reserved operation journal.
+
+The directory always contains thirteen entries describing the fixed sections. Nonempty sections allocate storage after the superblock; zero-capacity sections allocate no bytes and have offset zero. Section contents, the Registry's variable-sized definition records, and message payloads are stored outside the superblock. The superblock is therefore the session's control area, not the entire Registry or the entire fixed reservation. Its immutable configuration metadata and mutable recovery/control fields have different validation and access rules.
 
 Offsets below are from the start of `session.ang`. The initial immutable settings are separate from mutable roots. The [journal protocol](concurrency.md#operation-protocol-and-crash-boundaries) defines their authority and recovery.
 
@@ -140,7 +148,13 @@ Entity definitions start with a common 64-byte body: `key:u64`, `created_by:u16`
 | Field | `base_type:u16`, `flags:u16`, `declared_size:u32`, `attributes:ByteSlice`. Attributes are empty for the initial scalar definitions; later required encodings need feature/version negotiation. |
 | Message schema | `message_type:u16`, two reserved bytes, `schema_version:u32`, `fields:ArraySlice` of full `u32` Field IDs. |
 
+Step 2.7's Field and schema bodies each have 88 fixed bytes. Field flags and attributes are zero/empty; its name and documentation follow the fixed body in order. A schema places its encoded Field array immediately after the fixed body, followed by name and documentation. Array order and repetitions are preserved. An empty array has zero offset and count; optional empty documentation likewise uses a zero slice. Short zero padding completes the record allocation. Portable codecs recognize all stable base codes, while the native implementation currently enforces fixed scalar byte widths (1 for char/byte, 2 for 16-bit integers, 4 for 32-bit integers/floats, 8 for 64-bit integers/floats). Later representations require their specified encodings and feature negotiation.
+
+Immutable Field definitions have zero envelope predecessor. A new schema version links to the latest retained definition for its message type in registration order, independently of numeric version or allocation-slot order. Definitions in one atomic Registry Append may share a revision; logical record order distinguishes their predecessor chain. Readers require matching body/index/envelope identities and revisions, registered creators, a consistent type/name pairing, and Field references that existed by the schema's registration revision. All versions retain their index entries and original definitions.
+
 Resolved policies, priorities, capacities, and generated seeds are persisted. Inspection reconstructs owning descriptors from them. Each definition owns its variable bytes inside its immutable record. Registry names/docs and ordered schema Field arrays consume arena/log bytes, **not** the application string pool. New definitions and topology revisions append records and advance index roots through one Registry transaction; existing publications continue to reference their original definitions.
+
+Step 2.8 implements Queue, Source, and Publishing bodies with 80, 96, and 96 fixed bytes respectively. Source members and Publishing destinations are unique ordered `u16` arrays immediately after the fixed body, followed by name and documentation; empty slices use zero offset and count. All policies are resolved before encoding. Nonrandom Sources store seed zero and expose no random-seed override on inspection. New entities store Draft in both body and index. A Queue's Source membership update appends a new Source revision linked to its retained predecessor in the same batch. Current indexes must cover every retained identity and point to its latest definition; historical references and inverse Source membership are checked at their registration revision. The [native contract](native-storage.md#draft-queues-and-queue-sets) specifies initial draft-state mirrors and policy support.
 
 The Session definition has its own 128-byte fixed body: creator Task (`u16`), storage (`u16`), four default policy codes (`u16` each, delivery/selection/wait/acceptance), four reserved bytes, creation time (`i64`), default ring capacity (`u64`), segment quantum (`u64`), required-policy feature mask (`u64`), then five `ByteSlice`s for name, framework version, application version, creator user, and original directory. The slices occupy offsets 48 through 127. The directory is diagnostic; session identity and references survive relocation. `Session::options()._directory` describes the directory actually attached.
 
@@ -160,11 +174,15 @@ A Source's in-flight slot pins one receipt and its payload. Its issuance counter
 
 Task state records the latest attachment plus monotonic restart/incarnation information. Immutable definition revisions preserve Task registration and topology lifecycle history; publications and receipts retain the claims that performed their operations. This is not an unlimited journal of every attach/detach event. Replacement claims and progress recovery must remain possible when publication storage is full; step 1.5 resolves them using reserved state.
 
+The Session flags word at superblock offset 112 uses bit 0 (`1`) for completed bootstrap; remaining bits are reserved. Public attachment requires this flag after recovery. The Task flags word at row offset 48 uses bit 0 (`1`) for recorded attachment, bit 1 (`2`) for presence of last-attachment time, and bit 2 (`4`) for presence of last-detachment time; remaining bits are reserved. A never-attached Task row is all zero. Process Tasks have zero parent incarnation; an attached Thread Task records its parent's incarnation. Detachment preserves that tag so interrupted cleanup can rediscover the ending parent's children during replay. Reserved Task bytes and state in empty index slots must be zero.
+
 The 32-byte symbol row reserves ID (`u32`), flags (`u32`), value reference (`u64`), UTF-8 byte length (`u32`), character count (`u32`), and a reserved word (`u64`). Symbol values are immutable arena records and retain the wiki's 64-character maximum. Application strings occupy the separately reserved pool and use pool-relative offsets and lengths. Milestone 9 defines pool entry headers, retention, encoding constraints, and registration operations; its references must retain these lifetime and capacity rules. Registry metadata does not reduce the configured application pool capacity.
 
 ## Rings, publications, and receipts
 
 A two-plane ring allocation has a 64-byte record envelope followed by `ring_capacity` slots of 32 bytes, rounded up to 64 bytes. Each slot contains `queue_sequence:u64`, `delivery_link:u64`, `publication_ref:u64`, and `generation/state:u64`. A ring slot is an index into retained history. Its overwrite is neither an acknowledgment nor permission to reclaim a pinned payload. Recover-from-log queues reconstruct missing entries from retained delivery links and receipts. Allow-loss queues use overwritten sequence ranges while preserving an already issued pin.
+
+Step 2.9 allocates the initial ring in the Queue activation batch. Its immutable body is empty, predecessor is zero, and associated Registry revision is the Queue's first Active definition revision. The Queue state row stores its reference at byte 16 and resolved capacity at byte 24; every other word remains zero. Ring slots and allocation padding are zero until delivery is implemented. Each retained ring has exactly one Active Queue owner. Source runtime rows remain zero, and Publishing rows retain only topology revision/current definition reference. Active state uses wire code 2 in both definition and index; all creation attribution stays unchanged across revisions.
 
 Segmented storage has no ring-overwrite boundary. Under this initial contract it grows until the session byte cap, where new publications return `LogFull`; `allow_loss` does not introduce implicit eviction. Both delivery policies preserve pending deliveries in that mapping. A future eviction policy would need an explicit boundary, gap semantics, and feature negotiation.
 

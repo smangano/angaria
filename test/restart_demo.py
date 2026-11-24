@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Exercise endpoint restart and offline inspection through the demo executable."""
 
+# This walkthrough uses the earlier v0 producer/consumer prototype, not the
+# format-2 Queue Set runtime planned by the roadmap. Its process handshakes show
+# when delivery/acknowledgment becomes observable before an owner is killed.
 import argparse
 import hashlib
 import os

@@ -1,20 +1,20 @@
 # Angaria configuration and lifecycle contract
 
-This document defines the proposed step 1.2 defaults for review. It carries forward the agreed single-producer topology, recovery-from-log delivery default, and all-destination publication acceptance default.
+This document defines Angaria's configuration schema and lifecycle rules. Step 2.10 implements TOML loading and the file-based Session factories against the same descriptor and policy validation used by programmatic registration.
 
 Configuration files use TOML through cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`. The syntax contract targets TOML v0.5.0, which the upstream README documents. The [trading configuration](../examples/trading.toml) illustrates the three-process topology from the [milestone 1 plan](milestones/milestone-1.md). [cpptoml source](https://github.com/skystrife/cpptoml/tree/fededad7169e538ca47e11a9ee9251bc361a9a65)
 
-The step 1.2 compatibility check parses the example through the pinned parser. Milestone 2 delivers the Registry configuration loader and semantic validation. YAML, JSON, and XML converters arrive in milestone 10 and produce TOML for this same loader.
+The current native profile supports two-plane storage, fixed-width scalar Fields, strict selection, spin waiting, recovery-from-log delivery, and all-destination acceptance. Other recognized policy choices below describe the planned contract and return `UnsupportedPolicy` until implemented. Sending, receiving, and message encoding remain later milestone work. YAML, JSON, and XML converters arrive in milestone 10 and produce TOML for this same loader.
 
-The example registers three process Tasks, MarketData, StrategyHost, and Risk, plus the Strategy thread Task hosted by StrategyHost. Strategy owns StrategyInputs and produces StrategyToRisk. MarketDataUpdates publishes to the Strategy and Risk inputs. Its capacity values illustrate a bounded configuration for review.
+The example registers three process Tasks, MarketData, StrategyHost, and Risk, plus the Strategy thread Task hosted by StrategyHost. Strategy owns StrategyInputs and produces StrategyToRisk. MarketDataUpdates names the Strategy and Risk destination queues. Its capacity values illustrate a bounded configuration. The [primer's TOML lesson](primer.md#7-move-setup-into-a-toml-file) provides a smaller runnable starting point.
 
 ## File structure and values
 
 The root key `config_version` is required and must be the integer `1`. The configuration contains `session` and `limits` tables, optional `defaults` tables, and arrays of tables declaring Tasks, Source Queue Sets, Queues, Publishing Queue Sets, Fields, and Messages. Declaration arrays may be omitted or empty. Each declared category must fit its reserved capacity.
 
-Names and references are case-sensitive strings. A reference names a declared or registered entity of the required kind. Entity names identify one entity in their Registry namespace. Source and Publishing Queue Sets share the Queue Set namespace. Duplicate declarations and conflicting identities are configuration errors.
+Names and references are case-sensitive strings. During creation a reference names a declared entity of the required kind; declaration order does not constrain forward references. During file-based attachment a reference may also name an entity already registered in the Session. Entity names identify one entity in their Registry namespace. Source and Publishing Queue Sets share the Queue Set namespace. Duplicate declarations and conflicting identities are configuration errors, even when duplicate descriptors are identical. The optional `doc` key supplies documentation for each declared Task, Queue, Queue Set, Field, or Message.
 
-TOML integers are signed 64-bit values. Validate sign and the destination range before converting to an unsigned capacity, identifier, version, seed, or priority. Positive means greater than zero. Unknown tables and keys are rejected so misspelled settings cannot silently select defaults.
+TOML integers are signed 64-bit values. The loader validates sign and the destination range before converting to an unsigned capacity, identifier, version, seed, or priority. Positive means greater than zero. Values must have their specified TOML type: a quoted number or a floating-point value does not satisfy an integer setting. Unknown tables and keys are rejected so misspelled settings cannot silently select defaults.
 
 ## Session
 
@@ -29,7 +29,9 @@ TOML integers are signed 64-bit values. Validate sign and the destination range 
 
 Session creation identifies a process Task as its creator, as defined by the [public API contract](api.md). That Task consumes a reserved entry and supplies initial registration attribution.
 
-The storage mapping and allocation settings bind when a session is created. Existing-session attachment reads its recorded effective configuration and validates compatibility. When an attachment supplies configuration, its resolved session name, storage settings, and capacity limits must match the recorded values or return a configuration-mismatch result. Configuration changes take effect through a new session or the explicit registration APIs for supported topology additions.
+The storage mapping and allocation settings bind when a session is created. `Session::create_from_file(path, creator)` requires the creator to name a declared Process Task and consumes that declaration's entry, without adding an extra Task. It validates the complete configuration before initial registration, then registers definitions and activates complete nonempty topology through the common runtime path. The completed directory is published exclusively only after setup succeeds. A failure does not publish a partial Session or replace an existing target.
+
+`Session::attach_from_file(path)` locates the existing Session through the resolved directory, reads its recorded effective configuration, and validates compatibility. The Session name, application version, log byte limit, storage/segment settings, capacity limits, and policy defaults must match or return `ConfigurationMismatch`. The actual canonical directory can differ from the recorded creation location after relocation. Attachment checks supplied declarations and references without applying registrations, changing topology, or claiming Tasks. It does not require supported runtime topology changes to match the original declaration list. Normal Session validation and interrupted recovery may still write to the underlying file. Configuration changes take effect through a new Session or explicit supported Registry APIs.
 
 ## Capacity limits
 
@@ -67,13 +69,15 @@ Per-entity settings override their corresponding configuration defaults.
 | `defaults.source_set.wait` | `spin` | `spin`, `eventfd`. |
 | `defaults.publishing_set.acceptance` | `all_destinations` | `all_destinations`, `partial`. |
 
-The two delivery and acceptance defaults are agreed architecture. Ring capacity, strict selection, and spinning are proposed step 1.2 defaults. A selected policy must be supported by the build and platform. The eventfd policy is Linux-specific.
+These are the agreed defaults. A selected policy must be supported by the build and platform. The current native implementation accepts only `two_plane`, `recover_from_log`, `strict`, `spin`, and `all_destinations`; other known choices return `UnsupportedPolicy`. The planned eventfd policy is Linux-specific.
 
 ## Tasks
 
 Each `[[tasks]]` entry has a required `name`. Its `kind` defaults to `process` and accepts `process` or `thread`.
 
 A thread Task also specifies `process`, naming its parent process Task. A process Task omits that key. Runtime process and thread identifiers are recorded when a Task attaches. Configuration names logical participants.
+
+Programmatic Task registration is implemented in step 2.6. Its descriptor uses the parent's typed Task ID, and the parent must already be a registered Process Task; it need not be attached yet. Exact re-registration compares name, kind, parent, and documentation, preserving the original registration metadata. A different descriptor under that name returns `Conflict`. File-based creation resolves parent names and registers Process Tasks before their Threads, independently of declaration order.
 
 A Task may produce and consume. Applications coordinate sending threads that share a producer endpoint, including overlapping publishing destinations.
 
@@ -90,6 +94,8 @@ Each `[[source_sets]]` entry contains the following keys.
 | `random_seed` | Optional nonnegative integer for `weighted_random`. Omission generates an effective seed when the set is created and records it with policy settings. Reattachment reads the recorded seed. This key is an error for other selection policies. |
 
 Queue declarations provide membership and priority. The loader checks those relationships together. A set owns at most one in-flight delivery under this initial contract, and its owner must acknowledge or release it before receiving another delivery. Separate Source Queue Sets have independent in-flight state.
+
+Steps 2.8–2.9 implement programmatic Queue/Queue Set registration, effective policy inspection, membership discovery, draft adoption/assignment, and activation. Source and Publishing names/IDs share one namespace. Creating or moving a Queue commits its definition and inverse Source memberships together. Exact retries compare resolved values, and a Source registration retry remains idempotent after Queues join it. Drafts may be incomplete for later programmatic setup; TOML declarations require the complete references shown here. The step 2.10 loader resolves and validates them before application.
 
 ## Queues
 
@@ -122,6 +128,8 @@ Optional `[[messages]]` declarations have required `name`, `type`, `version`, an
 
 A message schema is identified by its type and version. Multiple immutable versions may share a message type and name. Conflicting names for a type, conflicting types for a name, and repeated type/version declarations are errors. Every referenced Field must resolve.
 
+Step 2.7 implements the equivalent programmatic Field/schema registrations and inspections. Field IDs use the complete `0xEE000000`–`0xEEFFFFFF` range; table capacity counts entries rather than the numeric ID. Programmatic exact re-registration is idempotent, while conflicting Field IDs/names return Conflict and conflicting schema identities/type-name pairings return SchemaConflict. Message Field order and repetition are meaningful, and an empty array is valid. The native Field types accepted in TOML are `char`, `byte`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, and `float64`. Their sizes follow the fixed scalar wire width rather than `sizeof` a native C++ object. Other representations and their encoding features follow milestones 3 and 9.
+
 Applications may register definitions programmatically within the same reserved capacities. TOML declarations supply initial registrations.
 
 ## Registration and activation
@@ -133,6 +141,8 @@ Exact-match re-registration is idempotent. A conflicting registration returns a 
 Runtime additions are allowed within reserved capacity through atomic Registry updates. A draft queue can be created and assigned to a Source Queue Set before activation. Sending and receiving require active entities with complete ownership and membership. Active Source and Publishing Queue Sets have at least one member. Activation depends on complete definitions and allocated resources. A complete configured topology can be activated during session creation while its producer and consumer processes are offline. Empty sets remain draft until complete. Draft entities support subsequent programmatic setup.
 
 Ownership adoption is allowed while an entity is draft. Once active, queue producer/source assignments and Source/Publishing Queue Set owners remain fixed under this initial contract. A replacement Task attaches to the same logical ownership with a new incarnation after the former claim is released. Competing live claims return ownership-busy.
+
+Programmatic adoption requires a nonzero registered target Task, which may be offline. Source assignment can explicitly unassign a draft Queue by passing a zero Source ID. Activation order is Source, then its Queues, then Publishing sets. A Queue's activation budget includes its ring, definition, manifest, redo, and padding; insufficient space leaves it draft. Active Publishing destination replacement requires its owning actor, a nonempty list, and Active Queues owned by that producer. Exact unchanged operations remain no-ops at exhausted capacity/log/counters. Sending and receiving are later milestone work.
 
 Source membership may gain a newly registered queue through an atomic topology update. Publishing membership changes occur with no publication call in progress for that set and create a new topology generation. The update validates all destination ownership and capacity constraints before commit. Previously committed destination snapshots retain their meaning.
 
@@ -166,4 +176,4 @@ Syntax failures include the input filename and the parser's line diagnostic wher
 
 YAML, JSON, and XML conversion is defined against this configuration schema. Equivalent supported values produce equivalent effective TOML configuration. Unsupported or lossy mappings produce conversion errors. Relative-path meaning must be preserved when converted TOML is written to another directory.
 
-The example's parser-compatibility check establishes that the selected cpptoml revision accepts the chosen TOML syntax. Full loader behavior, semantic-error cases, and Registry-application tests follow in milestone 2. Converter implementations and equivalence tests follow in milestone 10.
+The [loader tests](../test/test_file_configuration.cpp) exercise public file factories, semantic failures, capacity boundaries, effective attachment settings, and preservation of existing Sessions. The parser-compatibility check also keeps the documented example within the pinned parser's syntax. Converter implementations and equivalence tests follow in milestone 10.

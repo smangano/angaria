@@ -6,11 +6,17 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten planned milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria).
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1 and [2](docs/milestones/milestone-2.md) are complete. General message construction and encoding follow in milestone 3.
+
+The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
+
+The milestone-6 demo target is a [five-process trading simulation](ROADMAP.md#demonstration-application): market-data feed, strategy, risk gateway, exchange simulator, and audit consumer. Planning starts during milestones 2–3, with runnable portions introduced as mapped storage and Queue Sets become available.
 
 The current v0 prototype exchanges an integer message through a bounded filesystem queue, supports independent endpoint restart and explicit acknowledgment, and records messages in an inspectable session file. The commands below run that prototype.
 
 ## Build and test
+
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through eight runnable programs, from creating a Session to configuring fan-out, loading TOML, and inspecting Registry history across processes. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -23,25 +29,66 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+For usage examples, start with the [test reading guide](test/README.md). Test comments explain the demonstrated scenarios and distinguish public Session usage from private fixtures, recovery checks, the protocol model, and the earlier prototype.
+
+On macOS, install the test dependencies with Homebrew and use its prefix when configuring:
+
+```sh
+brew install cmake boost googletest python
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+cmake --build build --parallel 3
+ctest --test-dir build --output-on-failure
+```
+
+Hosted CI exercises Linux and macOS on both x86_64 and ARM64. The [native qualification contract](docs/native-storage.md#registry-qualification-and-native-profiles) defines what those runs cover.
+
 ## Configuration contract
 
-The [configuration and lifecycle contract](docs/configuration.md) defines the proposed TOML schema for the Registry implementation. The [trading example](examples/trading.toml) exercises process and thread Tasks, both Queue Set types, and the delivery policies.
+The [configuration and lifecycle contract](docs/configuration.md) defines the implemented TOML schema. `Session::create_from_file` validates configuration and creates the initial Registry; `Session::attach_from_file` validates settings against an existing Session without applying registrations or claiming Tasks. The [trading example](examples/trading.toml) describes process and thread Tasks, both Queue Set types, scalar Fields, and an immutable message schema using the supported native policy profile. Start with the [primer's TOML lesson](docs/primer.md#7-move-setup-into-a-toml-file) for a smaller runnable example.
 
-CTest parses this example with pinned cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`. CMake fetches those headers when testing is enabled. A local checkout of that revision can be supplied for an offline build.
+The loader uses pinned cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`, targeting TOML v0.5.0 syntax. CMake fetches those headers for library builds, including builds with testing disabled. A local checkout of that revision can be supplied for an offline build.
 
 ```sh
 cmake -S . -B build -DFETCHCONTENT_SOURCE_DIR_CPPTOML=/absolute/path/to/cpptoml
 ```
 
-Milestone 2 integrates configuration loading and semantic validation with the Registry.
+Relative Session directories resolve from the TOML file's parent directory. Creation refuses to replace an existing Session and publishes its directory only after setup succeeds. Delivery policies whose runtime behavior is not implemented still return `UnsupportedPolicy`.
 
 ## Public API contract
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines the proposed format 2.0, capacity accounting, and migration rules. Its checked reservation arithmetic is tested; format-2 file I/O and synchronization follow in the implementation milestones.
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, and publication identity issuance are implemented. Message delivery and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
 
-The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs a bounded crash-recovery reference model; native format-2 runtime qualification follows in the implementation milestones.
+The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Publication, delivery, and notification behavior follow in their implementation milestones.
+
+Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. The [superblock](docs/mapped-format.md#superblock) is the fixed 4,096-byte session control area at the beginning of `session.ang`. Its codec encodes a provisional superblock prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Native resources, journal recovery, and Session integration are separate increments in the [milestone 2 steps](docs/milestones/milestone-2.md). Related terms are defined in the [glossary](docs/glossary.md).
+
+Step 2.2 adds private [native file and mapping owners](docs/native-storage.md): checked positional I/O, read-only/shared writable mappings, and bounded resize with process-local protection for live views across aliases. A mapping retains its backing file state. These storage primitives do not expose usable format-2 Sessions.
+
+Step 2.3 adds the shared [session controller, mutation guards, Task leases, and native atomic adapter](docs/native-storage.md#shared-controller-and-mutation-gate). Native tests exercise thread/process exclusion, claim lifetimes and process termination, and mapped-memory publication ordering.
+
+Step 2.4 adds the private [mutation journal](docs/native-storage.md#journal-transactions-and-recovery): inline fixed-state transactions, append batches with manifests, stale-plan rejection, and repeatable rollback/redo for two-plane storage. Tests terminate independent processes at real write/recovery boundaries and inject I/O failures.
+
+Step 2.5 integrates [public Session creation and attachment](docs/native-storage.md#public-session-and-task-lifetimes), persisted options/metadata, the creator Process Task, Task inspection, and fixed-state attachment/incarnation/publication-ID operations. Creation publishes a completely initialized directory exclusively; attachment validates and recovers existing state. Claim replacement, including cleanup of a dead Process Task's thread Tasks, works with no append space.
+
+Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registration) through a live Task's Registry. Exact descriptors return the existing identity without writing; conflicting descriptors, exhausted capacities, and insufficient log space preserve existing registrations. Process and Thread Tasks can be registered before attachment, and each successful new registration commits one immutable definition and Registry revision. Tests cover concurrent registrars, independent discovery, and interrupted registration/recovery.
+
+Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; payload encoding and other Field representations follow their roadmap steps. Step 2.10 integrates TOML loading below.
+
+Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-and-queue-sets), shared typed Queue Set identities, ownership checks, and atomic Source membership registration. Independent-process tests exercise discovery, concurrent registration, and interrupted multi-record updates. Activation, ring allocation, and endpoints follow their roadmap steps.
+
+Step 2.9 adds [adoption, topology changes, and activation](docs/native-storage.md#topology-changes-and-activation). Queue activation reserves a zeroed ring atomically with its Active definition. Endpoint handles expose identities and retain Task ownership; a Source opening is exclusive within that claim. Sending, receiving, acknowledgment, and publishing follow their implementation milestones.
+
+Step 2.10 adds [TOML Session factories](docs/native-storage.md#toml-session-factories), complete semantic preflight, shared programmatic policy validation, initial registration/activation, and exact effective-setting checks on file-based attachment. The [primer](docs/primer.md#7-move-setup-into-a-toml-file) and automated examples demonstrate the public file API.
+
+Step 2.11 adds [consistent current and historical Registry snapshots](docs/api.md#current-and-historical-registry-snapshots) and mixed independent-process qualification. The [Registry walkthrough](docs/registry-walkthrough.md) shows every entity kind, concurrent registration, ownership replacement, and inspection after application shutdown:
+
+```sh
+python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/primer/configuration.toml
+```
+
+The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities; message encoding and delivery follow their roadmap milestones.
 
 ## Run the restart walkthrough
 

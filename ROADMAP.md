@@ -6,7 +6,45 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below are planned. Milestone 6 delivers an application using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and [milestone 2](docs/milestones/milestone-2.md) is complete through its eleven reviewed steps. Milestone 3 adds general message construction and encoding next. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+
+## Living programmer primer
+
+The [Angaria primer](docs/primer.md) teaches the implemented public API through small runnable programs, then builds toward multi-process applications. Keep its language accessible to junior programmers. Every milestone includes updating the primer and its [compiled examples](examples/primer/) for new public features, supported policies, and lifecycle rules; milestone completion reviews include that update. CI runs the examples so changes cannot silently leave the learning path broken. Planned topics remain clearly marked until their APIs work.
+
+## Versioning
+
+The framework uses `major.minor.build`, recorded in the root [VERSION](VERSION) file and read by CMake. During roadmap development, major is `0`, minor is the milestone number, and build increases once for every new PR. This includes fixes, documentation changes, and milestone integration PRs. Additional commits, review fixes, and CI reruns within one PR retain its assigned version.
+
+Build numbers continue increasing across milestones. For example, successive PRs could use `0.2.1`, `0.2.2`, milestone integration `0.2.3`, and then `0.3.4` for the first milestone-3 PR. Assign the next unused build number when opening a PR and include the version in its description. Check previously assigned PR versions so parallel or closed work does not cause a number to be reused.
+
+Tracking begins with the versioning PR at `0.2.1`; earlier PRs remain unversioned. Completion of all ten milestones produces release **`1.0.0`**, resetting the development counter. Framework versions are independent of configuration, mapped-format, message-schema, and synchronization protocol versions; those retain their own compatibility rules.
+
+## Demonstration application
+
+The agreed milestone-6 demo is a trading simulation with five cooperating application processes:
+
+| Process | Role |
+| --- | --- |
+| Market-data feed | Produce a repeatable synthetic quote workload. |
+| Strategy | Consume quotes and execution reports, and generate simulated orders using simple rules. |
+| Risk gateway | Apply simple configured checks and forward approved orders to the exchange simulator. |
+| Exchange simulator | Process approved orders and produce simulated execution reports. |
+| Audit consumer | Observe orders, risk decisions, and execution reports through its own destination queues. |
+
+Each producer-consumer connection uses a separate single-producer queue in the consumer's Source Queue Set. Publishing Queue Sets fan out messages, including quotes and execution reports. Quote queues may allow stale-data loss with visible gap reporting; order, risk-decision, and execution-report paths recover from the log and acknowledge independently. Configuration uses TOML through the common loader.
+
+The complete demo must exercise Source selection policies, all-destination acceptance, configurable partial acceptance/retry, ring wraparound, bounded log exhaustion, and producer/consumer termination and restart. Rejection scenarios require a destination that actually cannot accept: an offline consumer or overwritten ring alone does not cause rejection. Assertions cover message contents, per-queue order, acceptance results, gaps, and acknowledgment/redelivery progress.
+
+Use stable application order and execution identifiers to recognize repeated processing after redelivery. Transport redelivery does not provide exactly-once application effects or a total order across producer queues. Detailed schemas, queue wiring, workload bounds, and simulated-order processing rules will be reviewed during planning.
+
+| Milestone | Demo objective |
+| --- | --- |
+| 2–3 | Plan the topology, schemas, workloads, and failure scenarios against the Registry and message APIs. |
+| 4 | Build the first runnable multi-process path using mapped messages and log recovery. |
+| 5 | Exercise multiple inputs and Source Queue Set selection policies. |
+| 6 | Deliver the complete five-process application and the acceptance scenarios above. |
+| 7–10 | Extend the same application across waiting/storage policies, then add release walkthroughs and measurements. |
 
 ## Agreed architecture
 
@@ -43,7 +81,7 @@ The default recovery policy retains records needed for unacknowledged deliveries
 
 ## 1 Core architecture and policy contracts
 
-The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divide this work into five step PRs targeting `milestone-1`.
+Completed through [PR #7](https://github.com/smangano/angaria/pull/7). The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divided this work into five reviewed step PRs targeting `milestone-1`.
 
 - Define the public C++ model for Tasks, queues, both Queue Set types, registration, ownership, attachment, acknowledgment, and failure results.
 - Specify policy interfaces for storage mapping, source selection, consumer synchronization, queue delivery, and publishing acceptance.
@@ -55,6 +93,8 @@ Completion requires a reviewed public API example for a bounded multi-process ap
 
 ## 2 Shared persistent Registry
 
+Complete. The [milestone 2 review plan](docs/milestones/milestone-2.md) records eleven reviewed step PRs, from the format-2 foundation through validated TOML configuration, consistent historical snapshots, and the [independent-process Registry walkthrough](docs/registry-walkthrough.md). Framework version `0.2.14` integrates this completed milestone into `main`.
+
 - Implement the live Registry in shared mapped memory and place its persisted representation at the start of message logs.
 - Implement registration and lookup for Tasks, Queues, Source Queue Sets, Publishing Queue Sets, Messages, schema versions, and Fields.
 - Load TOML configuration through cpptoml and validate capacities, topology, and policy settings before applying Registry updates.
@@ -63,7 +103,7 @@ Completion requires a reviewed public API example for a bounded multi-process ap
 - Implement consistent IDs and name indexes, concurrent registration, capacity errors, and recovery from interrupted updates.
 - Preserve the historical definitions needed to interpret captured messages after schema, Task, or topology changes.
 
-Completion requires independent processes to register and discover every entity type, recover from interrupted registration, and inspect the recorded Registry after application shutdown.
+Completion is demonstrated by independent processes registering and discovering every entity type, recovering interrupted registration and topology updates, and inspecting current and historical Registry state after application shutdown. The full qualification suite and walkthroughs pass on Linux and macOS for both x86_64 and ARM64.
 
 ## 3 General messages and basic inspection
 
@@ -103,7 +143,7 @@ Completion requires multiple producer queues feeding a consumer, with verified p
 - Implement recovery around publication commits and retry handling for rejected destinations.
 - Compose publishing sets with the destinations' consumer-owned Source Queue Sets and configured delivery policies.
 
-Completion requires tests for a destination that cannot accept, rejection without queue or log changes, partial acceptance and retry, independent acknowledgment, and publisher termination around commit and publication. A multi-process example must use the Registry and both Queue Set types.
+Completion requires tests for a destination that cannot accept, rejection without queue or log changes, partial acceptance and retry, independent acknowledgment, and publisher termination around commit and publication. The [five-process trading simulation](#demonstration-application) must demonstrate these behaviors using the Registry and both Queue Set types.
 
 ## 7 Consumer synchronization policies
 
