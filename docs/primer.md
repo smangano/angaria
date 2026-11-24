@@ -2,9 +2,9 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through the completed **milestone 2**, framework version **0.2.14**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 3, step 3.1**, framework version **0.3.1**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
-You can run every example in this guide today. They create persistent sessions, register definitions, build connections, and claim producer and consumer endpoints. Sending, publishing, receiving, acknowledgment, and message encoding arrive in later milestones. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, and encode scalar payloads. Sending, publishing, receiving, acknowledgment, and complete message envelopes arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
 ## A few ideas before the code
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The milestone-2 integration release, version `0.2.14`, includes this primer and all eight example sources on `main`. Use the guide and examples from the same checkout so commands match the API you build.
+The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lesson 9 is introduced by the `milestone-3-1` PR and reaches `milestone-3` after that PR is merged; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -49,9 +49,9 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The eight targets are named `angaria_primer_01_session` through `angaria_primer_08_registry`, matching their source filenames.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The nine targets are named `angaria_primer_01_session` through `angaria_primer_09_payload`, matching their source filenames.
 
-Each of the first five examples needs a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+Examples 1–5 and 9 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
 ```sh
 primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
@@ -137,7 +137,7 @@ Quote v2 Fields: PriceTicks Quantity Instrument
 
 The program prints the retained schema Field lists and demonstrates immutable registration. Retrying the same definition succeeds. Changing the ordered Fields or documentation of an existing schema produces `SchemaConflict`; the example checks the documentation case. Give a changed schema a new version instead.
 
-These are **definitions**, not encoded quote payloads. This example does not construct or transmit a quote. Scalar encoding and general message inspection belong to milestone 3, with more Field families following in milestone 9.
+These are **definitions**, not encoded quote payloads. This example does not construct or transmit a quote. Lesson 9 uses these definitions for binary scalar encoding. General message inspection follows in the remaining milestone-3 steps, with more Field families following in milestone 9.
 
 ## 4. Connect one producer to one consumer
 
@@ -351,6 +351,53 @@ Task claims and restart incarnations change independently of Registry revisions.
 
 The inspector claims no Task. Its Session Registry rejects registration with `ReadOnlyRegistry`, and it can discover the saved catalog after the application processes exit. As in the earlier examples, normal Session attachment may complete interrupted recovery. This walkthrough qualifies Registry behavior on the tested profiles; it does not demonstrate message delivery or general session replay.
 
+## 9. Encode a Quote payload
+
+Read [09_payload.cpp](../examples/primer/09_payload.cpp), then run:
+
+```sh
+./build/angaria_primer_09_payload "$primer_workspace/09-payload"
+```
+
+A **payload** is the application data carried by a message. A **scalar** is one simple value, such as an integer or floating-point number. This example converts the scalar Fields of a Quote into bytes, then reads the same values back.
+
+The program registers `PriceTicks` as int64, `Quantity` as uint64, and `Instrument` as uint32. Quote version 1 contains the first two Fields. `BinaryPayloadCodec` resolves that exact schema and owns a copy of its ordered Field definitions:
+
+```cpp
+constexpr std::uint64_t payload_limit = 64;
+auto codec = primer::value(angaria::BinaryPayloadCodec::from_registry(
+    session.registry(), quote_schema, payload_limit));
+const std::array<angaria::ScalarValue, 2> values{
+    std::int64_t{-2}, std::uint64_t{7}};
+const auto bytes = primer::value(codec.encode(values));
+const auto decoded = primer::value(codec.decode(bytes));
+```
+
+The named byte limit reserves no storage by itself. It tells the codec the largest payload this application is willing to build. This schema needs 16 bytes, so a limit of 15 fails with `CapacityExceeded` while compiling it.
+
+`ScalarValue` is a variant containing one supported scalar type. Each input must have the exact registered C++ type. Here the first value is explicitly `std::int64_t`, and the second is explicitly `std::uint64_t`. A positive signed integer is still a different type from an unsigned integer. The codec reports a mismatch rather than silently converting it.
+
+The bytes use **little-endian** order: the least significant byte of a multi-byte value comes first. Field values sit next to each other in schema order, without C++ structure padding. Look for:
+
+```text
+Quote v1 bytes: 16
+Quote v1 hex: fe ff ff ff ff ff ff ff 07 00 00 00 00 00 00 00
+Decoded v1: PriceTicks=-2 Quantity=7
+Quote v2 bytes: 20
+Decoded v2: PriceTicks=-2 Quantity=7 Instrument=42
+Retained codec version: 1
+Codecs remain usable after Session handles close.
+Payload encoding only: no messages were sent.
+```
+
+Quote version 2 adds `Instrument`, making its payload four bytes longer. The earlier codec stays attached to version 1's immutable definition. In this program, the helper finishes all registrations and closes its Session and Task handles before either codec encodes. The codecs remain usable because they own their schema information and retain no Task claim.
+
+The encoded byte vector and decoded value vector also own their data. Use `std::get<std::int64_t>(decoded[0])` to read the first value, and `std::get<std::uint64_t>(decoded[1])` for the second. Decoding requires the exact byte count; it rejects both truncated input and extra trailing bytes.
+
+Keep the exact schema identity alongside the payload. These bytes contain neither their message type nor their version. A codec for another same-sized schema cannot determine that you supplied the wrong data. A complete message envelope will carry the surrounding metadata in a later step.
+
+This lesson runs in application memory. The [payload format guide](message-payload.md) lists supported scalar types and error rules. Queue transport, publication, receiving, and acknowledgment follow their roadmap steps.
+
 ## Understand bounds and ordinary failures
 
 Angaria targets small, bounded systems. Capacities reserve room for Tasks, queues, both kinds of Queue Sets, memberships, Fields, and schema versions. Named setters make adjustments readable:
@@ -375,13 +422,13 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The milestone-2 learning sequence now reaches TOML setup, independent-process Registry use, and current/historical snapshots. The next milestone adds general message construction and scalar encoding. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, and binary scalar payload encoding. The remaining milestone-3 steps add the other basic representations, complete message metadata, and generic inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 3 | Build general messages, encode scalar Fields, and inspect exact schema versions. |
+| 3, remaining steps | Extend basic representations, build complete messages, and inspect exact schema versions. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |

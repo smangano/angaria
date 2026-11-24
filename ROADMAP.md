@@ -6,7 +6,7 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and [milestone 2](docs/milestones/milestone-2.md) is complete through its eleven reviewed steps. Milestone 3 adds general message construction and encoding next. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and [milestone 2](docs/milestones/milestone-2.md) is complete through its eleven reviewed steps. [Milestone 3](docs/milestones/milestone-3.md) is under implementation, beginning with schema-driven binary scalar payloads. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Living programmer primer
 
@@ -14,9 +14,9 @@ The [Angaria primer](docs/primer.md) teaches the implemented public API through 
 
 ## Versioning
 
-The framework uses `major.minor.build`, recorded in the root [VERSION](VERSION) file and read by CMake. During roadmap development, major is `0`, minor is the milestone number, and build increases once for every new PR. This includes fixes, documentation changes, and milestone integration PRs. Additional commits, review fixes, and CI reruns within one PR retain its assigned version.
+The framework uses `major.minor.build`, recorded in the root [VERSION](VERSION) file and read by CMake. During roadmap development, major is `0` and minor is the milestone number. Starting with milestone 3, build starts at `1` for each milestone and increases once for every new PR within that milestone. This includes fixes, documentation changes, and milestone integration PRs. Additional commits, review fixes, and CI reruns within one PR retain its assigned version.
 
-Build numbers continue increasing across milestones. For example, successive PRs could use `0.2.1`, `0.2.2`, milestone integration `0.2.3`, and then `0.3.4` for the first milestone-3 PR. Assign the next unused build number when opening a PR and include the version in its description. Check previously assigned PR versions so parallel or closed work does not cause a number to be reused.
+Milestone 2 keeps its issued versions through integration release `0.2.14`. The first milestone-3 step is `0.3.1`; its next PR uses `0.3.2`. The first milestone-4 PR starts again at `0.4.1`. Assign the next unused build number within the current milestone when opening a PR and include it in the description. Check previously assigned versions, including closed PRs, to avoid reusing a version.
 
 Tracking begins with the versioning PR at `0.2.1`; earlier PRs remain unversioned. Completion of all ten milestones produces release **`1.0.0`**, resetting the development counter. Framework versions are independent of configuration, mapped-format, message-schema, and synchronization protocol versions; those retain their own compatibility rules.
 
@@ -106,6 +106,8 @@ Complete. The [milestone 2 review plan](docs/milestones/milestone-2.md) records 
 Completion is demonstrated by independent processes registering and discovering every entity type, recovering interrupted registration and topology updates, and inspecting current and historical Registry state after application shutdown. The full qualification suite and walkthroughs pass on Linux and macOS for both x86_64 and ARM64.
 
 ## 3 General messages and basic inspection
+
+Under implementation. The [milestone 3 review plan](docs/milestones/milestone-3.md) keeps encoding, basic Field representations, generic message headers, and inspection in focused PRs. Step 3.1 implements the portable binary payload codec for existing scalar definitions at framework version `0.3.1`.
 
 - Implement generic headers and ordered fields driven by registered message definitions.
 - Cover sequence numbers, message/schema identity, payload type and size, producer identity, timestamps, and user flags. Store dequeue and acknowledgment metadata per destination.

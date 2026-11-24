@@ -6,9 +6,9 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1 and [2](docs/milestones/milestone-2.md) are complete. General message construction and encoding follow in milestone 3.
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1 and [2](docs/milestones/milestone-2.md) are complete. [Milestone 3](docs/milestones/milestone-3.md) begins general message construction with schema-driven binary scalar payloads.
 
-The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
+The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR and, from milestone 3, build numbering starting at `1` for each milestone. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
 
 The milestone-6 demo target is a [five-process trading simulation](ROADMAP.md#demonstration-application): market-data feed, strategy, risk gateway, exchange simulator, and audit consumer. Planning starts during milestones 2–3, with runnable portions introduced as mapped storage and Queue Sets become available.
 
@@ -16,7 +16,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through eight runnable programs, from creating a Session to configuring fan-out, loading TOML, and inspecting Registry history across processes. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through nine runnable programs, from creating a Session to configuring fan-out, inspecting Registry history across processes, and encoding binary payloads. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -74,7 +74,7 @@ Step 2.5 integrates [public Session creation and attachment](docs/native-storage
 
 Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registration) through a live Task's Registry. Exact descriptors return the existing identity without writing; conflicting descriptors, exhausted capacities, and insufficient log space preserve existing registrations. Process and Thread Tasks can be registered before attachment, and each successful new registration commits one immutable definition and Registry revision. Tests cover concurrent registrars, independent discovery, and interrupted registration/recovery.
 
-Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; payload encoding and other Field representations follow their roadmap steps. Step 2.10 integrates TOML loading below.
+Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; step 3.1 adds their payload encoding below, while additional Field representations follow their roadmap steps. Step 2.10 integrates TOML loading below.
 
 Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-and-queue-sets), shared typed Queue Set identities, ownership checks, and atomic Source membership registration. Independent-process tests exercise discovery, concurrent registration, and interrupted multi-record updates. Activation, ring allocation, and endpoints follow their roadmap steps.
 
@@ -88,7 +88,9 @@ Step 2.11 adds [consistent current and historical Registry snapshots](docs/api.m
 python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/primer/configuration.toml
 ```
 
-The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities; message encoding and delivery follow their roadmap milestones.
+The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities. The ninth lesson adds payload encoding; delivery follows its roadmap milestones.
+
+Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Message headers, inspection, and additional basic Field representations follow the [milestone 3 steps](docs/milestones/milestone-3.md).
 
 ## Run the restart walkthrough
 
