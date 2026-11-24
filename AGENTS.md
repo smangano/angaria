@@ -14,6 +14,14 @@ Boost and Intel TBB are permitted dependencies when warranted by the implementat
 - Define specialized and project-specific terms at first use, or link to their canonical definition.
 - Keep shared terminology in `docs/glossary.md` consistent with the format/API contracts and code comments.
 
+## Living programmer primer
+
+- Maintain `docs/primer.md` and its runnable programs in `examples/primer/` throughout all milestones. The reader is a junior programmer: use simple language, define new terms, and progress from small complete programs to larger applications.
+- Every feature/milestone PR must review the primer. Incorporate newly implemented public behavior and update affected commands, examples, expected results, ownership/lifetime explanations, and error handling in the same PR. An unrelated change need not manufacture a primer edit.
+- Treat the compiled example sources as canonical. Keep linked explanations and snippets consistent with them; add new example targets and extend `test/primer_examples.py` when the learning sequence grows.
+- Clearly separate implemented, runnable features from planned chapters and the legacy prototype. Do not demonstrate undeveloped API methods as working examples.
+- Include a primer/example update in each milestone's completion review, preserving the beginner path as advanced features are added.
+
 ## Tests as usage documentation
 
 - Treat tests as examples readers use to learn Angaria. Explain the scenario, relevant API sequence, and the guarantee or failure behavior being demonstrated.

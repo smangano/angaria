@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.8 are integrated into `milestone-2`; step 2.9 adds topology changes, activation, and endpoint identity/ownership handles. Its framework version is `0.2.10` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.9 are integrated into `milestone-2`. The [programmer primer](../primer.md) documents that implemented API with runnable examples before development continues to step 2.10. The primer PR uses framework version `0.2.11` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 

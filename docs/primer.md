@@ -1,0 +1,303 @@
+# A programmer's first guide to Angaria
+
+Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
+
+This guide follows the implemented public API through **milestone 2, step 2.9**. The primer was introduced with framework version **0.2.11**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+
+You can run every example in this guide today. They create persistent sessions, register definitions, build connections, and claim producer and consumer endpoints. Sending, publishing, receiving, acknowledgment, and message encoding arrive in later milestones. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+
+## A few ideas before the code
+
+A **process** is a running program. A **thread** is one path of execution inside a process. Two terminal windows can launch two independent processes, even when both run the same executable.
+
+Angaria gives communication roles their own names and identities:
+
+| Idea | Meaning |
+| --- | --- |
+| **Session** | One persistent workspace shared by cooperating programs. Its directory contains the session's stored state and coordination files. |
+| **Task** | A named logical participant, such as `Feed` or `Strategy`. A Task can represent a process or a thread. |
+| **Registry** | The Session's shared catalog of Tasks, Fields, message schemas, queues, ownership, and connections. |
+| **Task claim** | Exclusive attachment to a Task. It says which running process or thread currently acts as that logical participant. |
+| **Queue** | One producer Task's connection into one consumer-owned Source Queue Set. |
+| **Source Queue Set** | A consumer's collection of input queues. Its selection policy will choose which input to receive from. |
+| **Publishing Queue Set** | A producer's ordered list of destination queues. It will publish one message to those destinations. |
+| **Field** | A named piece of message data with a declared representation, such as a 64-bit integer price. |
+| **Message schema** | A message type and version with an ordered list of registered Fields. |
+
+A Task ID identifies a registered role inside a Session. It is different from the operating system's process ID, or PID. A restarted `Feed` process keeps the registered `Feed` Task ID but receives a new claim **incarnation**, a counter that distinguishes this attachment from its predecessors.
+
+For example, a feed and an order generator can each have their own queue in a risk consumer's Source Queue Set. Each queue still has one producer. Threads sharing a producer role must coordinate operations on a common queue. The [glossary](glossary.md) and [API contract](api.md) provide more detail once these ideas become familiar.
+
+## Build the examples
+
+Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers when tests are enabled; see the README for the offline override.
+
+Use a checkout containing this primer and its example sources. For version 0.2.11, use its PR branch or `milestone-2` after that PR is merged. The work reaches `main` when the milestone is integrated.
+
+Run these commands from the repository root:
+
+```sh
+cmake -S . -B build
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+To build the runnable examples without the test dependencies, use a separate directory:
+
+```sh
+cmake -S . -B build-primer -DBUILD_TESTING=OFF
+cmake --build build-primer --parallel
+```
+
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The six targets are named `angaria_primer_01_session` through `angaria_primer_06_processes`, matching their source filenames.
+
+Each of the first five examples needs a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+
+```sh
+primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
+```
+
+This command works in the default shells on Linux and macOS. Keep this terminal open so the variable remains available. The examples create their child directories exclusively. They do not overwrite or remove an existing Session. To repeat an example, choose another child name.
+
+## 1. Create and inspect a Session
+
+Read [01_session.cpp](../examples/primer/01_session.cpp), then run:
+
+```sh
+./build/angaria_primer_01_session "$primer_workspace/01-session"
+```
+
+The program creates a Session and its creator Task, then inspects the stored metadata and finds that Task through the Registry. Session creation needs both configuration and a creator identity. The essential pattern is:
+
+```cpp
+angaria::SessionOptions options;
+options._name = "First session";
+options._directory = argv[1];
+options._maxLogBytes = 1024 * 1024;
+options._limits = angaria::CapacityLimits::empty().tasks(8).queues(8)
+    .source_sets(4).publishing_sets(4).memberships_per_set(4)
+    .fields(16).message_schemas(8);
+options._defaults._ringCapacity = 8;
+
+angaria::TaskDescriptor creator;
+creator._name = "Setup";
+
+auto created = primer::value(angaria::Session::create(options, creator));
+const auto metadata = primer::value(created._session.metadata());
+```
+
+`CreatedSession` contains a Session handle and an attached creator Task handle. A **handle** is a C++ object that keeps the resources for an operation alive. Here, `created._session` gives access to the Session, and `created._creator` acts as its initial Task.
+
+The small [example support header](../examples/primer/example_support.h) supplies two helpers. Later examples reuse the configuration above through `session_options`, including the 1 MiB log limit and ring capacity of eight entries. `value` checks Angaria results so the examples stay readable.
+
+Most fallible operations return `Result<T>`, which is a `std::variant<T, Error>`. A variant holds one alternative at a time: either the requested value or an error. `primer::value` returns the value or throws a `std::runtime_error` containing the failure information. Each example catches exceptions at the top of `main`, prints the error, and exits unsuccessfully. A larger application can inspect the `Error` directly and choose whether to retry, ask for different settings, or stop.
+
+The output reports the Session's name, framework version, creator Task ID, and Task capacity. For this fresh Session, `Setup` has Task ID 1 and the Task capacity is eight. The framework version comes from the built library, so later releases will print a newer value. IDs are local to a Session; do not use an ID from one Session in another.
+
+## 2. Register roles, then attach to them
+
+Read [02_tasks.cpp](../examples/primer/02_tasks.cpp):
+
+```sh
+./build/angaria_primer_02_tasks "$primer_workspace/02-tasks"
+```
+
+Registration and attachment do different jobs. **Registration** adds a durable logical definition to the Registry. **Attachment** claims that role for a running process or thread. Registering `Feed` does not start a feed program or claim the role on its behalf.
+
+A Task has two useful ways to obtain a Registry. `task.registry()` returns an **actor-bound Registry**: mutations are attributed to that attached Task. `session.registry()` gives a lookup and inspection view. Trying to register through the Session's view returns `ReadOnlyRegistry`.
+
+The example registers a `Consumer` role and retries its registration. Registering an identical Task descriptor again returns the same ID. Changing a descriptor under the same name returns `Conflict`; registration is not an implicit edit command. This behavior makes a repeated setup operation safe without silently changing an existing definition.
+
+It also demonstrates attachment and reattachment. The first successful attachment has incarnation 1. After its claim closes, a replacement attachment has incarnation 2. Another live claimant for the same Task receives `OwnershipBusy`.
+
+Resource lifetime matters here. C++ commonly uses **RAII**, meaning an object's lifetime controls a resource. Leaving a scope destroys its local objects. Angaria's dependent handles share ownership of a claim: a Task, its actor-bound Registry views, and its endpoints can each keep it alive. Closing the original Task variable releases the claim only after its last dependent handle also closes. The later multi-process example makes this visible.
+
+The examples use process Tasks. Thread Tasks also exist, but require their parent process Task to be attached locally and must be used on the attaching thread. Start with process roles while learning the ownership model.
+
+## 3. Describe messages before carrying data
+
+Read [03_schemas.cpp](../examples/primer/03_schemas.cpp):
+
+```sh
+./build/angaria_primer_03_schemas "$primer_workspace/03-schemas"
+```
+
+Suppose a quote contains a price and a quantity. Instead of copying the compiler's in-memory C++ struct layout into storage, the Registry describes those pieces explicitly. The example registers fixed-width scalar Fields and two versions of a Quote schema.
+
+A Field has a full 32-bit ID beginning with `0xEE`, a name, a base type, a declared byte size, and documentation. For example, `PriceTicks` can use a signed 64-bit integer. An application can define one tick as one cent and use an integer value of `12345` to mean 123.45. Angaria records the Field definition; the application still needs to explain the chosen units.
+
+A schema is identified by both its message type and its version. Version 1 and version 2 remain separate definitions. Adding an instrument Field to version 2 preserves version 1, so older records can retain their original meaning. Looking up an exact version does not substitute the newest version.
+
+The output includes both ordered Field lists:
+
+```text
+Quote v1 Fields: PriceTicks Quantity
+Quote v2 Fields: PriceTicks Quantity Instrument
+```
+
+The program prints the retained schema Field lists and demonstrates immutable registration. Retrying the same definition succeeds. Changing the ordered Fields or documentation of an existing schema produces `SchemaConflict`; the example checks the documentation case. Give a changed schema a new version instead.
+
+These are **definitions**, not encoded quote payloads. This example does not construct or transmit a quote. Scalar encoding and general message inspection belong to milestone 3, with more Field families following in milestone 9.
+
+## 4. Connect one producer to one consumer
+
+Read [04_connections.cpp](../examples/primer/04_connections.cpp):
+
+```sh
+./build/angaria_primer_04_connections "$primer_workspace/04-connections"
+```
+
+This program registers the wiring for a producer and a consumer. **Topology** means the connections between those registered participants. The producer owns a Queue and a Publishing Queue Set. The consumer owns the Source Queue Set containing that Queue.
+
+The conceptual wiring is:
+
+```mermaid
+flowchart LR
+    P[Producer Task] --> Pub[Publishing Queue Set]
+    Pub --> Q[Single-producer Queue]
+    Q --> Src[Consumer's Source Queue Set]
+    Src --> C[Consumer Task]
+```
+
+The arrows describe registered connections. This example does not move messages along them.
+
+New topology entities start in **Draft** state. Drafts allow setup to assemble complete definitions before opening endpoints. **Activation** changes an entity to Active after its requirements pass. For this connection, the setup order is:
+
+1. Register the Tasks, Source Queue Set, Queue, and Publishing Queue Set.
+2. Activate the Source, whose member queues must already be fully configured.
+3. Activate the Queue, which requires an Active Source and allocates its initial ring.
+4. Activate the Publishing set, whose destination queues must be Active.
+5. Attach the owning Tasks and open their endpoints.
+
+A **ring** is bounded storage reused in a cycle. Later delivery code will use each queue's ring to reference messages in the log. At this step, activation allocates it without delivering messages.
+
+The example opens a `QueueWriter`, a `SourceQueueSet`, and a `PublishingQueueSet` and prints their identities. Opening checks both activation and ownership: a Draft entity returns `NotActive`, and another Task's endpoint returns `WrongOwner`. A Source can have one open handle per live claim; a second open returns `OwnershipBusy`.
+
+For a compact introduction, this program holds both producer and consumer roles in one OS process. A Task name does not require a separate executable. Example 6 launches the roles independently.
+
+## 5. Build a bounded network and change a destination
+
+Read [05_fanout.cpp](../examples/primer/05_fanout.cpp):
+
+```sh
+./build/angaria_primer_05_fanout "$primer_workspace/05-fanout"
+```
+
+Now `Feed` and `Strategy` each need connections to `Risk` and `Audit`. **Fanout** means one publication has several destinations. The registered topology contains four distinct queues:
+
+| Producer | Queue | Consumer's Source |
+| --- | --- | --- |
+| Feed | QuotesToRisk | RiskInputs |
+| Feed | QuotesToAudit | AuditInputs |
+| Strategy | OrdersToRisk | RiskInputs |
+| Strategy | OrdersToAudit | AuditInputs |
+
+`Feed` owns `QuoteUpdates`, which references its two quote queues. `Strategy` owns `OrderUpdates`, which references its two order queues. There is no need for two producers to write the same queue. Each consumer has one Source collecting its incoming queues.
+
+The example starts part of the configuration incomplete, then uses explicit draft operations to adopt ownership and assign a Queue to a Source. Adoption gives an unowned draft a registered owner. Assignment updates the Queue's Source and the Source's membership together. An Active Queue's producer and assigned Source are fixed.
+
+After activation, the `Feed` owner removes `QuotesToAudit` from `QuoteUpdates`. This replaces that Publishing set's destination list; it does not delete the Queue or change who owns it. The program compares the old descriptor, which is an ordinary owning C++ copy, with a fresh Registry description. The old list has two destinations; the new list has one. It also prints the committed revision information.
+
+Look for `QuoteUpdates destinations: 2 -> 1` in the output.
+
+This demonstrates a live topology update. Per-publication destination snapshots will preserve earlier publications' routing when publication is implemented.
+
+The configuration records higher priority for orders than quotes at `RiskInputs`, plus the default strict selection, spin waiting, log recovery, and all-destination acceptance policies. These are currently validated configuration choices. The example cannot demonstrate receiving priorities, busy waiting, recovery of a message, or acceptance across destinations yet.
+
+The planned log-recovery default lets a lagging consumer find retained deliveries after its ring entries have been overwritten. An alternative will allow skipping stale deliveries while reporting the gap. All-destination acceptance will require every destination to accept a publication; configurable partial acceptance will report which destinations accepted and which rejected it. Selection will choose among available inputs, and waiting will control what a consumer does when none is ready.
+
+## 6. Coordinate independent programs
+
+Read [06_processes.cpp](../examples/primer/06_processes.cpp). This executable has four modes:
+
+```text
+angaria_primer_06_processes <init|inspect|producer|consumer> <session-directory> [--hold]
+```
+
+Only `init` creates a new directory. The other modes attach to that existing Session. `--hold` is valid for `producer` and `consumer`; it keeps endpoint handles alive until Enter or end-of-input. Without it, each mode prints its information and exits, which also makes it suitable for automated checks.
+
+Initialize once in your original terminal:
+
+```sh
+./build/angaria_primer_06_processes init "$primer_workspace/06-processes"
+printf '%s\n' "$primer_workspace/06-processes"
+```
+
+Copy the printed absolute path into each of three terminals. Run from the repository root in each terminal and set the same variable:
+
+```sh
+session_directory=/paste/the/printed/path/here
+```
+
+In terminal A, open the consumer role:
+
+```sh
+./build/angaria_primer_06_processes consumer "$session_directory" --hold
+```
+
+Its output includes `READY consumer incarnation=1`. Leave it waiting. In terminal B, open the producer:
+
+```sh
+./build/angaria_primer_06_processes producer "$session_directory" --hold
+```
+
+Its output includes `READY producer incarnation=1`. In terminal C, inspect the shared state and attempt a second producer:
+
+```sh
+./build/angaria_primer_06_processes inspect "$session_directory"
+./build/angaria_primer_06_processes producer "$session_directory"
+```
+
+Inspection finds `Feed` and `Strategy` attached. The second command fails with `OwnershipBusy` because terminal B still owns `Feed`.
+
+The inspector uses a read-only Registry view and claims neither Task. Attaching the Session still validates stored state and may complete recovery; an inspection view does not imply that the underlying file was opened read-only.
+
+Press Enter in terminal B, then run its producer command again. It now prints `READY producer incarnation=2`. The logical Task ID stays the same. Press Enter to close that replacement and the consumer in terminal A, then inspect once more from terminal C. The definitions remain available after both roles close; their attachment status now reports offline.
+
+The example intentionally lets the original Task variable close while endpoint handles remain alive. Those handles retain the claim, which explains why the second producer cannot attach until they close. Normal process termination also releases the native claim lock; recorded PID information is diagnostic rather than the authority for deciding ownership.
+
+The producer reserves a publication identity, consisting of its claim and a sequence number. Reserving an identity does not publish a message. This walkthrough demonstrates separate processes sharing the Registry and enforcing endpoint ownership; actual producer-to-consumer delivery follows later milestones.
+
+## Understand bounds and ordinary failures
+
+Angaria targets small, bounded systems. Capacities reserve room for Tasks, queues, both kinds of Queue Sets, memberships, Fields, and schema versions. Named setters make adjustments readable:
+
+```cpp
+auto limits = angaria::CapacityLimits{}.tasks(16).queues(32).source_sets(8);
+```
+
+Unspecified values keep their defaults. Increasing a capacity affects a new Session's reserved storage; it does not enlarge an existing Session simply because a later process requests more room.
+
+The log stores persistent definitions and updates. Registry entries can fit within their count limits while the log lacks room for another definition. Think of count limits as reserved catalog slots and log capacity as the byte budget for their contents and history.
+
+| Result | What to check |
+| --- | --- |
+| `OwnershipBusy` | Another live claim owns this Task, or this claim already has the Source open. Close the relevant owners before retrying. |
+| `Conflict` | A name or identity is already registered with a different definition. Inspect it; repeating the changed registration will not edit it. |
+| `SchemaConflict` | An immutable message schema disagrees with the requested definition. Register an appropriate new version. |
+| `CapacityExceeded` | A reserved entity or membership count is exhausted. Review the bounds for a new Session. |
+| `LogFull` | The bounded log cannot hold the required append. Count capacity alone is insufficient. |
+
+Exact registration retries are useful because they preserve the existing definition without appending another copy. In contrast, repeated topology edits can consume log space. Claims and incarnation replacement use reserved state, allowing Task replacement even when append space is exhausted.
+
+## How this guide will grow
+
+The next Registry work adds TOML loading through **cpptoml**, followed by the complete independent-process Registry walkthrough. Configuration files use TOML. Planned YAML, JSON, and XML converters will produce TOML for the same loader. The current examples use programmatic configuration because the file factories are not implemented through step 2.9.
+
+The [roadmap](../ROADMAP.md) is the authority for upcoming features:
+
+| Milestone | What the primer will add when implemented |
+| --- | --- |
+| 2, remaining steps | Load validated TOML and walk through the complete persistent Registry. |
+| 3 | Build general messages, encode scalar Fields, and inspect exact schema versions. |
+| 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
+| 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
+| 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |
+| 7 | Compare spinning with Linux eventfd waiting and explain wakeups and endpoint replacement. |
+| 8 | Grow segmented storage and handle allocation limits and restart. |
+| 9 | Use advanced Field types, shared pools, and additional serialization formats. |
+| 10 | Inspect and replay sessions, convert configuration formats, and follow the qualified 1.0.0 walkthrough. |
+
+The primer and its runnable sources are maintained together throughout the milestones. Examples compile against the public API, and automated walkthroughs check their observable behavior. Each feature change should update the relevant explanation and example; future chapters become runnable only after their operations exist. The [test reading guide](../test/README.md) offers more detailed scenarios, while the API and storage contracts explain guarantees beyond this introduction.
+
+The older [v0 queue demo](../README.md#run-the-queue-demo) exercises an earlier prototype. Its delivery code and file format are separate from the Registry API taught here.

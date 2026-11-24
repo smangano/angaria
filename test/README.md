@@ -1,5 +1,7 @@
 # Reading the tests
 
+For a guided introduction before reading test fixtures, use the [programmer primer](../docs/primer.md) and [runnable examples](../examples/primer/). CTest's `primer_examples` check runs those programs and verifies the independent-process ownership walkthrough.
+
 Start with [test_runtime_session.cpp](test_runtime_session.cpp) for Session creation/lifetimes, [test_task_registration.cpp](test_task_registration.cpp) for logical Task registration, and [test_schema_registry.cpp](test_schema_registry.cpp) for Field and versioned schema definitions. Their test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
 
 A useful reading order is:

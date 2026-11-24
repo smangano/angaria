@@ -4,6 +4,10 @@ Angaria is a C++ inter-process messaging framework built around a shared persist
 
 The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and milestone 2 is under implementation. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
+## Living programmer primer
+
+The [Angaria primer](docs/primer.md) teaches the implemented public API through small runnable programs, then builds toward multi-process applications. Keep its language accessible to junior programmers. Every milestone includes updating the primer and its [compiled examples](examples/primer/) for new public features, supported policies, and lifecycle rules; milestone completion reviews include that update. CI runs the examples so changes cannot silently leave the learning path broken. Planned topics remain clearly marked until their APIs work.
+
 ## Versioning
 
 The framework uses `major.minor.build`, recorded in the root [VERSION](VERSION) file and read by CMake. During roadmap development, major is `0`, minor is the milestone number, and build increases once for every new PR. This includes fixes, documentation changes, and milestone integration PRs. Additional commits, review fixes, and CI reruns within one PR retain its assigned version.
