@@ -12,6 +12,8 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through six runnable programs, from creating a Session to configuring fan-out and opening endpoints in separate processes. It grows with each milestone.
+
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
 ```sh
