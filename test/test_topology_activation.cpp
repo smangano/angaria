@@ -103,6 +103,105 @@ namespace
     PublishingQueueSetId _publishing{};
   };
 
+  // Private atomic-batch fixture. Public mutations emit one final definition
+  // per entity, while the format can retain intermediate same-revision records.
+  // Preserve their frames/predecessors and install the final runtime mirrors so
+  // these tests isolate committed transition semantics from byte corruption.
+  // The caller captures Task::claim() before taking RuntimeAccess's gate.
+  class TransitionBatch
+  {
+  public:
+    TransitionBatch(runtime::RuntimeAccess& access, TaskClaim claim) : _access(access), _next(access._snapshot._tail)
+    {
+      _plan._base = access._snapshot;
+      _plan._kind = mapped::JournalKind::Append;
+      _plan._actor = claim._task;
+      _plan._actorIncarnation = claim._incarnation;
+      _plan._newRevision = access._snapshot._revision + 1;
+    }
+
+    std::uint64_t add_queue(mapped::QueueDefinition definition, const runtime::LoadedQueue& target,
+                             std::uint64_t previous)
+    {
+      definition._registration._revision = _plan._newRevision;
+      const auto reference = add_record(3, previous,
+          require_value(mapped::encode_queue_definition(definition, _next)));
+      add_index(target._indexOffset, static_cast<std::uint16_t>(definition._id), reference, definition._state);
+      return reference;
+    }
+
+    std::uint64_t add_source(mapped::SourceDefinition definition, const runtime::LoadedSource& target,
+                              std::uint64_t previous)
+    {
+      definition._registration._revision = _plan._newRevision;
+      const auto reference = add_record(4, previous,
+          require_value(mapped::encode_source_definition(definition, _next)));
+      add_index(target._indexOffset, static_cast<std::uint16_t>(definition._id), reference, definition._state);
+      add_members(target._slot, definition._members, 1, _plan._newRevision);
+      return reference;
+    }
+
+    std::uint64_t add_publishing(mapped::PublishingDefinition definition, const runtime::LoadedPublishing& target,
+                                  std::uint64_t previous)
+    {
+      definition._registration._revision = _plan._newRevision;
+      const auto reference = add_record(5, previous,
+          require_value(mapped::encode_publishing_definition(definition, _next)));
+      add_index(target._indexOffset, static_cast<std::uint16_t>(definition._id), reference, definition._state);
+      const std::array<std::uint64_t, 2> state{definition._topologyRevision, reference};
+      _plan._commands.push_back(runtime::runtime_write_words(target._stateOffset, state));
+      const auto group = _access._session->_controller->configuration()._limits._sourceSets + target._slot;
+      add_members(group, definition._descriptor._destinations, 0, definition._topologyRevision);
+      return reference;
+    }
+
+    void commit()
+    {
+      require_value(_access._journal.execute(_access._guard, _plan));
+    }
+
+  private:
+    std::uint64_t add_record(std::uint16_t kind, std::uint64_t previous, std::vector<std::byte> body)
+    {
+      const auto reference = _next;
+      _next += *mapped::checked_align(mapped::record_envelope_bytes + *mapped::checked_align(body.size(), 8), 64);
+      mapped::JournalRecord record;
+      record._kind = kind;
+      record._previous = previous;
+      record._immutable = std::move(body);
+      _plan._records.push_back(std::move(record));
+      return reference;
+    }
+
+    void add_index(std::uint64_t offset, std::uint16_t id, std::uint64_t reference, EntityState state)
+    {
+      const std::array<std::uint64_t, 4> row{id, reference, _plan._newRevision,
+          state == EntityState::Active ? 2u : 1u};
+      _plan._commands.push_back(runtime::runtime_write_words(offset, row));
+    }
+
+    void add_members(std::uint64_t group, const std::vector<QueueId>& members,
+                       std::uint8_t priority, std::uint64_t revision)
+    {
+      const auto capacity = _access._session->_controller->configuration()._limits._membershipsPerSet;
+      for (std::uint64_t member = 0; member < capacity; ++member)
+      {
+        std::array<std::uint64_t, 2> row{};
+        if (member < members.size())
+        {
+          row = {static_cast<std::uint16_t>(members[member]) | (std::uint64_t{priority} << 16), revision};
+        }
+        const auto offset = _access.section_offset(mapped::SectionKind::MembershipState) +
+                            (group * capacity + member) * mapped::membership_bytes;
+        _plan._commands.push_back(runtime::runtime_write_words(offset, row));
+      }
+    }
+
+    runtime::RuntimeAccess& _access;
+    mapped::TransactionPlan _plan;
+    std::uint64_t _next;
+  };
+
   class TopologyActivationTest : public testing::Test
   {
   protected:
@@ -332,6 +431,58 @@ namespace
       }
       require_value(access._journal.execute(access._guard, plan));
       return plan._base._tail;
+    }
+
+    void check_publishing_batch_transition(bool changed, std::uint64_t finalCounter)
+    {
+      {
+        auto created = create();
+        const auto claim = created._creator.claim();
+        auto actor = created._creator.registry();
+        const auto value = graph(actor);
+        const auto second = require_value(actor.register_queue(queue("Second", TaskId{1}, value._source)));
+        activate(actor, value);
+        require_value(actor.activate_queue(second));
+        const auto original = loaded_publishing(value._publishing);
+        const auto before = observe();
+        auto intermediate = original._definition;
+        intermediate._descriptor._destinations = changed ? std::vector<QueueId>{second, value._queue} :
+                                                           std::vector<QueueId>{second};
+        intermediate._topologyRevision = 2;
+        auto final = original._definition;
+        final._descriptor._destinations = changed ? std::vector<QueueId>{second} : std::vector<QueueId>{value._queue};
+        final._topologyRevision = finalCounter;
+        {
+          runtime::RuntimeAccess access(state());
+          TransitionBatch batch(access, claim);
+          const auto previous = batch.add_publishing(intermediate, original, original._reference);
+          batch.add_publishing(final, original, previous);
+          batch.commit();
+        }
+        const auto evidence = observe();
+        if (finalCounter == (changed ? 2u : 1u))
+        {
+          auto attached = require_value(Session::attach(_directory));
+          EXPECT_EQ(require_value(attached.registry().describe_publishing_set(value._publishing))._destinations,
+                    final._descriptor._destinations);
+          EXPECT_EQ(loaded_publishing(value._publishing)._definition._topologyRevision, finalCounter);
+          const auto metadata = require_value(attached.registry().metadata(value._publishing));
+          EXPECT_EQ(metadata._revision, before._snapshot._revision + 1);
+          EXPECT_EQ(metadata._createdBy, original._definition._registration._createdBy);
+          EXPECT_EQ(metadata._createdAt, original._definition._registration._createdAt);
+          require_value(actor.set_destinations(value._publishing, final._descriptor._destinations));
+          EXPECT_EQ(observe(), evidence);
+        }
+        else
+        {
+          expect_error(Session::attach(_directory), ErrorCode::IoError);
+          expect_error(actor.find_publishing_set("Outputs"), ErrorCode::IoError);
+          expect_error(actor.describe_publishing_set(value._publishing), ErrorCode::IoError);
+          expect_error(actor.set_destinations(value._publishing, final._descriptor._destinations), ErrorCode::IoError);
+          EXPECT_EQ(raw_image(), evidence._image);
+        }
+      }
+      fs::remove_all(_directory);
     }
 
     fs::path _root;
@@ -966,6 +1117,198 @@ namespace
     expect_error(actor.source_members(value._source), ErrorCode::IoError);
     expect_error(actor.activate_source_set(value._source), ErrorCode::IoError);
     EXPECT_EQ(raw_image(), evidence);
+  }
+
+  // An atomic batch may retain a temporary destination list before restoring
+  // the committed one. The visible list did not change, so counter 1 remains
+  // correct; counting the two physical changes and ending at 3 is corruption.
+  TEST_F(TopologyActivationTest, RestoredPublishingDestinationsUseTheCommittedCounter)
+  {
+    for (const auto counter : {1u, 3u})
+    {
+      SCOPED_TRACE(counter);
+      check_publishing_batch_transition(false, counter);
+    }
+  }
+
+  // Multiple physical lists in one revision still represent only one visible
+  // change. Compare the final list with the preceding committed list and require
+  // one counter increment, rather than one increment per intermediate record.
+  TEST_F(TopologyActivationTest, ChangedPublishingDestinationsIncrementOncePerCommittedRevision)
+  {
+    for (const auto counter : {2u, 3u})
+    {
+      SCOPED_TRACE(counter);
+      check_publishing_batch_transition(true, counter);
+    }
+  }
+
+  // Initial counters are also a committed-state rule. A newly introduced
+  // Publishing identity must finish its first atomic batch at counter 1, even
+  // when an earlier retained definition inside that batch carries another value.
+  TEST_F(TopologyActivationTest, InitialPublishingCounterUsesTheFinalBatchDefinition)
+  {
+    for (const auto counter : {1u, 3u})
+    {
+      SCOPED_TRACE(counter);
+      {
+        auto created = create();
+        const auto claim = created._creator.claim();
+        auto actor = created._creator.registry();
+        const auto inputs = require_value(actor.register_source_set(source()));
+        const auto feed = require_value(actor.register_queue(queue("Feed", TaskId{1}, inputs)));
+        require_value(actor.activate_source_set(inputs));
+        require_value(actor.activate_queue(feed));
+        mapped::PublishingDefinition definition;
+        definition._id = PublishingQueueSetId{2};
+        definition._descriptor = publishing("InitialOutputs", TaskId{1}, {feed});
+        definition._descriptor._acceptance = AcceptancePolicy::AllDestinations;
+        definition._state = EntityState::Active;
+        definition._registration = RegistrationMetadata{TaskId{1},
+            require_value(created._session.metadata())._createdAt, 1};
+        definition._topologyRevision = 2;
+        {
+          runtime::RuntimeAccess access(state());
+          runtime::LoadedPublishing target;
+          target._indexOffset = access.section_offset(mapped::SectionKind::PublishingIndex);
+          target._stateOffset = access.section_offset(mapped::SectionKind::PublishingState);
+          TransitionBatch batch(access, claim);
+          const auto previous = batch.add_publishing(definition, target, 0);
+          definition._topologyRevision = counter;
+          batch.add_publishing(definition, target, previous);
+          batch.commit();
+        }
+        const auto evidence = observe();
+        if (counter == 1)
+        {
+          auto attached = require_value(Session::attach(_directory));
+          EXPECT_EQ(require_value(attached.registry().find_publishing_set("InitialOutputs")), definition._id);
+          EXPECT_EQ(loaded_publishing(definition._id)._definition._topologyRevision, 1u);
+          EXPECT_EQ(require_value(attached.registry().state(definition._id)), EntityState::Active);
+          EXPECT_EQ(observe(), evidence);
+        }
+        else
+        {
+          expect_error(Session::attach(_directory), ErrorCode::IoError);
+          expect_error(actor.find_publishing_set("InitialOutputs"), ErrorCode::IoError);
+          expect_error(actor.activate_publishing_set(definition._id), ErrorCode::IoError);
+          EXPECT_EQ(raw_image(), evidence._image);
+        }
+      }
+      fs::remove_all(_directory);
+    }
+  }
+
+  // Ownership/state rules bind consecutive committed snapshots. These private
+  // Source and Queue records temporarily describe different Draft owners before
+  // restoring the original Active definitions in the same atomic batch.
+  TEST_F(TopologyActivationTest, SameRevisionQueueAndSourceRestorationPreservesActiveOwnership)
+  {
+    auto created = create();
+    const auto claim = created._creator.claim();
+    auto actor = created._creator.registry();
+    const auto other = register_task(actor, "OtherOwner");
+    const auto value = graph(actor);
+    activate(actor, value);
+    const auto inputs = loaded_source(value._source);
+    const auto feed = loaded_queue(value._queue);
+    const auto old_ring_state = queue_state(feed);
+    auto intermediate_source = inputs._definition;
+    intermediate_source._state = EntityState::Draft;
+    intermediate_source._descriptor._owner = other;
+    auto intermediate_queue = feed._definition;
+    intermediate_queue._state = EntityState::Draft;
+    intermediate_queue._descriptor._producer = other;
+    intermediate_queue._descriptor._ringCapacity = 8;
+    {
+      runtime::RuntimeAccess access(state());
+      TransitionBatch batch(access, claim);
+      const auto source_previous = batch.add_source(intermediate_source, inputs, inputs._reference);
+      const auto queue_previous = batch.add_queue(intermediate_queue, feed, feed._reference);
+      batch.add_source(inputs._definition, inputs, source_previous);
+      batch.add_queue(feed._definition, feed, queue_previous);
+      batch.commit();
+    }
+    const auto evidence = observe();
+    auto attached = require_value(Session::attach(_directory));
+    EXPECT_EQ(require_value(attached.registry().describe_source_set(value._source))._owner, TaskId{1});
+    EXPECT_EQ(require_value(attached.registry().describe_queue(value._queue))._producer, TaskId{1});
+    EXPECT_EQ(require_value(attached.registry().state(value._source)), EntityState::Active);
+    EXPECT_EQ(require_value(attached.registry().state(value._queue)), EntityState::Active);
+    EXPECT_EQ(queue_state(loaded_queue(value._queue)), old_ring_state);
+    EXPECT_EQ(observe(), evidence);
+  }
+
+  // The same final-state rule applies to Publishing ownership and lifecycle.
+  // Its original destination list and counter remain unchanged throughout;
+  // only an unobservable intermediate definition names a different Draft owner.
+  TEST_F(TopologyActivationTest, SameRevisionPublishingRestorationPreservesActiveOwnership)
+  {
+    auto created = create();
+    const auto claim = created._creator.claim();
+    auto actor = created._creator.registry();
+    const auto other = register_task(actor, "OtherOwner");
+    const auto value = graph(actor);
+    activate(actor, value);
+    const auto outputs = loaded_publishing(value._publishing);
+    auto intermediate = outputs._definition;
+    intermediate._state = EntityState::Draft;
+    intermediate._descriptor._owner = other;
+    {
+      runtime::RuntimeAccess access(state());
+      TransitionBatch batch(access, claim);
+      const auto previous = batch.add_publishing(intermediate, outputs, outputs._reference);
+      batch.add_publishing(outputs._definition, outputs, previous);
+      batch.commit();
+    }
+    const auto evidence = observe();
+    auto attached = require_value(Session::attach(_directory));
+    EXPECT_EQ(require_value(attached.registry().describe_publishing_set(value._publishing))._owner, TaskId{1});
+    EXPECT_EQ(require_value(attached.registry().state(value._publishing)), EntityState::Active);
+    EXPECT_EQ(loaded_publishing(value._publishing)._definition._topologyRevision, 1u);
+    EXPECT_EQ(observe(), evidence);
+  }
+
+  // Coalescing logical transitions must not skip structural history checks.
+  // An intermediate record with a broken predecessor or changed creation
+  // attribution remains corrupt even when the final definition restores it.
+  TEST_F(TopologyActivationTest, IntermediateRecordsStillRequirePredecessorsAndCreationAttribution)
+  {
+    for (unsigned corruption = 0; corruption != 3; ++corruption)
+    {
+      SCOPED_TRACE(corruption);
+      {
+        auto created = create();
+        const auto claim = created._creator.claim();
+        auto actor = created._creator.registry();
+        const auto other = register_task(actor, "OtherCreator");
+        const auto value = graph(actor);
+        activate(actor, value);
+        const auto outputs = loaded_publishing(value._publishing);
+        auto intermediate = outputs._definition;
+        if (corruption == 1)
+        {
+          intermediate._registration._createdBy = other;
+        }
+        if (corruption == 2)
+        {
+          intermediate._registration._createdAt += std::chrono::nanoseconds{1};
+        }
+        {
+          runtime::RuntimeAccess access(state());
+          TransitionBatch batch(access, claim);
+          const auto previous = batch.add_publishing(intermediate, outputs, corruption == 0 ? 0 : outputs._reference);
+          batch.add_publishing(outputs._definition, outputs, previous);
+          batch.commit();
+        }
+        const auto evidence = raw_image();
+        expect_error(Session::attach(_directory), ErrorCode::IoError);
+        expect_error(actor.find_publishing_set("Outputs"), ErrorCode::IoError);
+        expect_error(actor.activate_publishing_set(value._publishing), ErrorCode::IoError);
+        EXPECT_EQ(raw_image(), evidence);
+      }
+      fs::remove_all(_directory);
+    }
   }
 
   // Empty active rings are resources, not pending deliveries. Task lifetime

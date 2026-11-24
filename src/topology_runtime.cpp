@@ -144,13 +144,6 @@ namespace angaria::detail
           {
             runtime_fail(ErrorCode::IoError, "topology.previous", "Initial definition has a predecessor");
           }
-          if constexpr (std::is_same_v<Definition, mapped::PublishingDefinition>)
-          {
-            if (definition._topologyRevision != 1)
-            {
-              runtime_fail(ErrorCode::IoError, "publishing_set.topology_revision", "Initial Publishing topology revision is not one");
-            }
-          }
           history._firstRevision.emplace(id, registration._revision);
         }
         else
@@ -165,7 +158,6 @@ namespace angaria::detail
           {
             runtime_fail(ErrorCode::IoError, "topology.previous", "Retained definition chain or creation attribution is inconsistent");
           }
-          check_transition(old, definition);
         }
         history._latest[id] = history._records.size();
         history._records.push_back(HistoricalDefinition<Definition>{std::move(definition), reference});
@@ -326,8 +318,9 @@ namespace angaria::detail
     };
 
     // Replay only definition changes, not every entity at every revision. Each
-    // batch installs its final per-entity definitions before checking references,
-    // so physical order and intermediate same-revision records are invisible.
+    // batch checks transitions against the preceding committed definitions and
+    // installs its final per-entity definitions before checking relationships.
+    // Intermediate same-revision records retain provenance, not visible states.
     std::map<QueueId, std::uint64_t> check_historical_topology(
         const History<mapped::QueueDefinition>& queues,
         const History<mapped::SourceDefinition>& sources,
@@ -405,6 +398,10 @@ namespace angaria::detail
           for (const auto& [id, definition] : changes._queues)
           {
             const auto old = effectiveQueues.find(id);
+            if (old != effectiveQueues.end())
+            {
+              check_transition(*old->second, *definition);
+            }
             previous.emplace(id, old == effectiveQueues.end() ? nullptr : old->second);
             effectiveQueues[id] = definition;
           }
@@ -416,6 +413,10 @@ namespace angaria::detail
           for (const auto& [id, definition] : changes._sources)
           {
             const auto old = effectiveSources.find(id);
+            if (old != effectiveSources.end())
+            {
+              check_transition(*old->second, *definition);
+            }
             previous.emplace(id, old == effectiveSources.end() ? nullptr : old->second);
             effectiveSources[id] = definition;
           }
@@ -426,10 +427,15 @@ namespace angaria::detail
           const auto previous = effectivePublishing.find(id);
           if (previous != effectivePublishing.end())
           {
+            check_transition(*previous->second, *definition);
             for (const auto destination : previous->second->_descriptor._destinations)
             {
               publishers[destination].erase(id);
             }
+          }
+          else if (definition->_topologyRevision != 1)
+          {
+            runtime_fail(ErrorCode::IoError, "publishing_set.topology_revision", "Initial committed Publishing topology revision is not one");
           }
           effectivePublishing[id] = definition;
           for (const auto destination : definition->_descriptor._destinations)
