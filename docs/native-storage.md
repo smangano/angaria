@@ -125,7 +125,7 @@ A Process Task permits coordinated calls from application threads. A Thread Task
 
 `TaskAttachmentObserver` is a private qualification hook after native acquisition and before the new intent. Test workers use it to pause a replacement, prove that an independent status reader finds the gate busy, and then commit, fail, or terminate that replacement. Production attachment supplies no observer. These tests coordinate through pipes and gate results rather than timing assumptions about which process runs first.
 
-Step 2.5 implements Task lookup, description, registration metadata, and runtime status; subsequent steps add the remaining Registry operations below. File-based TOML factories follow step 2.10. The current native policy profile supports two-plane storage, strict selection, spin waiting, recovery from log, and all-destination acceptance; other recognized policies return UnsupportedPolicy before creation. The portable codecs can inspect their stable wire codes without providing live execution support. Endpoint identities are implemented in step 2.9; publication delivery/status remain later work.
+Step 2.5 implements Task lookup, description, registration metadata, and runtime status; subsequent steps add the remaining Registry operations below. File-based TOML factories are implemented in step 2.10 below. The current native policy profile supports two-plane storage, strict selection, spin waiting, recovery from log, and all-destination acceptance; other recognized policies return UnsupportedPolicy before creation. The portable codecs can inspect their stable wire codes without providing live execution support. Endpoint identities are implemented in step 2.9; publication delivery/status remain later work.
 
 ## Public Task registration
 
@@ -188,6 +188,18 @@ Attachment validates the final topology at every committed historical revision, 
 Task attachment validates the full topology before installing a claim, including through an already-held Session after external corruption. Task-only ReleaseClaim replay independently checks zero progress, current Queue definitions, exact ring capacity, geometry, and slots; equal rounded allocations cannot conceal a changed capacity. Task replacement and endpoint opening need no append allocation and work at LogFull. Future receipt cleanup will extend this idle-resource subset when delivery becomes available.
 
 The [activation examples](../test/test_topology_activation.cpp), [endpoint lifetimes](../test/test_endpoint_runtime.cpp), and [independent-process tests](../test/test_activation_recovery.cpp) explain normal use, no-write failures, exact ring budgets, retained history, ownership/exclusivity, Task replacement, concurrent activation, and real interruption/recovery/I/O boundaries. Their private fixtures and fault hooks are clearly separated from application APIs.
+
+## TOML Session factories
+
+Step 2.10 adds `Session::create_from_file` and `Session::attach_from_file` using pinned cpptoml. The [configuration contract](configuration.md) defines exact types, required and optional keys, supported policies, and named references. The loader resolves names independently of declaration order and uses the common descriptor and native policy validators. Unknown keys, malformed values, duplicate identities, unresolved references, wrong ownership, unsupported policies, and exhausted capacities fail with configuration key paths.
+
+File-based creation takes the name of a declared Process Task as its creator. That declaration supplies Task ID 1 and its reserved entry, and initial registrations retain its attribution. The factory registers Process Tasks before Threads, Fields before schemas, and complete topology before activation. Nonempty Sources activate before their Queues, then nonempty Publishing sets activate. Empty sets remain Draft. Registration and activation preserve their ordinary checked journal, ring-allocation, and byte-limit guarantees.
+
+The complete setup runs before exclusive publication of the requested Session directory. A concurrent creator or existing target cannot be replaced. Ordinary failure cleans only that invocation's unpublished staging directory; a process terminated during setup can leave an unpublished staging directory, as with programmatic creation. No partial configured Session is published at the requested path.
+
+File-based attachment resolves `session.directory` from the TOML file's parent, validates and recovers the existing Session, and compares effective name/application version, byte limit, storage/segment settings, capacities, and defaults. A mismatch returns `ConfigurationMismatch`; the actual canonical location may differ from its recorded creation path. Supplied declarations and references are checked with already registered names available. They do not reapply initialization, revert supported topology changes, or claim Tasks. The underlying validation/recovery path retains its normal write behavior.
+
+The [file configuration tests](../test/test_file_configuration.cpp) explain public creation and attachment, rejection behavior, and preservation of existing state. The [primer lesson](primer.md#7-move-setup-into-a-toml-file) demonstrates the same operations without private fixtures. Configuring Active endpoints still does not implement payload delivery or scheduling.
 
 ## Failures and validation scope
 

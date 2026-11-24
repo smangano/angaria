@@ -12,7 +12,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through six runnable programs, from creating a Session to configuring fan-out and opening endpoints in separate processes. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through seven runnable programs, from creating a Session to configuring fan-out, opening endpoints in separate processes, and loading TOML. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -29,15 +29,15 @@ For usage examples, start with the [test reading guide](test/README.md). Test co
 
 ## Configuration contract
 
-The [configuration and lifecycle contract](docs/configuration.md) defines the proposed TOML schema for the Registry implementation. The [trading example](examples/trading.toml) exercises process and thread Tasks, both Queue Set types, and the delivery policies.
+The [configuration and lifecycle contract](docs/configuration.md) defines the implemented TOML schema. `Session::create_from_file` validates configuration and creates the initial Registry; `Session::attach_from_file` validates settings against an existing Session without applying registrations or claiming Tasks. The [trading example](examples/trading.toml) describes process and thread Tasks, both Queue Set types, scalar Fields, and an immutable message schema using the supported native policy profile. Start with the [primer's TOML lesson](docs/primer.md#7-move-setup-into-a-toml-file) for a smaller runnable example.
 
-CTest parses this example with pinned cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`. CMake fetches those headers when testing is enabled. A local checkout of that revision can be supplied for an offline build.
+The loader uses pinned cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`, targeting TOML v0.5.0 syntax. CMake fetches those headers for library builds, including builds with testing disabled. A local checkout of that revision can be supplied for an offline build.
 
 ```sh
 cmake -S . -B build -DFETCHCONTENT_SOURCE_DIR_CPPTOML=/absolute/path/to/cpptoml
 ```
 
-Milestone 2 integrates configuration loading and semantic validation with the Registry.
+Relative Session directories resolve from the TOML file's parent directory. Creation refuses to replace an existing Session and publishes its directory only after setup succeeds. Delivery policies whose runtime behavior is not implemented still return `UnsupportedPolicy`.
 
 ## Public API contract
 
@@ -59,11 +59,13 @@ Step 2.5 integrates [public Session creation and attachment](docs/native-storage
 
 Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registration) through a live Task's Registry. Exact descriptors return the existing identity without writing; conflicting descriptors, exhausted capacities, and insufficient log space preserve existing registrations. Process and Thread Tasks can be registered before attachment, and each successful new registration commits one immutable definition and Registry revision. Tests cover concurrent registrars, independent discovery, and interrupted registration/recovery.
 
-Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; payload encoding, other Field representations, and TOML loading follow their roadmap steps.
+Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; payload encoding and other Field representations follow their roadmap steps. Step 2.10 integrates TOML loading below.
 
 Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-and-queue-sets), shared typed Queue Set identities, ownership checks, and atomic Source membership registration. Independent-process tests exercise discovery, concurrent registration, and interrupted multi-record updates. Activation, ring allocation, and endpoints follow their roadmap steps.
 
 Step 2.9 adds [adoption, topology changes, and activation](docs/native-storage.md#topology-changes-and-activation). Queue activation reserves a zeroed ring atomically with its Active definition. Endpoint handles expose identities and retain Task ownership; a Source opening is exclusive within that claim. Sending, receiving, acknowledgment, and publishing follow their implementation milestones.
+
+Step 2.10 adds [TOML Session factories](docs/native-storage.md#toml-session-factories), complete semantic preflight, shared programmatic policy validation, initial registration/activation, and exact effective-setting checks on file-based attachment. The [primer](docs/primer.md#7-move-setup-into-a-toml-file) and automated examples demonstrate the public file API.
 
 ## Run the restart walkthrough
 

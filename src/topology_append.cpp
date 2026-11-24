@@ -70,6 +70,22 @@ namespace angaria::detail
     return *total;
   }
 
+  std::uint64_t append_tail(std::uint64_t tail, std::span<const std::uint64_t> bodies,
+                             std::uint64_t commandBytes, std::uint64_t maxLogBytes)
+  {
+    for (const auto body : bodies)
+    {
+      tail = add_bytes(tail, record_bytes(body));
+    }
+    const auto manifestBody = add_bytes(add_bytes(64, multiply_bytes(bodies.size(), 8)), commandBytes);
+    tail = add_bytes(tail, record_bytes(manifestBody));
+    if (tail > maxLogBytes)
+    {
+      runtime_fail(ErrorCode::LogFull, "session.max_log_bytes", "Complete definitions, manifest, and redo exceed the log byte ceiling");
+    }
+    return tail;
+  }
+
   PreparedAppend prepare_append(RuntimeAccess& access, const std::shared_ptr<TaskState>& actor,
                                    std::span<const std::uint64_t> bodies,
                                    std::uint64_t commandBytes)
@@ -79,18 +95,14 @@ namespace angaria::detail
     {
       runtime_fail(ErrorCode::CapacityExceeded, "topology.counter", "Registry revision or operation generation is exhausted");
     }
+    (void)append_tail(access._snapshot._tail, bodies, commandBytes,
+                      access._session->_controller->configuration()._maxLogBytes);
     PreparedAppend prepared;
     auto offset = access._snapshot._tail;
     for (const auto body : bodies)
     {
       prepared._references.push_back(offset);
       offset = add_bytes(offset, record_bytes(body));
-    }
-    const auto manifestBody = add_bytes(add_bytes(64, multiply_bytes(bodies.size(), 8)), commandBytes);
-    const auto tail = add_bytes(offset, record_bytes(manifestBody));
-    if (tail > access._session->_controller->configuration()._maxLogBytes)
-    {
-      runtime_fail(ErrorCode::LogFull, "session.max_log_bytes", "Complete topology definitions, manifest, and redo exceed the log byte ceiling");
     }
     prepared._plan._base = access._snapshot;
     prepared._plan._kind = mapped::JournalKind::Append;

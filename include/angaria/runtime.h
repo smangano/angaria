@@ -19,6 +19,7 @@ namespace angaria
     class QueueWriterState;
     class SourceQueueSetState;
     class PublishingQueueSetState;
+    struct ConfigurationPlan;
   } // namespace detail
 
   struct CreatedSession;
@@ -127,6 +128,9 @@ namespace angaria
     Result<Task> attach_task(TaskId task);
 
   private:
+    static Result<CreatedSession> create_configured(const SessionOptions& options,
+                                                     const TaskDescriptor& creator,
+                                                     const detail::ConfigurationPlan* configuration);
     explicit Session(std::shared_ptr<detail::SessionState> state);
     std::shared_ptr<detail::SessionState> _state;
   };

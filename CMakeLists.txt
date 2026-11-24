@@ -13,7 +13,18 @@ message(STATUS "Angaria version ${PROJECT_VERSION}")
 find_package(Boost 1.70 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(
+  cpptoml
+  GIT_REPOSITORY https://github.com/skystrife/cpptoml.git
+  GIT_TAG fededad7169e538ca47e11a9ee9251bc361a9a65
+  SOURCE_SUBDIR include
+)
+FetchContent_MakeAvailable(cpptoml)
+
 add_library(angaria STATIC
+  src/configuration.cpp
+  src/configuration_runtime.cpp
   src/session.cpp
   src/session_log.cpp
   src/role_lock.cpp
@@ -37,12 +48,14 @@ add_library(angaria STATIC
   src/topology_metadata.cpp
   src/topology_runtime.cpp
   src/topology_registry.cpp
+  src/topology_policy.cpp
   src/topology_append.cpp
   src/topology_mutations.cpp
   src/endpoint_runtime.cpp
 )
 target_include_directories(angaria PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(angaria PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_include_directories(angaria SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
 target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
 
@@ -54,7 +67,7 @@ add_library(angaria_api_contract OBJECT examples/trading_api.cpp)
 target_link_libraries(angaria_api_contract PRIVATE angaria)
 
 # Primer programs use implemented public APIs and remain runnable without tests.
-foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes)
+foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)
   target_link_libraries(angaria_primer_${lesson} PRIVATE angaria)
 endforeach()
@@ -63,14 +76,6 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
-  include(FetchContent)
-  FetchContent_Declare(
-    cpptoml
-    GIT_REPOSITORY https://github.com/skystrife/cpptoml.git
-    GIT_TAG fededad7169e538ca47e11a9ee9251bc361a9a65
-    SOURCE_SUBDIR include
-  )
-  FetchContent_MakeAvailable(cpptoml)
 
   add_executable(angaria_native_atomic_worker test/native_atomic_worker.cpp)
   target_include_directories(angaria_native_atomic_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -109,6 +114,7 @@ if(BUILD_TESTING)
     test/test_field.cpp
     test/test_session.cpp
     test/test_configuration.cpp
+    test/test_file_configuration.cpp
     test/test_identities.cpp
     test/test_api_contract.cpp
     test/test_mapped_format.cpp
@@ -177,6 +183,8 @@ if(BUILD_TESTING)
             "$<TARGET_FILE:angaria_primer_04_connections>"
             "$<TARGET_FILE:angaria_primer_05_fanout>"
             "$<TARGET_FILE:angaria_primer_06_processes>"
+            "$<TARGET_FILE:angaria_primer_07_configuration>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/configuration.toml"
   )
   set_tests_properties(primer_examples PROPERTIES TIMEOUT 45)
   add_test(
