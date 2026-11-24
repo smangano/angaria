@@ -279,6 +279,67 @@ namespace angaria
     std::uint64_t _revision{};
   };
 
+  // Snapshot entries own their strings and lists. They do not retain a Session
+  // or Task claim, and later Registry updates do not change an earlier copy.
+  struct TaskSnapshot
+  {
+    TaskId _id{};
+    TaskDescriptor _descriptor;
+    RegistrationMetadata _registration;
+  };
+
+  struct QueueSnapshot
+  {
+    QueueId _id{};
+    QueueDescriptor _descriptor;
+    RegistrationMetadata _registration;
+    EntityState _state{EntityState::Draft};
+  };
+
+  struct SourceSnapshot
+  {
+    SourceQueueSetId _id{};
+    SourceQueueSetDescriptor _descriptor;
+    RegistrationMetadata _registration;
+    EntityState _state{EntityState::Draft};
+    std::vector<QueueId> _members;
+  };
+
+  struct PublishingSnapshot
+  {
+    PublishingQueueSetId _id{};
+    PublishingQueueSetDescriptor _descriptor;
+    RegistrationMetadata _registration;
+    EntityState _state{EntityState::Draft};
+    std::uint64_t _topologyRevision{};
+  };
+
+  struct FieldSnapshot
+  {
+    FieldDescriptor _descriptor;
+    RegistrationMetadata _registration;
+  };
+
+  struct MessageSnapshot
+  {
+    MessageDescriptor _descriptor;
+    RegistrationMetadata _registration;
+  };
+
+  struct RegistrySnapshot
+  {
+    // Registry revisions describe definition changes. Live Task attachment and
+    // publication issuance have separate state and are not historical entries.
+    std::uint64_t _revision{};
+    std::uint64_t _currentRevision{};
+    std::vector<TaskSnapshot> _tasks;
+    std::vector<QueueSnapshot> _queues;
+    std::vector<SourceSnapshot> _sources;
+    std::vector<PublishingSnapshot> _publishing;
+    std::vector<FieldSnapshot> _fields;
+    std::vector<MessageSnapshot> _messages;
+  };
+
   struct TaskRuntimeInfo
   {
     TaskId _task{};

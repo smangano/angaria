@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 2, step 2.10**, framework version **0.2.12**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 2, step 2.11**, framework version **0.2.13**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, and claim producer and consumer endpoints. Sending, publishing, receiving, acknowledgment, and message encoding arrive in later milestones. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-Use a checkout containing this primer and its example sources. For version 0.2.12, use the `milestone-2-10` PR branch or `milestone-2` after that PR is merged. The work reaches `main` when the milestone is integrated.
+Use a checkout containing this primer and its example sources. For version 0.2.13, use the `milestone-2-11` PR branch or `milestone-2` after that PR is merged. The work reaches `main` when the milestone is integrated.
 
 Run these commands from the repository root:
 
@@ -49,7 +49,7 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The seven targets are named `angaria_primer_01_session` through `angaria_primer_07_configuration`, matching their source filenames.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The eight targets are named `angaria_primer_01_session` through `angaria_primer_08_registry`, matching their source filenames.
 
 Each of the first five examples needs a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
@@ -310,6 +310,47 @@ For an ordinary mistake, change `source_set = "ConsumerInputs"` in a copy to an 
 
 Known policies can still be unavailable. For example, `delivery = "allow_loss"` is part of Angaria's design but currently returns `UnsupportedPolicy`. The runnable examples use `recover_from_log`. The [configuration contract](configuration.md) lists the complete schema and the current implementation boundary.
 
+## 8. Share a Registry and inspect its history
+
+Read [08_registry.cpp](../examples/primer/08_registry.cpp). It combines the earlier lessons into a public-API program that several independent processes can run against one Session. The [complete Registry walkthrough](registry-walkthrough.md) explains each command and a manual multi-terminal run.
+
+Start with the automated version, which creates a new Session and keeps it for inspection:
+
+```sh
+python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/primer/configuration.toml --session "$primer_workspace/08-registry"
+./build/angaria_primer_08_registry inspect "$primer_workspace/08-registry"
+```
+
+The script copies lesson 7's TOML file into its own workspace and selects the new Session directory. It starts two registrar processes with separate Task claims. Each adds a Field, a message schema, and a Queue to the consumer's existing Source Queue Set. They also retry identical definitions and compete to register different definitions under one Task name. An exact retry keeps its identity; one conflicting definition wins and the other is rejected.
+
+After both registrars exit, the inspector finds seven Tasks, three Queues, one Source, one Publishing set, four Fields, and four message-schema versions. Both `Quote` versions remain discoverable. The script then replaces a terminated endpoint owner and changes its Publishing destinations.
+
+A **Registry revision** numbers a committed definition change. A **snapshot** copies the complete catalog at one such revision:
+
+```cpp
+auto registry = session.registry();
+auto snapshot = primer::value(registry.snapshot());
+for (const auto& message : snapshot._messages)
+{
+  std::cout << message._descriptor._name
+            << " version " << message._descriptor._schema._version << '\n';
+}
+```
+
+The copy owns its strings and lists. It remains usable after the original Registry view closes, and later updates do not change it. All its categories come from one consistent committed revision: a Queue and its Source's member list cannot describe different sides of a concurrent update.
+
+`snapshot._revision` identifies the copied definitions. Passing an earlier saved revision returns the definitions from that point:
+
+```cpp
+auto earlier = primer::value(registry.snapshot(saved_revision));
+```
+
+Entities added later are absent, and a changed Publishing set retains its old destinations in the historical copy. `_currentRevision` reports the current committed Registry revision observed by the call. Source and destination order is preserved; the top-level entity lists use numeric identity order, with message schemas ordered by type and version.
+
+Task claims and restart incarnations change independently of Registry revisions. A historical snapshot therefore contains definitions and topology, rather than past PID or attachment status. The example prints current claim information separately as `CURRENT`.
+
+The inspector claims no Task. Its Session Registry rejects registration with `ReadOnlyRegistry`, and it can discover the saved catalog after the application processes exit. As in the earlier examples, normal Session attachment may complete interrupted recovery. This walkthrough qualifies Registry behavior on the tested profiles; it does not demonstrate message delivery or general session replay.
+
 ## Understand bounds and ordinary failures
 
 Angaria targets small, bounded systems. Capacities reserve room for Tasks, queues, both kinds of Queue Sets, memberships, Fields, and schema versions. Named setters make adjustments readable:
@@ -334,13 +375,12 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-Step 2.10 adds TOML loading through **cpptoml** alongside programmatic configuration. The next Registry step completes the independent-process qualification and Registry walkthrough. Planned YAML, JSON, and XML converters will produce TOML for the same loader.
+The milestone-2 learning sequence now reaches TOML setup, independent-process Registry use, and current/historical snapshots. The next milestone adds general message construction and scalar encoding. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 2, remaining step | Complete the independent-process persistent Registry walkthrough and qualification. |
 | 3 | Build general messages, encode scalar Fields, and inspect exact schema versions. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |

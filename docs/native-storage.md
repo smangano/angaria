@@ -201,6 +201,27 @@ File-based attachment resolves `session.directory` from the TOML file's parent, 
 
 The [file configuration tests](../test/test_file_configuration.cpp) explain public creation and attachment, rejection behavior, and preservation of existing state. The [primer lesson](primer.md#7-move-setup-into-a-toml-file) demonstrates the same operations without private fixtures. Configuring Active endpoints still does not implement payload delivery or scheduling.
 
+## Registry qualification and native profiles
+
+Step 2.11 adds owning, consistent [Registry snapshots](api.md#current-and-historical-registry-snapshots). One recovered mutation gate protects complete current validation and the copy of either current definitions or the final definitions at a requested committed revision. Historical cuts include topology states, memberships, Publishing generations, exact schema versions, and attribution. They do not reconstruct earlier Task attachment diagnostics. Inspecting an old cut still validates the current retained catalog, so an inconsistent current index cannot hide behind a request for earlier history.
+
+Task definitions are immutable and retain no predecessor links. The shared loader requires every committed Task definition to have its unique current index row, and verifies that its creator and Thread parent existed at its registration revision. These checks apply to ordinary attachment, typed reads, mutations, and snapshots. The [corruption regressions](../test/test_task_catalog_validation.cpp) deliberately rewrite private fixtures; application code uses the public Registry instead.
+
+The [mixed-process suite](../test/test_registry_qualification.cpp) and [worker](../test/native_registry_worker.cpp) combine TOML bootstrap, registration/discovery of every entity kind, observer snapshots before/during/after updates, ownership contention, process termination/replacement, representative Queue/schema commit cuts, and repeated interrupted recovery. Existing Task, schema, topology, activation, journal, and native-ordering suites supply the detailed domain matrices. The public [Registry walkthrough](registry-walkthrough.md) demonstrates the same application concepts without fault hooks.
+
+The native adapter recognizes these little-endian 64-bit profiles, each requiring an always-lock-free eight-byte atomic implementation:
+
+| OS and CPU | ABI profile | Hosted qualification job |
+| --- | --- | --- |
+| Linux x86_64 | `0x00010001` | Existing `Linux CI` on `ubuntu-24.04`. |
+| Linux ARM64 | `0x00010002` | `Linux ARM64` on `ubuntu-24.04-arm`. |
+| macOS x86_64 | `0x00020001` | `macOS x86_64` on `macos-15-intel`. |
+| macOS ARM64 | `0x00020002` | `macOS ARM64` on `macos-15`. |
+
+The additional jobs run in [native-profiles.yml](../.github/workflows/native-profiles.yml), using [GitHub-hosted standard runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Every job runs the full test suite, including the public walkthroughs, on its actual architecture. Qualification evidence is the passing run for the relevant commit/profile, rather than recognition of an ABI code alone. Live attachment continues to require the recorded profile to match the process's native adapter.
+
+These runs exercise process termination on the runners' coherent local filesystems. They do not establish power-loss durability, network-filesystem support, arbitrary fork safety, foreign-profile live attachment, or later delivery/scheduling behavior. The implemented profile remains two-plane storage, strict selection, spin waiting, recovery-from-log delivery configuration, all-destination acceptance configuration, and native scalar Field definitions. Configured delivery policies gain execution behavior in their owning milestones.
+
 ## Failures and validation scope
 
 | Result | Meaning here |

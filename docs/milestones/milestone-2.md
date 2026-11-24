@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.9 and the [programmer primer](../primer.md) are integrated into `milestone-2`. Step 2.10 adds validated TOML loading and extends the primer with a file-configuration lesson. Its framework version is `0.2.12` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.10 and the [programmer primer](../primer.md) are integrated into `milestone-2`. Step 2.11 completes Registry inspection, independent-process qualification, and the walkthrough. Its framework version is `0.2.13` under the [per-PR versioning policy](../../ROADMAP.md#versioning). After this step is reviewed and merged, a separate milestone integration PR brings the completed work to `main`.
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 
@@ -129,6 +129,16 @@ The pinned cpptoml loader parses the documented schema with strict types and unk
 `Session::attach_from_file` resolves relative paths from the TOML file, checks persisted effective Session settings, and validates supplied declarations/references, including references to already registered entities. It applies no configuration updates and claims no Task. Supported runtime topology changes remain intact, and ordinary attachment recovery retains its normal write behavior. Relocated Session directories can be selected by the file without requiring the diagnostic creation path to match.
 
 The [file configuration tests](../../test/test_file_configuration.cpp) cover normal use and rejection boundaries. The [primer's seventh lesson](../primer.md#7-move-setup-into-a-toml-file) and its [runnable program](../../examples/primer/07_configuration.cpp) demonstrate configuration, discovery, creator closure, and compatible reattachment. Step 2.11 completes independent-process Registry qualification and its walkthrough.
+
+## Step 2.11 Registry inspection and qualification
+
+`Registry::snapshot()` captures all entity kinds under one recovered mutation gate. Passing a committed Registry revision returns the final definitions at that historical cut, including Source membership, activation, Publishing destinations/generation, exact schema versions, and registration attribution. Entries own their values and retain no Task claims. Current Task diagnostics remain a separate query because claim changes do not advance Registry revision.
+
+The shared Task loader now requires complete retained-definition/index coverage, zero predecessors for immutable Task records, and creator/Thread-parent registration chronology. Snapshot tests and deliberate corruption fixtures verify current and historical inspection rejects inconsistent catalogs without new writes.
+
+Mixed independent exec clients register and discover every entity kind, observe coherent snapshots during updates, enforce claim contention and replacement, recover representative Queue/schema interruptions, repeat interrupted recovery, and preserve exact schema history. Existing per-domain crash matrices continue to exercise the detailed write cuts. The [Registry walkthrough](../registry-walkthrough.md) uses only public APIs and is the [primer's eighth lesson](../primer.md#8-share-a-registry-and-inspect-its-history).
+
+The existing Linux x86_64 job and additional GitHub-hosted Linux ARM64/macOS x86_64/macOS ARM64 jobs run the complete suite and walkthroughs. See [native qualification](../native-storage.md#registry-qualification-and-native-profiles) for the profile and failure scope. This step closes the eleven-step milestone plan; message encoding and general message inspection begin in milestone 3 after milestone-2 integration.
 
 ## Registry implementation boundaries
 

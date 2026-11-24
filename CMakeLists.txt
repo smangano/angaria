@@ -38,6 +38,7 @@ add_library(angaria STATIC
   src/mutation_journal.cpp
   src/session_metadata.cpp
   src/runtime_state.cpp
+  src/registry_snapshot.cpp
   src/runtime_session.cpp
   src/task_runtime.cpp
   src/task_claim_redo.cpp
@@ -67,7 +68,7 @@ add_library(angaria_api_contract OBJECT examples/trading_api.cpp)
 target_link_libraries(angaria_api_contract PRIVATE angaria)
 
 # Primer programs use implemented public APIs and remain runnable without tests.
-foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration)
+foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)
   target_link_libraries(angaria_primer_${lesson} PRIVATE angaria)
 endforeach()
@@ -109,12 +110,19 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_activation_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_activation_worker PRIVATE angaria)
 
+  add_executable(angaria_native_registry_worker test/native_registry_worker.cpp)
+  target_include_directories(angaria_native_registry_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_registry_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
     test/test_session.cpp
     test/test_configuration.cpp
     test/test_file_configuration.cpp
+    test/test_registry_snapshot.cpp
+    test/test_registry_qualification.cpp
+    test/test_task_catalog_validation.cpp
     test/test_identities.cpp
     test/test_api_contract.cpp
     test/test_mapped_format.cpp
@@ -154,11 +162,12 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_SCHEMA_WORKER="$<TARGET_FILE:angaria_native_schema_worker>"
     ANGARIA_NATIVE_TOPOLOGY_WORKER="$<TARGET_FILE:angaria_native_topology_worker>"
     ANGARIA_NATIVE_ACTIVATION_WORKER="$<TARGET_FILE:angaria_native_activation_worker>"
+    ANGARIA_NATIVE_REGISTRY_WORKER="$<TARGET_FILE:angaria_native_registry_worker>"
     ANGARIA_TEST_VERSION="${PROJECT_VERSION}"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
-  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 10)
@@ -187,6 +196,13 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/configuration.toml"
   )
   set_tests_properties(primer_examples PROPERTIES TIMEOUT 45)
+  add_test(
+    NAME registry_walkthrough
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/registry_walkthrough.py"
+            "$<TARGET_FILE:angaria_primer_08_registry>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/configuration.toml"
+  )
+  set_tests_properties(registry_walkthrough PROPERTIES TIMEOUT 45)
   add_test(
     NAME protocol_model
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/protocol_model.py"
