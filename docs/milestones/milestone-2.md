@@ -1,8 +1,8 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.10 and the [programmer primer](../primer.md) are integrated into `milestone-2`. Step 2.11 completes Registry inspection, independent-process qualification, and the walkthrough. Its framework version is `0.2.13` under the [per-PR versioning policy](../../ROADMAP.md#versioning). After this step is reviewed and merged, a separate milestone integration PR brings the completed work to `main`.
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). **Milestone 2 is complete:** all eleven steps and the [programmer primer](../primer.md) are reviewed and merged into `milestone-2`, with the final qualification step merged through [PR #22](https://github.com/smangano/angaria/pull/22). Framework version `0.2.14` integrates the completed shared persistent Registry into `main` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
 
-Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
+Completion is demonstrated by independent processes registering and discovering Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recovering interrupted updates; and inspecting the persisted Registry after application shutdown. The full suite and eight primer programs pass on Linux and macOS for both x86_64 and ARM64.
 
 The staging branch `milestone-2` starts from the merged `main`. Each focused step uses `milestone-2-<s>` and a PR targeting `milestone-2`. After all steps are reviewed and merged, a milestone PR integrates `milestone-2` into `main`.
 

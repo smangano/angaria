@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 2, step 2.11**, framework version **0.2.13**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through the completed **milestone 2**, framework version **0.2.14**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, and claim producer and consumer endpoints. Sending, publishing, receiving, acknowledgment, and message encoding arrive in later milestones. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-Use a checkout containing this primer and its example sources. For version 0.2.13, use the `milestone-2-11` PR branch or `milestone-2` after that PR is merged. The work reaches `main` when the milestone is integrated.
+The milestone-2 integration release, version `0.2.14`, includes this primer and all eight example sources on `main`. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 

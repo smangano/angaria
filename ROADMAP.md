@@ -1,8 +1,12 @@
 # Angaria roadmap
 
+<p align="center">
+  <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="200"></a>
+</p>
+
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and milestone 2 is under implementation. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and [milestone 2](docs/milestones/milestone-2.md) is complete through its eleven reviewed steps. Milestone 3 adds general message construction and encoding next. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Living programmer primer
 
@@ -89,7 +93,7 @@ Completion requires a reviewed public API example for a bounded multi-process ap
 
 ## 2 Shared persistent Registry
 
-The final qualification step is under review. The [milestone 2 review plan](docs/milestones/milestone-2.md) divides the work into eleven focused step PRs targeting `milestone-2`, from the format-2 foundation through consistent historical snapshots and the [independent-process Registry walkthrough](docs/registry-walkthrough.md). After step 2.11 merges, a separate PR integrates the milestone into `main`.
+Complete. The [milestone 2 review plan](docs/milestones/milestone-2.md) records eleven reviewed step PRs, from the format-2 foundation through validated TOML configuration, consistent historical snapshots, and the [independent-process Registry walkthrough](docs/registry-walkthrough.md). Framework version `0.2.14` integrates this completed milestone into `main`.
 
 - Implement the live Registry in shared mapped memory and place its persisted representation at the start of message logs.
 - Implement registration and lookup for Tasks, Queues, Source Queue Sets, Publishing Queue Sets, Messages, schema versions, and Fields.
@@ -99,7 +103,7 @@ The final qualification step is under review. The [milestone 2 review plan](docs
 - Implement consistent IDs and name indexes, concurrent registration, capacity errors, and recovery from interrupted updates.
 - Preserve the historical definitions needed to interpret captured messages after schema, Task, or topology changes.
 
-Completion requires independent processes to register and discover every entity type, recover from interrupted registration, and inspect the recorded Registry after application shutdown.
+Completion is demonstrated by independent processes registering and discovering every entity type, recovering interrupted registration and topology updates, and inspecting current and historical Registry state after application shutdown. The full qualification suite and walkthroughs pass on Linux and macOS for both x86_64 and ARM64.
 
 ## 3 General messages and basic inspection
 
