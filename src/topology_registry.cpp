@@ -1,4 +1,4 @@
-#include "topology_state.h"
+#include "topology_append.h"
 
 #include <algorithm>
 #include <array>
@@ -17,101 +17,6 @@ namespace angaria::detail
 {
   namespace
   {
-    void check_actor(const std::shared_ptr<SessionState>& session,
-                       const std::shared_ptr<TaskState>& actor)
-    {
-      if (!session || !session->_controller)
-      {
-        runtime_fail(ErrorCode::InvalidState, "session", "Registry has no live Session state");
-      }
-      runtime_value(session->_controller->check_owner());
-      if (!actor)
-      {
-        runtime_fail(ErrorCode::ReadOnlyRegistry, "registry", "Registration requires an actor-bound Registry");
-      }
-      runtime_check_task_owner(actor);
-    }
-
-    void check_task(TaskId id, const TopologySnapshot& topology, const char* path)
-    {
-      if (id != TaskId::Invalid &&
-          std::none_of(topology._tasks.begin(), topology._tasks.end(), [id](const auto& task)
-          {
-            return task._definition._id == id;
-          }))
-      {
-        runtime_fail(ErrorCode::NotFound, path, "Task is not registered");
-      }
-    }
-
-    std::uint64_t add_bytes(std::uint64_t left, std::uint64_t right)
-    {
-      const auto result = mapped::checked_add(left, right);
-      if (!result || *result > mapped::max_log_bytes)
-      {
-        runtime_fail(ErrorCode::LogFull, "topology.definition", "Topology allocation exceeds format byte bounds");
-      }
-      return *result;
-    }
-
-    std::uint64_t multiply_bytes(std::uint64_t count, std::uint64_t width)
-    {
-      const auto result = mapped::checked_multiply(count, width);
-      if (!result || *result > mapped::max_log_bytes)
-      {
-        runtime_fail(ErrorCode::LogFull, "topology.definition", "Topology array exceeds format byte bounds");
-      }
-      return *result;
-    }
-
-    std::uint64_t record_bytes(std::uint64_t bodyBytes)
-    {
-      const auto body = mapped::checked_align(bodyBytes, mapped::record_alignment);
-      const auto required = body ? mapped::checked_add(mapped::record_envelope_bytes, *body) : std::nullopt;
-      const auto total = required ? mapped::checked_align(*required, mapped::section_alignment) : std::nullopt;
-      if (!total || *total > mapped::max_log_bytes)
-      {
-        runtime_fail(ErrorCode::LogFull, "topology.definition", "Topology record allocation exceeds format byte bounds");
-      }
-      return *total;
-    }
-
-    struct PreparedAppend
-    {
-      mapped::TransactionPlan _plan;
-      std::vector<std::uint64_t> _references;
-    };
-
-    PreparedAppend prepare_append(RuntimeAccess& access, const std::shared_ptr<TaskState>& actor,
-                                     std::span<const std::uint64_t> bodies,
-                                     std::uint64_t commandBytes)
-    {
-      if (access._snapshot._revision == std::numeric_limits<std::uint64_t>::max() ||
-          access._snapshot._generation == std::numeric_limits<std::uint64_t>::max())
-      {
-        runtime_fail(ErrorCode::CapacityExceeded, "topology.counter", "Registry revision or operation generation is exhausted");
-      }
-      PreparedAppend prepared;
-      auto offset = access._snapshot._tail;
-      for (const auto body : bodies)
-      {
-        prepared._references.push_back(offset);
-        offset = add_bytes(offset, record_bytes(body));
-      }
-      const auto manifestBody = add_bytes(add_bytes(64, multiply_bytes(bodies.size(), 8)), commandBytes);
-      const auto tail = add_bytes(offset, record_bytes(manifestBody));
-      if (tail > access._session->_controller->configuration()._maxLogBytes)
-      {
-        runtime_fail(ErrorCode::LogFull, "session.max_log_bytes", "Complete topology definitions, manifest, and redo exceed the log byte ceiling");
-      }
-      prepared._plan._base = access._snapshot;
-      prepared._plan._kind = mapped::JournalKind::Append;
-      prepared._plan._actor = actor->_claim._task;
-      prepared._plan._actorIncarnation = actor->_claim._incarnation;
-      prepared._plan._newRevision = access._snapshot._revision + 1;
-      return prepared;
-    }
-
     RegistrationMetadata registration(const PreparedAppend& prepared)
     {
       return RegistrationMetadata{prepared._plan._actor,
@@ -162,24 +67,6 @@ namespace angaria::detail
         ids.insert(static_cast<std::uint16_t>(publishing._definition._id));
       }
       return allocate_id(ids);
-    }
-
-    void add_index(PreparedAppend& prepared, std::uint64_t offset, std::uint16_t id, std::uint64_t reference)
-    {
-      const std::array<std::uint64_t, 4> row{id, reference, prepared._plan._newRevision, 1};
-      prepared._plan._commands.push_back(runtime_write_words(offset, row));
-    }
-
-    void add_membership(PreparedAppend& prepared, RuntimeAccess& access,
-                           std::uint64_t group, std::uint64_t slot,
-                           QueueId queue, std::uint8_t priority, std::uint64_t revision)
-    {
-      const auto capacity = access._session->_controller->configuration()._limits._membershipsPerSet;
-      const auto offset = access.section_offset(mapped::SectionKind::MembershipState) +
-                          (group * capacity + slot) * mapped::membership_bytes;
-      const std::array<std::uint64_t, 2> row{
-          static_cast<std::uint16_t>(queue) | (std::uint64_t{priority} << 16), revision};
-      prepared._plan._commands.push_back(runtime_write_words(offset, row));
     }
 
     struct QueuePolicy
@@ -354,6 +241,10 @@ namespace angaria::detail
           runtime_fail(ErrorCode::NotFound, "queue.source_set", "Source Queue Set is not registered");
         }
         source = &*found;
+        if (source->_definition._state == EntityState::Active && descriptor._producer == TaskId::Invalid)
+        {
+          runtime_fail(ErrorCode::InvalidState, "queue.producer", "An active Source requires fully owned member Queues");
+        }
         if (source->_definition._members.size() >= limits._membershipsPerSet)
         {
           runtime_fail(ErrorCode::CapacityExceeded, "limits.memberships_per_set", "Source Queue Set has no unused membership capacity");
@@ -399,7 +290,7 @@ namespace angaria::detail
         sourceRecord._previous = source->_reference;
         sourceRecord._immutable = runtime_value(mapped::encode_source_definition(updated, prepared._references[1]));
         prepared._plan._records.push_back(std::move(sourceRecord));
-        add_index(prepared, source->_indexOffset, static_cast<std::uint16_t>(updated._id), prepared._references[1]);
+        add_index(prepared, source->_indexOffset, static_cast<std::uint16_t>(updated._id), prepared._references[1], updated._state);
         std::map<QueueId, std::uint8_t> priorities;
         for (const auto& queue : topology._queues)
         {

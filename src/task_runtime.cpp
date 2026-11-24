@@ -1,5 +1,6 @@
 #include "runtime_state.h"
 #include "task_claim_redo.h"
+#include "topology_state.h"
 
 #include <algorithm>
 #include <array>
@@ -165,14 +166,17 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::IoError, "task.cleanup", "Session has no valid fixed layout");
       }
-      runtime_value(mapped::validate_task_only_topology(*access._file, *layout));
-      for (const auto kind : {8, 9, 10})
+      for (const auto kind : {9, 10})
       {
         if (!access.record_references(static_cast<std::uint16_t>(kind)).empty())
         {
-          runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Active ring or publication cleanup is not implemented yet");
+          runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Publication receipt cleanup is not implemented yet");
         }
       }
+      // Validate definitions and resource mirrors before installing a claim,
+      // including through a Session handle opened before external corruption.
+      // ReleaseClaim replay independently checks its idle-resource subset.
+      (void)runtime_topology(access);
     }
 
     mapped::RedoCommand release_claim(std::uint64_t offset, std::uint64_t incarnation, std::int64_t timestamp)

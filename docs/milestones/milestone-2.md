@@ -1,6 +1,6 @@
 # Milestone 2 Shared persistent Registry
 
-Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.7 are integrated into `milestone-2`; step 2.8 adds draft Queues and both Queue Set kinds. Its framework version is `0.2.9` under the [per-PR versioning policy](../../ROADMAP.md#versioning), following build 8 reserved by the logo-assets PR.
+Milestone 1's architecture and policy contracts reached `main` through [PR #7](https://github.com/smangano/angaria/pull/7). Milestone 2 implements the shared persistent Registry against those reviewed contracts. Steps 2.1 through 2.8 are integrated into `milestone-2`; step 2.9 adds topology changes, activation, and endpoint identity/ownership handles. Its framework version is `0.2.10` under the [per-PR versioning policy](../../ROADMAP.md#versioning).
 
 Completion requires independent processes to register and discover Tasks, Fields, immutable message schemas, Queues, Source Queue Sets, and Publishing Queue Sets; recover interrupted updates; and inspect the persisted Registry after application shutdown.
 
@@ -109,6 +109,16 @@ Registering a Queue with a Source appends both its definition and a revised Sour
 Portable codecs cover every stable policy code and explicit Queue/Source/Publishing layouts. Native registration currently accepts strict selection, spinning, log recovery, and all-destination acceptance. Ring geometry is validated without allocating a ring. Attachment validates retained chains, complete current indexes, registered owners, inverse Source relationships, Publishing ownership, and reserved draft state. Task detachment/replacement remains available with draft topology, including at `LogFull`; delivery cleanup still rejects rings and publications.
 
 The [public examples](../../test/test_topology_registry.cpp), [portable fixtures](../../test/test_topology_metadata.cpp), and [independent-process tests](../../test/test_topology_recovery.cpp) explain capacities, shared namespaces, policy resolution, atomic membership changes, exact byte budgets, retained history, corruption rejection, concurrent registrars, and interrupted append/recovery/I/O outcomes. See the [native draft-topology contract](../native-storage.md#draft-queues-and-queue-sets). Adoption, explicit topology changes, and activation/resource allocation follow step 2.9; TOML factories remain step 2.10.
+
+## Step 2.9 Topology updates, activation, and endpoint identities
+
+The Registry now adopts draft ownership, assigns or moves draft Queues, replaces Publishing destinations, and activates all three topology kinds. A changed operation appends retained definitions and commits all inverse memberships, indexes, and snapshot mirrors in one Registry revision. Shared preflight includes ring allocation, manifests, redo, and padding before large copies. Exact requests remain no-ops at exhausted append space or counters.
+
+Source activation requires complete nonempty membership; Queue activation requires an Active Source and commits a zeroed ring with its Active definition; Publishing activation requires nonempty Active destinations owned by its producer. Active owners and Queue assignments/policies remain fixed. Active Publishing destination replacement requires its own actor, preserves ordered unique destinations, and advances its separate topology counter only on list changes. Historical validation replays final batch definitions and checks every interval, including Queue producer changes affecting retained Publishing references.
+
+Task opening methods return Queue writer, Source, and Publishing identity/ownership handles. They retain claims across moves and closure of the original Task; a Source opening is exclusive within the claim. Task replacement remains possible with valid unused rings at LogFull. No delivery method is substituted with placeholder behavior: send/receive/publication/pin cleanup remain for their owning milestones.
+
+The [public activation examples](../../test/test_topology_activation.cpp), [endpoint examples](../../test/test_endpoint_runtime.cpp), and [process qualification](../../test/test_activation_recovery.cpp) cover activation order, ownership, atomic resource allocation, exact/one-byte-short budgets, retained history, corruption/no-write rejection, concurrency, SIGKILL, repeated recovery, and uncertain I/O outcomes. See the [native contract](../native-storage.md#topology-changes-and-activation). The next step, 2.10, integrates cpptoml TOML factories with this common validated path.
 
 ## Registry implementation boundaries
 
