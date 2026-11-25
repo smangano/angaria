@@ -107,7 +107,7 @@ Completion is demonstrated by independent processes registering and discovering 
 
 ## 3 General messages and basic inspection
 
-Under implementation. The [milestone 3 review plan](docs/milestones/milestone-3.md) keeps encoding, basic Field representations, generic message headers, and inspection in focused PRs. Steps 3.1–3.3 implement scalar/logical payloads, TOML version 2, and format 2.1. Step 3.4 adds [canonical message records](docs/message-record.md) at `0.3.4`, with exact Session/schema context and bounded portable headers. Capture and generic inspection are next.
+Under implementation. The [milestone 3 review plan](docs/milestones/milestone-3.md) keeps encoding, basic Field representations, generic message headers, and inspection in focused PRs. Steps 3.1–3.3 implement scalar/logical payloads, TOML version 2, and format 2.1. Step 3.4 adds [canonical message records](docs/message-record.md), with exact Session/schema context and bounded portable headers. Step 3.5 adds [capture streams and generic inspection](docs/capture-inspection.md) at `0.3.5`, retaining exact Registry definitions and independent record/catalog/text bounds. Step 3.6 qualifies process exchange, version additions, and inspection after application exit.
 
 - Implement generic headers and ordered fields driven by registered message definitions.
 - Cover sequence numbers, message/schema identity, payload type and size, producer identity, timestamps, and user flags. Store dequeue and acknowledgment metadata per destination.

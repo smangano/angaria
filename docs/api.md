@@ -17,6 +17,8 @@ The target checks declarations, including future delivery operations. The [progr
 | `angaria/results.h` | Typed ordinary failures and bounded publication outcome reports. |
 | `angaria/message.h` | Immutable borrowed payload and delivery views, gap events, and timeouts. |
 | `angaria/message_record.h` | Portable message headers/records, bounded framing, owning/borrowed decoding, and exact binary schema context. |
+| `angaria/capture.h` | Bounded, move-only readers/writers of consecutive canonical records through borrowed streams. |
+| `angaria/inspection.h` | Owning Field/schema catalogs and bounded generic text rendering with exact Session/schema context. |
 | `angaria/payload.h` | Owning schema-driven binary payload codecs, exact scalar/logical values, and bounded construction. |
 | `angaria/registry.h` | Registration, discovery, metadata inspection, activation, and draft ownership changes. |
 | `angaria/runtime.h` | Session, Task, QueueWriter, SourceQueueSet, and PublishingQueueSet handles. |
@@ -141,7 +143,17 @@ All five stable payload-format codes are preserved as opaque bytes; JSON/XML/CSV
 
 `MessageRecord::view()` is allowed on lvalues and borrows their payload storage. `MessageRecordView::message()` adapts to the existing borrowed `MessageView` while retaining the same backing-storage lifetime. Initial publication time is distinct from `DeliveryView`'s per-destination enqueue/dequeue metadata. Complete bytes, errors, lifetime, and receipt boundaries are specified in [the message-record contract](message-record.md) and demonstrated by [primer lesson 11](primer.md#11-wrap-a-payload-in-a-message-record).
 
-This step builds payload bytes. `MessageView` remains the borrowed view that later message construction/publication steps will consume; codec encoding does not issue publication identities or perform delivery.
+These codecs construct application-memory bytes. `MessageView` remains the borrowed view that later publication steps will consume; codec encoding does not issue publication identities or perform delivery.
+
+## Capture and generic inspection
+
+Step 3.5 implements `MessageCaptureWriter`, `MessageCaptureReader`, and `MessageInspector`. A [capture](capture-inspection.md) contains consecutive canonical records, with no additional file header or embedded schema catalog. Stream wrappers borrow a caller-owned stream and require record/aggregate byte caps. Writers validate before output; a partial I/O failure is terminal. Readers return an owning record, clean EOF, or a terminal contextual error. Counters count only complete successful records from the stream's initial position.
+
+`MessageInspector::from_session(session, limits)` obtains one consistent Registry snapshot. `from_snapshot(schemaSession, snapshot, limits)` accepts an independently retained Session identity and definitions. Inspectors own only Field/schema definitions and retain no Session or Task claim. Copies remain independent; moved-from inspectors return `InvalidState`. Later definitions require a new inspector. Native snapshot acquisition uses the ordinary Session API before inspector catalog preflight.
+
+`inspect(recordBytes)` or `inspect(recordView)` validates framing, source Session, and exact schema version, then returns owning ASCII text. It decodes existing binary scalar/logical Fields without application-specific types. Names, labels, and values are escaped; Field order, enum numbers/labels, bit widths, ASCII padding, and IEEE special values remain visible. Missing schemas return `NotFound`, a different Session returns `SchemaConflict`, and known nonbinary formats return `UnsupportedPolicy`.
+
+`InspectionLimits` bounds whole-record bytes, retained/expanded catalog definitions, and per-record text. Catalog preflight precedes inspector copies; repeated Field definitions are charged before compiling a selected layout. These size budgets do not measure exact process memory. The `angaria_inspect` CLI adds aggregate capture/output limits and closes native handles before capture I/O. Native catalog attachment can recover/write the Session and requires a compatible profile. See the [complete contract](capture-inspection.md) and [primer lesson 12](primer.md#12-capture-and-inspect-multiple-message-types).
 
 ## Messages and receive events
 

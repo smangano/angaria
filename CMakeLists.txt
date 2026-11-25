@@ -23,6 +23,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cpptoml)
 
 add_library(angaria STATIC
+  src/capture.cpp
+  src/inspection.cpp
   src/message_record.cpp
   src/payload.cpp
   src/configuration.cpp
@@ -65,12 +67,15 @@ target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
 add_executable(angaria_queue_demo examples/queue_demo.cpp)
 target_link_libraries(angaria_queue_demo PRIVATE angaria)
 
+add_executable(angaria_inspect tools/inspect.cpp)
+target_link_libraries(angaria_inspect PRIVATE angaria)
+
 # Compile the future runtime API example as a declaration contract.
 add_library(angaria_api_contract OBJECT examples/trading_api.cpp)
 target_link_libraries(angaria_api_contract PRIVATE angaria)
 
 # Primer programs use implemented public APIs and remain runnable without tests.
-foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record)
+foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record 12_capture)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)
   target_link_libraries(angaria_primer_${lesson} PRIVATE angaria)
 endforeach()
@@ -116,11 +121,16 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_registry_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_registry_worker PRIVATE angaria)
 
+  add_executable(angaria_capture_diagnostic_worker test/capture_diagnostic_worker.cpp)
+  target_link_libraries(angaria_capture_diagnostic_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
     test/test_payload.cpp
     test/test_message_record.cpp
+    test/test_capture.cpp
+    test/test_inspection.cpp
     test/test_session.cpp
     test/test_configuration.cpp
     test/test_file_configuration.cpp
@@ -226,6 +236,13 @@ if(BUILD_TESTING)
             "$<TARGET_FILE:angaria_primer_11_message_record>"
   )
   set_tests_properties(message_record_example PROPERTIES TIMEOUT 20)
+  add_test(
+    NAME capture_example
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/capture_example.py"
+            "$<TARGET_FILE:angaria_primer_12_capture>" "$<TARGET_FILE:angaria_inspect>"
+            "$<TARGET_FILE:angaria_capture_diagnostic_worker>"
+  )
+  set_tests_properties(capture_example PROPERTIES TIMEOUT 60)
   add_test(
     NAME protocol_model
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/protocol_model.py"
