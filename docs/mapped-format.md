@@ -188,7 +188,11 @@ Step 2.9 allocates the initial ring in the Queue activation batch. Its immutable
 
 Segmented storage has no ring-overwrite boundary. Under this initial contract it grows until the session byte cap, where new publications return `LogFull`; `allow_loss` does not introduce implicit eviction. Both delivery policies preserve pending deliveries in that mapping. A future eviction policy would need an explicit boundary, gap semantics, and feature negotiation.
 
-A Publication's immutable region starts with a 128-byte body:
+A native Publication's immutable region reserves a 128-byte fixed body.
+
+This native Publication body is a later storage contract. Step 3.4's [portable message record](message-record.md#relationship-to-native-session-storage) implements the logical header semantics in a separate self-contained encoding for application/capture use. It leaves this body unchanged. Native storage maps the header from Publication plus Session context, and its payload slice continues to reference application payload bytes alone.
+
+Offsets in the following table are relative to the start of that native body.
 
 | Offset in body | Bytes | Field |
 | ---: | ---: | --- |

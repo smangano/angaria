@@ -16,7 +16,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through ten runnable programs, from creating a Session to configuring fan-out, inspecting Registry history across processes, and encoding scalar and logical payloads. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through eleven runnable programs, from creating a Session to configuring fan-out, inspecting Registry history across processes, and constructing portable message records. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -90,9 +90,11 @@ python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/p
 
 The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities. The ninth lesson adds payload encoding; delivery follows its roadmap milestones.
 
-Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Message headers and inspection follow the [milestone 3 steps](docs/milestones/milestone-3.md).
+Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Step 3.4 adds message records below; capture inspection follows the [milestone 3 steps](docs/milestones/milestone-3.md).
 
-Step 3.2 reviewed the [basic logical Field contract](docs/logical-fields.md). Step 3.3, framework version **`0.3.3`**, implements booleans, 8/16/32/64-bit Fields, closed enumerations, fixed ASCII, and signed int8, including immutable Registry metadata and TOML version 2. New Sessions use format 2.1; existing 2.0 Sessions retain scalar behavior. The [tenth primer program](examples/primer/10_logical_fields.cpp) encodes logical values and demonstrates bounded caller-buffer construction with unchanged output on errors. Complete message envelopes follow step 3.4.
+Step 3.2 reviewed the [basic logical Field contract](docs/logical-fields.md). Step 3.3 implements booleans, 8/16/32/64-bit Fields, closed enumerations, fixed ASCII, and signed int8, including immutable Registry metadata and TOML version 2. New Sessions use format 2.1; existing 2.0 Sessions retain scalar behavior. The [tenth primer program](examples/primer/10_logical_fields.cpp) encodes logical values and demonstrates bounded caller-buffer construction with unchanged output on errors.
+
+Step 3.4, framework version **`0.3.4`**, adds [canonical message records](docs/message-record.md): an 80-byte portable header plus payload, with complete publication identity, exact schema, initial publication time, and flags. The [eleventh primer program](examples/primer/11_message_record.cpp) demonstrates bounded framing, owning/borrowed decoding, and exact Session/schema checks. Native Session formats remain unchanged; Queue publication and delivery follow later milestones.
 
 ## Run the restart walkthrough
 

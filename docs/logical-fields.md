@@ -132,7 +132,7 @@ There is no in-place upgrade, rewriting of retained definitions, or dynamic chan
 
 ## Implementation and qualification
 
-Step 3.3 implements descriptor metadata, equality/canonicalization, TOML version 2, persisted codecs, profile negotiation, Registry/snapshot validation, and payload values together. The [payload contract](message-payload.md) also defines initializer-list construction and `encode_into` for an exact caller-owned buffer. Its errors leave that buffer unchanged. These operations build bounded payloads in application memory; complete message envelopes follow step 3.4.
+Step 3.3 implements descriptor metadata, equality/canonicalization, TOML version 2, persisted codecs, profile negotiation, Registry/snapshot validation, and payload values together. The [payload contract](message-payload.md) also defines initializer-list construction and `encode_into` for an exact caller-owned buffer. Its errors leave that buffer unchanged. These operations build bounded payloads in application memory; step 3.4's [message records](message-record.md) add their portable headers and exact Session/schema context.
 
 | Failure | Required result |
 | --- | --- |
