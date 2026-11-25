@@ -25,7 +25,7 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 | --- | --- |
 | **Codec** | Code that encodes process-local values into specified bytes and decodes those bytes into values. The superblock codec also validates immutable metadata and section geometry. It does not serialize native C++ object layouts. |
 | **Little-endian** | Integer encoding in which the least significant byte is stored first, at the lowest byte offset. |
-| **Logical representation** | A Field's meaning and value constraints beyond its storage bytes: for example, a Boolean permits only zero and one. Step 3.2's [logical Field contract](logical-fields.md) describes the planned metadata. |
+| **Logical representation** | A Field's meaning and value constraints beyond its storage bytes: for example, a Boolean permits only zero and one. The [logical Field contract](logical-fields.md) describes its required metadata, implemented in step 3.3. |
 | **Storage base** | The underlying integer or character representation and fixed byte width used by a Field. Logical metadata can constrain it without changing an existing base code's meaning. |
 | **Closed enumeration** | A named mapping of distinct numeric values to distinct labels; numbers outside the mapping are invalid. Changing the mapping requires a new immutable Field identity. |
 | **Fixed ASCII** | An exact number of bytes in `00..7f`, including any explicitly supplied control or padding bytes. It is distinct from variable-length UTF-8 text. |

@@ -2,9 +2,9 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide accompanies framework version **0.3.2**, through **milestone 3, step 3.2**. The runnable public API reaches step 3.1; step 3.2 documents the next logical Field representations before their implementation in step 3.3. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 3, step 3.3**, framework version **0.3.3**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
-You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, and encode scalar payloads. Sending, publishing, receiving, acknowledgment, and complete message envelopes arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, and encode scalar and basic logical payloads. Sending, publishing, receiving, acknowledgment, and complete message envelopes arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
 ## A few ideas before the code
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lesson 9 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24); the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
+The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lesson 9 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24). Lesson 10 arrives with step 3.3; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -49,7 +49,7 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The nine targets are named `angaria_primer_01_session` through `angaria_primer_09_payload`, matching their source filenames.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The ten targets are named `angaria_primer_01_session` through `angaria_primer_10_logical_fields`, matching their source filenames.
 
 Examples 1–5 and 9 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
@@ -398,26 +398,75 @@ Keep the exact schema identity alongside the payload. These bytes contain neithe
 
 This lesson runs in application memory. The [payload format guide](message-payload.md) lists supported scalar types and error rules. Queue transport, publication, receiving, and acknowledgment follow their roadmap steps.
 
-## Plan logical Fields (step 3.2)
+## 10. Encode logical Fields and preserve an output buffer
 
-This section explains the [logical Field design](logical-fields.md) reviewed in step 3.2. Its new representations become runnable in step 3.3. The current Registry, TOML loader, and payload codec still support the scalar Fields demonstrated above.
+Read [10_logical_fields.cpp](../examples/primer/10_logical_fields.cpp) and its [TOML file](../examples/primer/logical-fields.toml). This lesson builds a small `OrderSettings` payload with a Boolean, bit flags, an enumeration, fixed ASCII text, and a signed 8-bit adjustment.
 
-A Field's **logical meaning** tells a reader how to interpret its stored bytes. For example, one byte could hold an ordinary number, a true-or-false answer, or several independent flags. The Registry needs that distinction so a general inspection program can explain a message without knowing the application's C++ types.
+Copy the configuration into a fresh child of the temporary workspace:
 
-| Planned representation | Meaning and byte rules |
-| --- | --- |
-| Boolean | A true-or-false value occupying one byte: `00` means false and `01` means true. Other byte values are errors. |
-| Bit field | A group of 8, 16, 32, or 64 independent bits, stored in little-endian order. Bit 0 is the least significant bit; setting it gives the numeric value 1. Larger 128- and 256-bit Fields follow in milestone 9. |
-| Enumeration | A fixed-width integer with registered names for its allowed values. For example, `Side` could define `Buy = 1` and `Sell = 2`. This is a **closed enumeration**: a value such as 3 is rejected when it has no registered entry. |
-| Fixed ASCII data | Exactly `N` bytes, each in the ASCII range `00` through `7f`. The declared size counts bytes. It does not count Unicode characters. |
+```sh
+mkdir "$primer_workspace/10-logical-fields"
+cp examples/primer/logical-fields.toml "$primer_workspace/10-logical-fields/"
+./build/angaria_primer_10_logical_fields "$primer_workspace/10-logical-fields/logical-fields.toml"
+```
 
-Fixed ASCII data has no automatic padding, trimming, or truncation. For a four-byte Field, the caller could supply `ABCD` or supply `AB` followed by two chosen padding bytes. A NUL byte, whose value is zero, is permitted and preserved like any other ASCII byte; it does not terminate the Field. A consumer reads the declared number of bytes.
+The file creates `logical-session` beside the copied TOML file. That Session directory must not already exist. To repeat the lesson, choose another fresh configuration directory. The program preserves an existing Session and reports `Conflict` instead of replacing it.
 
-The existing base codes 0 through 25 keep their meanings. Planned logical metadata records the additional interpretation and requires reader support. A reader must recognize that interpretation before treating the stored value as a boolean, bit field, or enumeration.
+A Field's **logical meaning** tells a reader how to interpret its stored bytes. One byte could hold an ordinary number, a true-or-false answer, or several flags. Registered logical metadata records that distinction so an inspector can explain the value without the application's C++ types.
 
-Field definitions remain immutable. Changing an enumeration's entries, a Field's width, or its logical meaning requires a new Field ID and name, followed by a new message-schema version that references it. Adding a message version alone cannot edit a Field used by an earlier schema. Earlier payloads keep their original definitions.
+| Field | Representation | C++ payload value |
+| --- | --- | --- |
+| `Enabled` | Boolean: one byte, `00` for false or `01` for true. Other bytes are invalid. | `true` |
+| `Flags` | Exactly 16 bits, stored little-endian. Bit 0 is the least significant bit. Basic widths are 8, 16, 32, and 64. | `BitFieldValue{0x8001}` |
+| `Side` | A byte-sized **closed enumeration**, with `Buy = 1` and `Sell = 2`. Values outside this mapping are invalid. | `EnumValue{std::uint8_t{1}}` |
+| `Instrument` | Exactly six ASCII bytes, each in the range `00..7f`. | `FixedAsciiValue{"IBM   "}` |
+| `Adjustment` | A signed 8-bit integer, in `-128..127`. | `std::int8_t{-128}` |
 
-The design document includes proposed TOML declarations and compatibility rules. Those declarations are design examples; the current loader does not accept them. The nine programs above remain the runnable learning path until step 3.3 adds the corresponding APIs and examples.
+These types are alternatives in `PayloadValue`. `ScalarValue` remains an alias for that type so lesson 9 still compiles. Logical wrappers keep a byte, bit field, enum, and Boolean distinct. The enum's `std::uint8_t` must match its declared byte storage; supplying `std::uint16_t` is a type error even for the number 1.
+
+Configuration version 2 adds these logical declarations while version 1 keeps its earlier scalar syntax. For example, the actual file defines `Side` as:
+
+```toml
+[[fields]]
+name = "Side"
+id = 0xEE000012
+type = "enum"
+underlying = "byte"
+enumerators = [{ name = "Sell", value = 2 }, { name = "Buy", value = "1" }]
+```
+
+Enum declarations can use TOML integers or canonical decimal strings. This preserves values up to the uint64 maximum, `"18446744073709551615"`, beyond TOML's signed integer range. Only enum values get this string form; settings such as `bits` and `size` still require TOML integers. Both forms normalize to the same numeric metadata. Inspection returns enum entries in numeric order, so this file prints `Side labels: 1=Buy 2=Sell`.
+
+The program compiles the exact `OrderSettings` schema with a 64-byte payload limit, then closes every Session, Registry, and Task handle. The owning codec retains its Field definitions and enum labels. It constructs the payload with:
+
+```cpp
+const auto payload = primer::value(codec.encode({
+    true, BitFieldValue{0x8001}, EnumValue{std::uint8_t{1}},
+    FixedAsciiValue{"IBM   "}, std::int8_t{-128}}));
+```
+
+Fixed ASCII has no automatic terminator, padding, trimming, or truncation. `IBM` needs three explicit spaces to fill the six-byte Field here. A NUL byte is also permitted and preserved; it does not end the Field. Larger 128- and 256-bit Fields, UTF-8 pooled strings, and additional text representations follow in milestone 9.
+
+Look for these complete output lines:
+
+```text
+OrderSettings payload bytes: 11
+OrderSettings hex: 01 01 80 01 49 42 4d 20 20 20 80
+Decoded: Enabled=true Flags=32769 Side=1 Instrument='IBM   ' Adjustment=-128
+Rejected undeclared enum: InvalidArgument
+Caller buffer unchanged: yes
+Caller buffer matches owning payload: yes
+```
+
+The 11 bytes are one Boolean byte, two flag bytes, one enum byte, six ASCII bytes, and one adjustment byte. The first flag byte is `01` and the second is `80`, because the value `0x8001` uses little-endian order. Signed `-128` encodes as the final byte `80`.
+
+`encode` returns an owning byte vector. When an application already owns an output buffer, `encode_into(values, output)` requires exactly `codec.payload_size()` bytes and checks all inputs before replacing any output byte. The lesson fills an 11-byte buffer with `a5`, tries an undeclared Side value of 3, and verifies `InvalidArgument` plus unchanged output. It then replaces that value with Buy and checks that successful caller-buffer encoding matches the owning payload.
+
+Field definitions remain immutable. Changing an enum mapping, width, or logical meaning requires a new Field ID and name, followed by a new message-schema version referencing it. A new message version alone cannot edit a Field used by earlier schemas. The existing base codes 0 through 25 retain their meanings; signed int8 adds code 26.
+
+New Sessions use mapped format 2.1 and advertise required logical-Field support at creation. This library also attaches to existing format-2.0 scalar Sessions, but adding logical Fields or int8 to them returns `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
+
+This example constructs and validates payloads in application memory. Complete message envelopes and Queue delivery arrive in their later steps.
 
 ## Understand bounds and ordinary failures
 
@@ -443,13 +492,13 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, and binary scalar payload encoding. Step 3.2 records the logical Field design; step 3.3 adds its runnable representations. Later milestone-3 steps add complete message metadata and generic inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, and binary scalar and logical payload encoding with bounded construction. Later milestone-3 steps add complete message metadata and generic inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 3, remaining steps | Extend basic representations, build complete messages, and inspect exact schema versions. |
+| 3, remaining steps | Build complete messages and inspect exact schema versions. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |

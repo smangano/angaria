@@ -69,7 +69,7 @@ add_library(angaria_api_contract OBJECT examples/trading_api.cpp)
 target_link_libraries(angaria_api_contract PRIVATE angaria)
 
 # Primer programs use implemented public APIs and remain runnable without tests.
-foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload)
+foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)
   target_link_libraries(angaria_primer_${lesson} PRIVATE angaria)
 endforeach()
@@ -211,6 +211,13 @@ if(BUILD_TESTING)
             "$<TARGET_FILE:angaria_primer_09_payload>"
   )
   set_tests_properties(payload_example PROPERTIES TIMEOUT 20)
+  add_test(
+    NAME logical_fields_example
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/logical_fields_example.py"
+            "$<TARGET_FILE:angaria_primer_10_logical_fields>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/logical-fields.toml"
+  )
+  set_tests_properties(logical_fields_example PROPERTIES TIMEOUT 20)
   add_test(
     NAME protocol_model
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/protocol_model.py"

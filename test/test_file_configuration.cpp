@@ -7,12 +7,14 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -184,6 +186,78 @@ fields = ["Price"]
   std::string complete_configuration()
   {
     return settings() + tasks() + topology() + schemas();
+  }
+
+  std::string logical_settings()
+  {
+    return replace_once(replace_once(settings(), "config_version = 1", "config_version = 2"),
+                        "fields = 4", "fields = 8");
+  }
+
+  std::string logical_fields()
+  {
+    return R"toml(
+[[fields]]
+name = "TradingEnabled"
+id = 0xEE000010
+type = "bool"
+
+[[fields]]
+name = "OrderFlags"
+id = 0xEE000011
+type = "bits"
+bits = 16
+
+[[fields]]
+name = "Side"
+id = 0xEE000012
+type = "enum"
+underlying = "byte"
+enumerators = [{ name = "Sell", value = 2 }, { name = "Buy", value = "1" }]
+
+[[fields]]
+name = "InstrumentCode"
+id = 0xEE000013
+type = "chars"
+size = 6
+
+[[fields]]
+name = "Delta"
+id = 0xEE000014
+type = "int8"
+
+[[fields]]
+name = "SignedStatus"
+id = 0xEE000015
+type = "enum"
+underlying = "int64"
+enumerators = [
+  { name = "Low", value = -9223372036854775808 },
+  { name = "High", value = "9223372036854775807" }
+]
+
+[[fields]]
+name = "ExternalStatus"
+id = 0xEE000016
+type = "enum"
+underlying = "uint64"
+enumerators = [
+  { name = "AllBitsSet", value = "18446744073709551615" },
+  { name = "HighBit", value = "9223372036854775808" }
+]
+
+[[messages]]
+name = "OrderSettings"
+type = 2
+version = 1
+fields = ["TradingEnabled", "OrderFlags", "Side", "InstrumentCode", "Delta", "SignedStatus", "ExternalStatus"]
+)toml";
+  }
+
+  std::string one_logical_field(std::string_view declaration)
+  {
+    return logical_settings() + tasks() + "\n[[fields]]\nname = \"Logical\"\nid = 0xEE000010\n" +
+           std::string{declaration} + "\n";
   }
 
   class FileConfigurationTest : public testing::Test
@@ -766,7 +840,7 @@ fields = ["Price"]
     };
     const auto valid = complete_configuration();
     const std::array invalid{
-        Invalid{"config_version = 1", "config_version = 2", "config_version"},
+        Invalid{"config_version = 1", "config_version = 3", "config_version"},
         Invalid{"tasks = 8", "tasks = -1", "tasks"},
         Invalid{"tasks = 8", "tasks = 4294967296", "tasks"},
         Invalid{"priority = 7", "priority = -1", "priority"},
@@ -996,5 +1070,269 @@ destinations = []
     EXPECT_EQ(read_bytes(_root / "session" / "session.ang"), image);
     EXPECT_EQ(directory_entries(_root), entries);
     EXPECT_EQ(require_value(Session::attach(_root / "session")).identity(), created._session.identity());
+  }
+
+  // Version 2 adds logical meaning without changing the earlier scalar or
+  // topology spelling. Existing version-1 files remain useful input.
+  TEST_F(FileConfigurationTest, AcceptsBothConfigurationVersionsForExistingScalarDefinitions)
+  {
+    const auto first = write_configuration(complete_configuration(), "first.toml");
+    const auto second = write_configuration(replace_once(replace_once(complete_configuration(),
+        "config_version = 1", "config_version = 2"), "directory = \"session\"", "directory = \"second\""),
+        "second.toml");
+    auto old_file = require_value(Session::create_from_file(first, "Setup"));
+    auto new_file = require_value(Session::create_from_file(second, "Setup"));
+    const auto old_price = require_value(old_file._session.registry().describe_field(static_cast<FieldId>(0xEE000000u)));
+    const auto new_price = require_value(new_file._session.registry().describe_field(old_price._id));
+    EXPECT_EQ(new_price._name, old_price._name);
+    EXPECT_EQ(new_price._base, old_price._base);
+    EXPECT_EQ(new_price._size, old_price._size);
+    EXPECT_EQ(new_price._logical, old_price._logical);
+    EXPECT_EQ(new_price._logical._kind, FieldLogicalKind::None);
+  }
+
+  TEST_F(FileConfigurationTest, CreatesLogicalFieldsWithOwningCanonicalMetadataAndFullIntegerRanges)
+  {
+    auto created = require_value(Session::create_from_file(
+        write_configuration(logical_settings() + tasks() + logical_fields()), "Setup"));
+    auto registry = created._creator.registry();
+    const auto enabled = require_value(registry.describe_field(require_value(registry.find_field("TradingEnabled"))));
+    EXPECT_EQ(enabled._base, EFieldBase::BASE_BYTE);
+    EXPECT_EQ(enabled._size, 1u);
+    EXPECT_EQ(enabled._logical._kind, FieldLogicalKind::Boolean);
+    EXPECT_TRUE(enabled._logical._enumerators.empty());
+    const auto flags = require_value(registry.describe_field(require_value(registry.find_field("OrderFlags"))));
+    EXPECT_EQ(flags._base, EFieldBase::BASE_UINT16);
+    EXPECT_EQ(flags._size, 2u);
+    EXPECT_EQ(flags._logical._kind, FieldLogicalKind::Bits);
+    const auto characters = require_value(registry.describe_field(require_value(registry.find_field("InstrumentCode"))));
+    EXPECT_EQ(characters._base, EFieldBase::BASE_CHARS);
+    EXPECT_EQ(characters._size, 6u);
+    EXPECT_EQ(characters._logical._kind, FieldLogicalKind::FixedAscii);
+    const auto delta = require_value(registry.describe_field(require_value(registry.find_field("Delta"))));
+    EXPECT_EQ(delta._base, EFieldBase::BASE_INT8);
+    EXPECT_EQ(delta._size, 1u);
+    EXPECT_EQ(delta._logical._kind, FieldLogicalKind::None);
+
+    // The same independently constructed public descriptor re-registers
+    // idempotently, regardless of TOML integer/string spelling or entry order.
+    FieldDescriptor side;
+    side._id = static_cast<FieldId>(0xEE000012u);
+    side._name = "Side";
+    side._base = EFieldBase::BASE_BYTE;
+    side._size = 1;
+    side._logical._kind = FieldLogicalKind::Enumeration;
+    side._logical._enumerators = {{"Buy", std::uint64_t{1}}, {"Sell", std::uint64_t{2}}};
+    EXPECT_EQ(require_value(registry.describe_field(side._id))._logical, side._logical);
+    const auto revision = require_value(registry.metadata(side._id))._revision;
+    std::reverse(side._logical._enumerators.begin(), side._logical._enumerators.end());
+    EXPECT_EQ(require_value(registry.register_field(side)), side._id);
+    EXPECT_EQ(require_value(registry.metadata(side._id))._revision, revision);
+    side._logical._enumerators.front()._name = "DifferentMeaning";
+    expect_error(registry.register_field(side), ErrorCode::Conflict);
+
+    const auto signed_status = require_value(registry.describe_field(require_value(registry.find_field("SignedStatus"))));
+    const std::vector<EnumeratorDescriptor> signed_values{
+        {"Low", std::numeric_limits<std::int64_t>::min()},
+        {"High", std::numeric_limits<std::int64_t>::max()}};
+    EXPECT_EQ(signed_status._logical._enumerators, signed_values);
+    const auto external = require_value(registry.describe_field(require_value(registry.find_field("ExternalStatus"))));
+    const std::vector<EnumeratorDescriptor> unsigned_values{
+        {"HighBit", std::uint64_t{1} << 63}, {"AllBitsSet", std::numeric_limits<std::uint64_t>::max()}};
+    EXPECT_EQ(external._logical._enumerators, unsigned_values);
+    EXPECT_EQ(require_value(registry.describe_message(require_value(registry.find_message("OrderSettings", 1))))._fields.size(), 7u);
+  }
+
+  TEST_F(FileConfigurationTest, AcceptsEveryBasicBitWidthAndMaximumFixedAsciiSizeWithoutPayloadAllocation)
+  {
+    const std::array<std::pair<unsigned, EFieldBase>, 4> widths{{
+        {8, EFieldBase::BASE_BYTE}, {16, EFieldBase::BASE_UINT16},
+        {32, EFieldBase::BASE_UINT32}, {64, EFieldBase::BASE_UINT64}}};
+    for (const auto& [bits, base] : widths)
+    {
+      SCOPED_TRACE(bits);
+      auto text = one_logical_field("type = \"bits\"\nbits = " + std::to_string(bits));
+      text = replace_once(text, "directory = \"session\"", "directory = \"bits-" + std::to_string(bits) + "\"");
+      auto created = require_value(Session::create_from_file(write_configuration(text), "Setup"));
+      const auto descriptor = require_value(created._session.registry().describe_field(static_cast<FieldId>(0xEE000010u)));
+      EXPECT_EQ(descriptor._base, base);
+      EXPECT_EQ(descriptor._size, bits / 8);
+      EXPECT_EQ(descriptor._logical._kind, FieldLogicalKind::Bits);
+    }
+    // A Field definition records a width; it does not allocate a value buffer
+    // of that width. Payload construction has its own explicit byte budget.
+    auto created = require_value(Session::create_from_file(write_configuration(
+        one_logical_field("type = \"chars\"\nsize = 4294967295")), "Setup"));
+    EXPECT_EQ(require_value(created._session.registry().describe_field(static_cast<FieldId>(0xEE000010u)))._size,
+              std::numeric_limits<std::uint32_t>::max());
+  }
+
+  TEST_F(FileConfigurationTest, NormalizesEveryEnumUnderlyingIntegerType)
+  {
+    struct Underlying
+    {
+      const char* _name;
+      const char* _low;
+      const char* _high;
+      EnumerationNumber _minimum;
+      EnumerationNumber _maximum;
+    };
+    const std::array types{
+        Underlying{"byte", "0", "255", std::uint64_t{0}, std::uint64_t{255}},
+        Underlying{"int8", "-128", "127", std::int64_t{-128}, std::int64_t{127}},
+        Underlying{"int16", "-32768", "32767", std::int64_t{-32768}, std::int64_t{32767}},
+        Underlying{"uint16", "0", "65535", std::uint64_t{0}, std::uint64_t{65535}},
+        Underlying{"int32", "-2147483648", "2147483647", std::int64_t{-2147483648LL}, std::int64_t{2147483647}},
+        Underlying{"uint32", "0", "4294967295", std::uint64_t{0}, std::uint64_t{4294967295ULL}},
+        Underlying{"int64", "-9223372036854775808", "9223372036854775807",
+                   std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max()},
+        Underlying{"uint64", "0", "18446744073709551615", std::uint64_t{0}, std::numeric_limits<std::uint64_t>::max()}};
+    for (const auto& type : types)
+    {
+      SCOPED_TRACE(type._name);
+      const auto declaration = std::string{"type = \"enum\"\nunderlying = \""} + type._name +
+          "\"\nenumerators = [{ name = \"High\", value = \"" + type._high +
+          "\" }, { name = \"Low\", value = \"" + type._low + "\" }]";
+      const auto text = replace_once(one_logical_field(declaration), "directory = \"session\"",
+          std::string{"directory = \"enum-"} + type._name + "\"");
+      auto created = require_value(Session::create_from_file(write_configuration(text), "Setup"));
+      const auto descriptor = require_value(created._session.registry().describe_field(static_cast<FieldId>(0xEE000010u)));
+      ASSERT_EQ(descriptor._logical._enumerators.size(), 2u);
+      EXPECT_EQ(descriptor._logical._enumerators[0]._name, "Low");
+      EXPECT_EQ(descriptor._logical._enumerators[0]._value, type._minimum);
+      EXPECT_EQ(descriptor._logical._enumerators[1]._value, type._maximum);
+    }
+  }
+
+  TEST_F(FileConfigurationTest, RequiresVersionTwoForLogicalTypesAndTheirKeys)
+  {
+    const std::array declarations{
+        "type = \"bool\"", "type = \"bits\"\nbits = 8", "type = \"int8\"",
+        "type = \"chars\"\nsize = 6",
+        "type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \"A\", value = 1 }]"};
+    for (const auto* declaration : declarations)
+    {
+      SCOPED_TRACE(declaration);
+      const auto text = replace_once(one_logical_field(declaration), "config_version = 2", "config_version = 1");
+      const auto result = Session::create_from_file(write_configuration(text), "Setup");
+      expect_error(result, ErrorCode::InvalidConfiguration, "fields[0]");
+      ASSERT_TRUE(std::holds_alternative<Error>(result));
+      EXPECT_NE(std::get<Error>(result)._message.find("config_version = 2"), std::string::npos);
+      EXPECT_FALSE(fs::exists(_root / "session"));
+    }
+  }
+
+  TEST_F(FileConfigurationTest, RejectsInapplicableKeysWrongTypesAndLogicalBoundsBeforePublishing)
+  {
+    struct Invalid
+    {
+      const char* _declaration;
+      const char* _key;
+    };
+    const std::array values{
+        Invalid{"type = \"bool\"\nsize = 1", "size"},
+        Invalid{"type = \"byte\"\nbits = 8", "bits"},
+        Invalid{"type = \"chars\"\nsize = 0", "size"},
+        Invalid{"type = \"chars\"\nsize = 4294967296", "size"},
+        Invalid{"type = \"chars\"\nsize = \"6\"", "size"},
+        Invalid{"type = \"bits\"\nbits = 7", "bits"},
+        Invalid{"type = \"bits\"\nbits = 9", "bits"},
+        Invalid{"type = \"bits\"\nbits = 128", "bits"},
+        Invalid{"type = \"bits\"\nbits = true", "bits"},
+        Invalid{"type = \"enum\"\nunderlying = \"float32\"\nenumerators = []", "underlying"},
+        Invalid{"type = \"enum\"\nunderlying = \"char\"\nenumerators = []", "underlying"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = []", "enumerators"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [1]", "enumerators"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \"A\" }]", "enumerators[0].value"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \"A\", value = 1, extra = 0 }]", "enumerators[0].extra"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \"A\", value = 1 }, { name = \"B\", value = \"1\" }]", "enumerators[1].value"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \"A\", value = 1 }, { name = \"A\", value = 2 }]", "enumerators[1].name"},
+        Invalid{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \"Bad\\u0000Name\", value = 1 }]", "enumerators[0].name"}};
+    for (const auto& value : values)
+    {
+      SCOPED_TRACE(value._declaration);
+      expect_creation_failure(one_logical_field(value._declaration), ErrorCode::InvalidConfiguration, value._key);
+    }
+  }
+
+  TEST_F(FileConfigurationTest, RejectsNoncanonicalEnumNumbersAndUnderlyingOverflowWithIndexedPaths)
+  {
+    const std::array invalid_unsigned{
+        "\"\"", "\"+1\"", "\"01\"", "\"-0\"", "\" 1\"", "\"1 \"", "\"1_0\"",
+        "\"0xff\"", "\"1e2\"", "\"1.0\"", "\"-1\"", "-1", "true", "1.0", "[]",
+        "\"18446744073709551616\""};
+    for (const auto* literal : invalid_unsigned)
+    {
+      SCOPED_TRACE(literal);
+      const auto declaration = std::string{"type = \"enum\"\nunderlying = \"uint64\"\nenumerators = [{ name = \"A\", value = "} + literal + " }]";
+      expect_creation_failure(one_logical_field(declaration), ErrorCode::InvalidConfiguration, "enumerators[0].value");
+    }
+    const std::array<std::pair<const char*, const char*>, 8> overflow{{
+        {"byte", "256"}, {"int8", "-129"}, {"int8", "128"}, {"uint16", "65536"},
+        {"int16", "32768"}, {"int32", "-2147483649"},
+        {"int64", "9223372036854775808"}, {"int64", "-9223372036854775809"}}};
+    for (const auto& [base, number] : overflow)
+    {
+      SCOPED_TRACE(number);
+      const auto declaration = std::string{"type = \"enum\"\nunderlying = \""} + base +
+          "\"\nenumerators = [{ name = \"A\", value = \"" + number + "\" }]";
+      expect_creation_failure(one_logical_field(declaration), ErrorCode::InvalidConfiguration, "enumerators[0].value");
+    }
+  }
+
+  TEST_F(FileConfigurationTest, AttachmentValidatesLogicalDeclarationsWithoutReplacingRegisteredMeaning)
+  {
+    const auto valid = logical_settings() + tasks() + logical_fields();
+    auto created = require_value(Session::create_from_file(write_configuration(valid), "Setup"));
+    const auto side_id = require_value(created._session.registry().find_field("Side"));
+    const auto before = require_value(created._session.registry().describe_field(side_id));
+    const auto revision = require_value(created._session.registry().metadata(side_id))._revision;
+    const auto image = read_bytes(_root / "session" / "session.ang");
+    // Attach treats declarations as validation-only input, just as it does for
+    // topology. Changing a valid supplied mapping does not edit the Registry.
+    const auto different = replace_once(valid, "{ name = \"Sell\", value = 2 }", "{ name = \"Sell\", value = 3 }");
+    auto attached = require_value(Session::attach_from_file(write_configuration(different, "attach.toml")));
+    EXPECT_EQ(require_value(attached.registry().describe_field(side_id))._logical, before._logical);
+    EXPECT_EQ(require_value(attached.registry().metadata(side_id))._revision, revision);
+    EXPECT_EQ(read_bytes(_root / "session" / "session.ang"), image);
+  }
+
+  TEST_F(FileConfigurationTest, IncludesEnumArraysLabelsAndLogicalAttributesInExactConfigurationBudget)
+  {
+    const auto valid = logical_settings() + tasks() + logical_fields();
+    std::uint64_t required{};
+    {
+      auto created = require_value(Session::create_from_file(write_configuration(valid), "Setup"));
+      required = fs::file_size(_root / "session" / "session.ang");
+    }
+    fs::remove_all(_root / "session");
+    expect_creation_failure(replace_once(valid, "max_log_bytes = 1048576",
+        "max_log_bytes = " + std::to_string(required - 1)), ErrorCode::LogFull, "max_log_bytes");
+    auto created = require_value(Session::create_from_file(write_configuration(replace_once(valid,
+        "max_log_bytes = 1048576", "max_log_bytes = " + std::to_string(required))), "Setup"));
+    EXPECT_EQ(fs::file_size(_root / "session" / "session.ang"), required);
+    // Labels belong to immutable definition bytes, even with no string pool.
+    EXPECT_EQ(require_value(created._session.options())._limits._stringPoolBytes, 0u);
+  }
+
+  TEST_F(FileConfigurationTest, BoundsCompleteEnumMetadataEvenWhenItsEntryArrayIsSmall)
+  {
+    // One entry has a tiny numeric array, but its label alone can exhaust the
+    // Session budget. The loader accounts for label bytes and the complete
+    // append allocation before producing another owning metadata copy.
+    const std::string label(65536, 'L');
+    const auto declaration = std::string{"type = \"enum\"\nunderlying = \"byte\"\nenumerators = [{ name = \""} +
+        label + "\", value = 1 }]";
+    const auto valid = one_logical_field(declaration);
+    expect_creation_failure(replace_once(valid, "max_log_bytes = 1048576", "max_log_bytes = 65536"),
+                            ErrorCode::LogFull, "max_log_bytes");
+
+    // The same label is valid with adequate log space; this is a resource bound
+    // rather than a hidden name-length limit or use of the application pool.
+    auto created = require_value(Session::create_from_file(write_configuration(valid), "Setup"));
+    const auto id = require_value(created._session.registry().find_field("Logical"));
+    const auto field = require_value(created._session.registry().describe_field(id));
+    ASSERT_EQ(field._logical._enumerators.size(), 1u);
+    EXPECT_EQ(field._logical._enumerators.front()._name, label);
   }
 } // namespace

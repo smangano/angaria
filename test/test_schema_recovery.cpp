@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -148,7 +149,7 @@ namespace
                  unsigned actor = 1, std::uint64_t raw = 0, std::uint32_t version = 1,
                  const std::string& name = "Registered", const std::string& doc = "durable metadata",
                  mapped::JournalCheckpoint point = mapped::JournalCheckpoint::Prepared,
-                 std::uint64_t index = 0)
+                 std::uint64_t index = 0, bool logical = false)
     {
       std::array<int, 2> output{-1, -1};
       std::array<int, 2> input{-1, -1};
@@ -200,7 +201,7 @@ namespace
           }
           const std::array<std::string, 11> values{
               ANGARIA_NATIVE_SCHEMA_WORKER, mode, directory.string(), std::to_string(actor),
-              isField ? "field" : "schema", std::to_string(raw == 0 ? (isField ? 0xee000010ull : 1ull) : raw),
+              isField ? (logical ? "logical" : "field") : "schema", std::to_string(raw == 0 ? (isField ? 0xee000010ull : 1ull) : raw),
               std::to_string(version), name, doc,
               std::to_string(static_cast<unsigned>(point)), std::to_string(index)};
           std::array<char*, 12> arguments{};
@@ -892,6 +893,90 @@ namespace
         }
         EXPECT_EQ(writer.finish(), 0);
       }
+    }
+  }
+  // Extra enum attributes are part of the same accepted definition, not a
+  // second update. Kill at real journal boundaries and inspect from a fresh
+  // process so labels, numeric extrema, and attribution survive together.
+  TEST_F(SchemaRecoveryTest, LogicalMetadataSurvivesCrashCutsAndIndependentInspection)
+  {
+    for (const auto point : {mapped::JournalCheckpoint::RecordReady,
+                            mapped::JournalCheckpoint::Committed,
+                            mapped::JournalCheckpoint::RedoWord})
+    {
+      SCOPED_TRACE(static_cast<unsigned>(point));
+      const auto directory = _root / std::to_string(static_cast<unsigned>(point));
+      auto session = create_detached(directory);
+      SchemaWorker writer(directory, "crash", true, 1, 0, 1, "Registered", "durable metadata", point, 0, true);
+      writer.terminate_at_checkpoint();
+      const bool accepted = point != mapped::JournalCheckpoint::RecordReady;
+      EXPECT_EQ(has_error(session.registry().find_field("Registered"), ErrorCode::NotFound), !accepted);
+      auto owner = require_value(session.attach_task(TaskId{1}));
+      auto descriptor = field();
+      descriptor._base = EFieldBase::BASE_UINT64;
+      descriptor._logical._kind = FieldLogicalKind::Enumeration;
+      descriptor._logical._enumerators = {{"Maximum", std::numeric_limits<std::uint64_t>::max()},
+                                          {"Zero", std::uint64_t{0}}};
+      const auto before = snapshot(directory);
+      EXPECT_EQ(require_value(owner.registry().register_field(descriptor)), descriptor._id);
+      EXPECT_EQ(snapshot(directory)._revision, 3u);
+      if (accepted)
+      {
+        EXPECT_EQ(snapshot(directory), before);
+      }
+      SchemaWorker reader(directory, "inspect", true, 1, 0, 1, "Registered", "durable metadata",
+                          mapped::JournalCheckpoint::Prepared, 0, true);
+      inspect_report(reader, identity(true), 3, 8);
+    }
+  }
+
+  // A committed but unfinished operation would require redo writes. An
+  // unsupported header must prevent those writes before journal recovery.
+  // Restore only the deliberately altered header, then prove recovery works.
+  TEST_F(SchemaRecoveryTest, UnsupportedProfileRejectsBeforeRecoveringAcceptedJournal)
+  {
+    for (const auto unknownFeature : {false, true})
+    {
+      SCOPED_TRACE(unknownFeature);
+      const auto directory = _root / (unknownFeature ? "unknown-feature" : "unknown-format");
+      {
+        auto session = create_detached(directory);
+        SchemaWorker writer(directory, "crash", true, 1, 0, 1, "Registered", "durable metadata",
+                             mapped::JournalCheckpoint::Committed);
+        writer.terminate_at_checkpoint();
+      }
+      const auto read_raw = [&]
+      {
+        auto file = require_value(mapped::NativeFile::open_existing(directory / "session.ang", mapped::FileAccess::ReadOnly));
+        std::vector<std::byte> bytes(static_cast<std::size_t>(require_value(file.size())));
+        require_value(file.read_exact(0, bytes));
+        return bytes;
+      };
+      const auto original = read_raw();
+      {
+        auto file = require_value(mapped::NativeFile::open_existing(directory / "session.ang", mapped::FileAccess::ReadWrite));
+        if (unknownFeature)
+        {
+          const std::array<std::byte, 1> flag{std::byte{0x80}};
+          require_value(file.write_exact(63, flag));
+        }
+        else
+        {
+          const std::array<std::byte, 2> minor{std::byte{2}};
+          require_value(file.write_exact(10, minor));
+        }
+      }
+      const auto unsupported = read_raw();
+      EXPECT_TRUE(has_error(Session::attach(directory), ErrorCode::IoError));
+      EXPECT_EQ(read_raw(), unsupported);
+      {
+        auto file = require_value(mapped::NativeFile::open_existing(directory / "session.ang", mapped::FileAccess::ReadWrite));
+        require_value(file.write_exact(10, std::span{original}.subspan(10, 2)));
+        require_value(file.write_exact(56, std::span{original}.subspan(56, 8)));
+      }
+      auto recovered = require_value(Session::attach(directory));
+      EXPECT_EQ(require_value(recovered.registry().find_field("Registered")), static_cast<FieldId>(identity(true)));
+      EXPECT_EQ(snapshot(directory)._revision, 3u);
     }
   }
 } // namespace

@@ -4,6 +4,8 @@ For a guided introduction before reading test fixtures, use the [programmer prim
 
 The ninth lesson runs as `payload_example` and shows schema-driven binary encoding/decoding. Its [codec tests](test_payload.cpp) use independent golden bytes, integer/IEEE boundaries, exact schema versions, malformed inputs, payload bounds, and independent codec lifetime. These payload APIs use the current Registry definitions and remain separate from the legacy Field-template serialization tests.
 
+The tenth lesson runs as `logical_fields_example` using [TOML version 2](../examples/primer/logical-fields.toml). It encodes Boolean, bit-field, enum, fixed-ASCII, and int8 values and preserves a caller buffer on errors. Logical metadata tests check independent wire bytes and corruption, including 65,536 enum entries. Registry/process tests check canonical retries, exact metadata budgets, historical definitions, legacy 2.0 support, logical crash recovery, and incompatible-profile rejection before recovery writes.
+
 Start with [test_runtime_session.cpp](test_runtime_session.cpp) for Session creation/lifetimes, [test_task_registration.cpp](test_task_registration.cpp) for logical Task registration, and [test_schema_registry.cpp](test_schema_registry.cpp) for Field and versioned schema definitions. Their test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
 
 A useful reading order is:

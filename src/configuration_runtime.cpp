@@ -1,6 +1,7 @@
 #include "configuration_runtime.h"
 
 #include "runtime_state.h"
+#include "schema_metadata.h"
 #include "topology_append.h"
 
 #include <cstddef>
@@ -83,7 +84,8 @@ namespace angaria::detail
     }
     for (const auto& entry : configuration._fields)
     {
-      budget.append({definition_bytes(88, entry._descriptor)}, 48, entry._path);
+      budget.append({configured_value(mapped::field_definition_body_bytes(entry._descriptor), entry._path)},
+          48, entry._path);
     }
     for (const auto& entry : configuration._messages)
     {

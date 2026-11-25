@@ -2,10 +2,14 @@
 
 #include "angaria/detail/cpptoml.h"
 #include "runtime_state.h"
+#include "schema_metadata.h"
+#include "topology_append.h"
 #include "topology_metadata.h"
 #include "topology_policy.h"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -17,7 +21,9 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace angaria::detail
@@ -97,6 +103,24 @@ namespace angaria::detail
       return value->get();
     }
 
+    // The parsed document retains these strings while its configuration plan
+    // is validated. Length checks can inspect them without an additional copy.
+    std::string_view borrowed_string_value(const Table& table, const std::string& key,
+                                             const std::string& path, bool required = true)
+    {
+      const auto node = required ? required_node(table, key, path) : optional_node(table, key);
+      if (!node)
+      {
+        return {};
+      }
+      const auto value = node->as<std::string>();
+      if (!value)
+      {
+        invalid(key_path(path, key), "Expected a TOML string");
+      }
+      return value->get();
+    }
+
     std::uint64_t unsigned_value(const Table& table, const std::string& key, const std::string& path,
                                     std::uint64_t minimum, std::uint64_t maximum,
                                     std::optional<std::uint64_t> fallback = {})
@@ -160,7 +184,8 @@ namespace angaria::detail
       return result;
     }
 
-    std::vector<Table> declaration_tables(const Table& root, const std::string& key)
+    std::vector<Table> declaration_tables(const Table& root, const std::string& key,
+                                           const std::string& path = {})
     {
       const auto node = optional_node(root, key);
       if (!node)
@@ -176,7 +201,7 @@ namespace angaria::detail
       {
         return {};
       }
-      invalid(key, "Expected an array of TOML tables, or an empty array");
+      invalid(key_path(path, key), "Expected an array of TOML tables, or an empty array");
     }
 
     std::string indexed_path(std::string_view category, std::size_t index)
@@ -210,7 +235,7 @@ namespace angaria::detail
       }
     }
 
-    void check_text(const std::string& text, const std::string& path, bool required = true,
+    void check_text(std::string_view text, const std::string& path, bool required = true,
                         bool noNull = true)
     {
       runtime_value(mapped::validate_metadata_text(text, required, noNull, path.c_str(),
@@ -225,6 +250,120 @@ namespace angaria::detail
         runtime_fail(ErrorCode::CapacityExceeded, path, category + " count " + std::to_string(count) +
                      " exceeds configured capacity " + std::to_string(limit));
       }
+    }
+
+    EFieldBase field_base(const Table& table, const std::string& key, const std::string& path)
+    {
+      (void)required_node(table, key, path);
+      return enum_value<EFieldBase>(table, key, path,
+          {{"none", EFieldBase::BASE_NONE}, {"char", EFieldBase::BASE_CHAR}, {"byte", EFieldBase::BASE_BYTE},
+           {"int8", EFieldBase::BASE_INT8}, {"int16", EFieldBase::BASE_INT16},
+           {"uint16", EFieldBase::BASE_UINT16}, {"int32", EFieldBase::BASE_INT32},
+           {"uint32", EFieldBase::BASE_UINT32}, {"int64", EFieldBase::BASE_INT64},
+           {"uint64", EFieldBase::BASE_UINT64}, {"float32", EFieldBase::BASE_FLOAT32},
+           {"float64", EFieldBase::BASE_FLOAT64}, {"date", EFieldBase::BASE_DATE},
+           {"timestamp", EFieldBase::BASE_TIMESTAMP}, {"years", EFieldBase::BASE_YEARS},
+           {"months", EFieldBase::BASE_MONTHS}, {"days", EFieldBase::BASE_DAYS},
+           {"hours", EFieldBase::BASE_HOURS}, {"minutes", EFieldBase::BASE_MINS},
+           {"seconds", EFieldBase::BASE_SECS}, {"milliseconds", EFieldBase::BASE_MILLISECS},
+           {"microseconds", EFieldBase::BASE_MICROSECS}, {"nanoseconds", EFieldBase::BASE_NANOSECS},
+           {"chars", EFieldBase::BASE_CHARS}, {"bytes", EFieldBase::BASE_BYTES},
+           {"symbol", EFieldBase::BASE_SYMBOL}, {"string", EFieldBase::BASE_STRING}}, EFieldBase::BASE_NONE);
+    }
+
+    std::uint32_t scalar_bytes(EFieldBase base)
+    {
+      switch (base)
+      {
+      case EFieldBase::BASE_CHAR:
+      case EFieldBase::BASE_BYTE:
+      case EFieldBase::BASE_INT8: return 1;
+      case EFieldBase::BASE_INT16:
+      case EFieldBase::BASE_UINT16: return 2;
+      case EFieldBase::BASE_INT32:
+      case EFieldBase::BASE_UINT32:
+      case EFieldBase::BASE_FLOAT32: return 4;
+      case EFieldBase::BASE_INT64:
+      case EFieldBase::BASE_UINT64:
+      case EFieldBase::BASE_FLOAT64: return 8;
+      default: return 0;
+      }
+    }
+
+    bool signed_integer(EFieldBase base)
+    {
+      return base == EFieldBase::BASE_INT8 || base == EFieldBase::BASE_INT16 ||
+             base == EFieldBase::BASE_INT32 || base == EFieldBase::BASE_INT64;
+    }
+
+    bool unsigned_integer(EFieldBase base)
+    {
+      return base == EFieldBase::BASE_BYTE || base == EFieldBase::BASE_UINT16 ||
+             base == EFieldBase::BASE_UINT32 || base == EFieldBase::BASE_UINT64;
+    }
+
+    EnumerationNumber enumeration_value(const Table& table, EFieldBase base, const std::string& path)
+    {
+      const auto node = required_node(table, "value", path);
+      const auto valuePath = path + ".value";
+      const auto bits = scalar_bytes(base) * 8;
+      const auto isSigned = signed_integer(base);
+      std::int64_t signedValue{};
+      std::uint64_t unsignedValue{};
+      if (const auto value = node->as<std::int64_t>())
+      {
+        signedValue = value->get();
+        if (!isSigned && signedValue < 0)
+        {
+          invalid(valuePath, "An unsigned enumerator cannot be negative");
+        }
+        unsignedValue = static_cast<std::uint64_t>(signedValue);
+      }
+      else if (const auto value = node->as<std::string>())
+      {
+        const auto& text = value->get();
+        const auto first = !text.empty() && text.front() == '-' ? std::size_t{1} : std::size_t{};
+        if (first == text.size() || (text[first] == '0' && (first != 0 || text.size() != 1)) ||
+            !std::all_of(text.begin() + static_cast<std::ptrdiff_t>(first), text.end(),
+                [](char character)
+                {
+                  return character >= '0' && character <= '9';
+                }))
+        {
+          invalid(valuePath, "Expected a canonical decimal integer string without sign '+', leading zeros, or whitespace");
+        }
+        if (!isSigned && first != 0)
+        {
+          invalid(valuePath, "An unsigned enumerator cannot be negative");
+        }
+        const auto parsed = isSigned ? std::from_chars(text.data(), text.data() + text.size(), signedValue) :
+                                       std::from_chars(text.data(), text.data() + text.size(), unsignedValue);
+        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
+        {
+          invalid(valuePath, "Enumerator does not fit its underlying integer range");
+        }
+      }
+      else
+      {
+        invalid(valuePath, "Expected a TOML integer or canonical decimal integer string");
+      }
+      if (isSigned)
+      {
+        const auto maximum = bits == 64 ? std::numeric_limits<std::int64_t>::max() :
+                                         (std::int64_t{1} << (bits - 1)) - 1;
+        if (signedValue < -maximum - 1 || signedValue > maximum)
+        {
+          invalid(valuePath, "Enumerator does not fit its signed underlying integer range");
+        }
+        return signedValue;
+      }
+      const auto maximum = bits == 64 ? std::numeric_limits<std::uint64_t>::max() :
+                                       (std::uint64_t{1} << bits) - 1;
+      if (unsignedValue > maximum)
+      {
+        invalid(valuePath, "Enumerator does not fit its unsigned underlying integer range");
+      }
+      return unsignedValue;
     }
 
     Table parse_file(const std::filesystem::path& file)
@@ -248,7 +387,7 @@ namespace angaria::detail
         }
         check_keys(root, "", {"config_version", "session", "limits", "defaults", "tasks", "fields",
                                "messages", "source_sets", "queues", "publishing_sets"});
-        (void)unsigned_value(root, "config_version", "", 1, 1);
+        (void)unsigned_value(root, "config_version", "", 1, 2);
         return root;
       }
       catch (const cpptoml::parse_exception& error)
@@ -623,19 +762,145 @@ namespace angaria::detail
         }
       }
 
+      void parse_enumerators(const Table& table, FieldDescriptor& descriptor, const std::string& path,
+                               std::string_view fieldName, std::string_view fieldDoc)
+      {
+        const auto tables = declaration_tables(table, "enumerators", path);
+        if (tables.empty())
+        {
+          invalid(path + ".enumerators", "An enumeration needs at least one enumerator");
+        }
+        // The parser already owns the input. Borrow its strings until the whole
+        // Field and its minimum append allocation have passed byte preflight.
+        const auto arrayBytes = mapped::checked_multiply(tables.size(), 24);
+        if (!arrayBytes || *arrayBytes > _plan._options._maxLogBytes)
+        {
+          runtime_fail(ErrorCode::LogFull, "session.max_log_bytes", "Enumerator array cannot fit the log while planning " + path);
+        }
+        auto& entries = descriptor._logical._enumerators;
+        if (tables.size() > entries.max_size())
+        {
+          runtime_fail(ErrorCode::CapacityExceeded, path + ".enumerators", "Enumerator array exceeds the native allocation range");
+        }
+        const auto add_metadata_bytes = [&path](std::uint64_t left, std::uint64_t right)
+        {
+          const auto sum = mapped::checked_add(left, right);
+          if (!sum || *sum > mapped::max_log_bytes)
+          {
+            runtime_fail(ErrorCode::LogFull, "session.max_log_bytes",
+                         "Enumeration metadata length overflows while planning " + path);
+          }
+          return *sum;
+        };
+        auto bodyBytes = add_metadata_bytes(88 + 16, *arrayBytes);
+        bodyBytes = add_metadata_bytes(bodyBytes, fieldName.size());
+        bodyBytes = add_metadata_bytes(bodyBytes, fieldDoc.size());
+        for (std::size_t index = 0; index < tables.size(); ++index)
+        {
+          const auto entryPath = path + ".enumerators[" + std::to_string(index) + "]";
+          const auto& entryTable = tables[index];
+          check_keys(entryTable, entryPath, {"name", "value"});
+          const auto label = borrowed_string_value(entryTable, "name", entryPath);
+          check_text(label, entryPath + ".name");
+          (void)enumeration_value(entryTable, descriptor._base, entryPath);
+          bodyBytes = add_metadata_bytes(bodyBytes, label.size());
+        }
+        if (bodyBytes > std::vector<std::byte>{}.max_size() ||
+            bodyBytes > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+        {
+          runtime_fail(ErrorCode::CapacityExceeded, path + ".enumerators",
+                       "Enumeration metadata exceeds the native allocation range");
+        }
+        const auto layout = mapped::make_fixed_layout(_plan._options._limits);
+        if (!layout)
+        {
+          invalid("limits", "The combined capacity reservations exceed the format's byte-address range");
+        }
+        const std::array bodies{bodyBytes};
+        try
+        {
+          // Starting at the empty arena is a lower bound. The complete initial
+          // configuration, including bootstrap and earlier definitions, still
+          // receives its ordinary cumulative preflight before publication.
+          (void)append_tail(layout->_arenaBegin, bodies, 48, _plan._options._maxLogBytes);
+        }
+        catch (const RuntimeFailure& failure)
+        {
+          auto error = failure._error;
+          error._message += " while planning " + path + ".enumerators";
+          throw RuntimeFailure{std::move(error)};
+        }
+        entries.reserve(tables.size());
+        // Reservation keeps borrowed name views valid while entries are built.
+        std::set<std::string_view> names;
+        std::set<EnumerationNumber> numbers;
+        for (std::size_t index = 0; index < tables.size(); ++index)
+        {
+          const auto entryPath = path + ".enumerators[" + std::to_string(index) + "]";
+          const auto& entryTable = tables[index];
+          check_keys(entryTable, entryPath, {"name", "value"});
+          EnumeratorDescriptor entry;
+          entry._name = string_value(entryTable, "name", entryPath);
+          check_text(entry._name, entryPath + ".name");
+          entry._value = enumeration_value(entryTable, descriptor._base, entryPath);
+          entries.push_back(std::move(entry));
+          if (!names.insert(entries.back()._name).second)
+          {
+            invalid(entryPath + ".name", "Duplicate enumerator name '" + entries.back()._name + "'");
+          }
+          if (!numbers.insert(entries.back()._value).second)
+          {
+            invalid(entryPath + ".value", "Duplicate enumerator numeric value");
+          }
+        }
+      }
+
       void parse_fields()
       {
         const auto tables = declaration_tables(_root, "fields");
         check_count(tables.size(), _plan._options._limits._fields, "limits.fields", "Field declarations");
+        const auto version = unsigned_value(_root, "config_version", "", 1, 2);
         std::set<FieldId> identities;
         for (std::size_t index = 0; index < tables.size(); ++index)
         {
           const auto& table = tables[index];
           const auto path = indexed_path("fields", index);
-          check_keys(table, path, {"name", "type", "id", "doc"});
+          const auto type = string_value(table, "type", path);
+          if (version == 1)
+          {
+            for (const auto* key : {"bits", "size", "underlying", "enumerators"})
+            {
+              if (table->contains(key))
+              {
+                invalid(path + "." + key, "This Field key requires config_version = 2");
+              }
+            }
+            if (type == "bool" || type == "bits" || type == "enum" || type == "int8")
+            {
+              invalid(path + ".type", "Field type '" + type + "' requires config_version = 2");
+            }
+          }
+          if (version == 2 && type == "bits")
+          {
+            check_keys(table, path, {"name", "type", "id", "doc", "bits"});
+          }
+          else if (version == 2 && type == "enum")
+          {
+            check_keys(table, path, {"name", "type", "id", "doc", "underlying", "enumerators"});
+          }
+          else if (version == 2 && type == "chars")
+          {
+            check_keys(table, path, {"name", "type", "id", "doc", "size"});
+          }
+          else
+          {
+            check_keys(table, path, {"name", "type", "id", "doc"});
+          }
           FieldDescriptor descriptor;
-          descriptor._name = string_value(table, "name", path);
-          descriptor._doc = string_value(table, "doc", path, false);
+          const auto fieldName = borrowed_string_value(table, "name", path);
+          const auto fieldDoc = borrowed_string_value(table, "doc", path, false);
+          check_text(fieldName, path + ".name");
+          check_text(fieldDoc, path + ".doc", false, false);
           descriptor._id = static_cast<FieldId>(unsigned_value(table, "id", path, 0,
                                                                  std::numeric_limits<std::uint32_t>::max()));
           if ((static_cast<std::uint32_t>(descriptor._id) & 0xff000000u) != 0xee000000u)
@@ -643,47 +908,54 @@ namespace angaria::detail
             invalid(path + ".id", "Field identity " + std::to_string(static_cast<std::uint32_t>(descriptor._id)) +
                     " must retain the 0xEE high byte");
           }
-          descriptor._base = enum_value<EFieldBase>(table, "type", path,
-              {{"none", EFieldBase::BASE_NONE}, {"char", EFieldBase::BASE_CHAR}, {"byte", EFieldBase::BASE_BYTE},
-               {"int16", EFieldBase::BASE_INT16}, {"uint16", EFieldBase::BASE_UINT16},
-               {"int32", EFieldBase::BASE_INT32}, {"uint32", EFieldBase::BASE_UINT32},
-               {"int64", EFieldBase::BASE_INT64}, {"uint64", EFieldBase::BASE_UINT64},
-               {"float32", EFieldBase::BASE_FLOAT32}, {"float64", EFieldBase::BASE_FLOAT64},
-               {"date", EFieldBase::BASE_DATE}, {"timestamp", EFieldBase::BASE_TIMESTAMP},
-               {"years", EFieldBase::BASE_YEARS}, {"months", EFieldBase::BASE_MONTHS},
-               {"days", EFieldBase::BASE_DAYS}, {"hours", EFieldBase::BASE_HOURS},
-               {"minutes", EFieldBase::BASE_MINS}, {"seconds", EFieldBase::BASE_SECS},
-               {"milliseconds", EFieldBase::BASE_MILLISECS}, {"microseconds", EFieldBase::BASE_MICROSECS},
-               {"nanoseconds", EFieldBase::BASE_NANOSECS}, {"chars", EFieldBase::BASE_CHARS},
-               {"bytes", EFieldBase::BASE_BYTES}, {"symbol", EFieldBase::BASE_SYMBOL}, {"string", EFieldBase::BASE_STRING}},
-              EFieldBase::BASE_NONE);
-          (void)required_node(table, "type", path);
-          switch (descriptor._base)
+          if (type == "bool")
           {
-          case EFieldBase::BASE_CHAR:
-          case EFieldBase::BASE_BYTE:
+            descriptor._base = EFieldBase::BASE_BYTE;
             descriptor._size = 1;
-            break;
-          case EFieldBase::BASE_INT16:
-          case EFieldBase::BASE_UINT16:
-            descriptor._size = 2;
-            break;
-          case EFieldBase::BASE_INT32:
-          case EFieldBase::BASE_UINT32:
-          case EFieldBase::BASE_FLOAT32:
-            descriptor._size = 4;
-            break;
-          case EFieldBase::BASE_INT64:
-          case EFieldBase::BASE_UINT64:
-          case EFieldBase::BASE_FLOAT64:
-            descriptor._size = 8;
-            break;
-          default:
-            break;
+            descriptor._logical._kind = FieldLogicalKind::Boolean;
           }
+          else if (type == "bits")
+          {
+            const auto bits = unsigned_value(table, "bits", path, 8, 64);
+            switch (bits)
+            {
+            case 8: descriptor._base = EFieldBase::BASE_BYTE; break;
+            case 16: descriptor._base = EFieldBase::BASE_UINT16; break;
+            case 32: descriptor._base = EFieldBase::BASE_UINT32; break;
+            case 64: descriptor._base = EFieldBase::BASE_UINT64; break;
+            default: invalid(path + ".bits", "Bit-field width must be exactly 8, 16, 32, or 64");
+            }
+            descriptor._size = static_cast<std::uint32_t>(bits / 8);
+            descriptor._logical._kind = FieldLogicalKind::Bits;
+          }
+          else if (type == "enum")
+          {
+            descriptor._base = field_base(table, "underlying", path);
+            if (!signed_integer(descriptor._base) && !unsigned_integer(descriptor._base))
+            {
+              invalid(path + ".underlying", "Enum storage must be byte, int8, int16, uint16, int32, uint32, int64, or uint64");
+            }
+            descriptor._size = scalar_bytes(descriptor._base);
+            descriptor._logical._kind = FieldLogicalKind::Enumeration;
+            parse_enumerators(table, descriptor, path, fieldName, fieldDoc);
+          }
+          else if (version == 2 && type == "chars")
+          {
+            descriptor._base = EFieldBase::BASE_CHARS;
+            descriptor._size = static_cast<std::uint32_t>(unsigned_value(table, "size", path, 1,
+                std::numeric_limits<std::uint32_t>::max()));
+            descriptor._logical._kind = FieldLogicalKind::FixedAscii;
+          }
+          else
+          {
+            descriptor._base = field_base(table, "type", path);
+            descriptor._size = scalar_bytes(descriptor._base);
+          }
+          descriptor._name = fieldName;
+          descriptor._doc = fieldDoc;
           at_path(path, [&]
           {
-            runtime_value(mapped::validate_field_descriptor(descriptor));
+            descriptor = runtime_value(mapped::canonicalize_field_descriptor(descriptor));
             runtime_validate_field_policy(descriptor, ErrorCode::InvalidConfiguration);
           });
           if (!_fields.emplace(descriptor._name, descriptor._id).second)

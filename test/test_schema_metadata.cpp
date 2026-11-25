@@ -322,7 +322,7 @@ namespace
       expect_error(mapped::decode_field_definition(body, record_offset), ErrorCode::IoError);
     }
     auto body = golden_field();
-    put_integer(body, 64, 26, 2);
+    put_integer(body, 64, 27, 2);
     expect_error(mapped::decode_field_definition(body, record_offset), ErrorCode::IoError);
   }
 
@@ -465,5 +465,373 @@ namespace
     EXPECT_EQ(require_value(mapped::decode_field_definition(
                   require_value(mapped::encode_field_definition(field_definition(), 8200)), 8200))._descriptor._id,
               field_definition()._descriptor._id);
+  }
+
+  mapped::FieldDefinition enum_definition()
+  {
+    auto definition = field_definition();
+    auto& field = definition._descriptor;
+    field._id = FieldId{0xee000002u};
+    field._name = "Range";
+    field._doc.clear();
+    field._base = EFieldBase::BASE_INT8;
+    field._size = 1;
+    field._logical._kind = FieldLogicalKind::Enumeration;
+    // Deliberately unsorted input: canonical numeric order is Low, then Max.
+    field._logical._enumerators = {{"Max", std::int64_t{127}}, {"Low", std::int64_t{-128}}};
+    return definition;
+  }
+
+  std::vector<std::byte> golden_enum()
+  {
+    // These offsets are authored from the format-2.1 contract: 88 fixed bytes,
+    // an eight-byte attribute header, u64 count, two 24-byte entries, six label
+    // bytes, then the five-byte Field name. No C++ object layout is involved.
+    std::vector<std::byte> bytes(152);
+    put_integer(bytes, 0, 0xee000002u, 8);
+    put_integer(bytes, 8, 3, 2);
+    put_integer(bytes, 16, 0xfffffffffffffff9u, 8);
+    put_integer(bytes, 24, 9, 8);
+    put_integer(bytes, 32, 8414, 8);
+    put_integer(bytes, 40, 5, 8);
+    put_integer(bytes, 64, 26, 2);
+    put_integer(bytes, 66, 1, 2);
+    put_integer(bytes, 68, 1, 4);
+    put_integer(bytes, 72, 8344, 8);
+    put_integer(bytes, 80, 70, 8);
+    put_integer(bytes, 88, 1, 2);
+    put_integer(bytes, 90, 3, 2);
+    put_integer(bytes, 96, 2, 8);
+    put_integer(bytes, 104, 0xffffffffffffff80u, 8);
+    put_integer(bytes, 112, 8408, 8);
+    put_integer(bytes, 120, 3, 8);
+    put_integer(bytes, 128, 127, 8);
+    put_integer(bytes, 136, 8411, 8);
+    put_integer(bytes, 144, 3, 8);
+    append_text(bytes, "LowMaxRange");
+    return bytes;
+  }
+
+  // An owning enum definition preserves numeric signedness and all labels.
+  // Declaration order is not semantic: encoding and canonicalization put the
+  // explicit signed values in ascending order without modifying the input.
+  TEST(LogicalMetadata, SignedEnumMatchesIndependentGoldenBytesAndOwnsCanonicalLabels)
+  {
+    auto definition = enum_definition();
+    EXPECT_EQ(require_value(mapped::encode_field_definition(definition, record_offset)), golden_enum());
+    EXPECT_EQ(require_value(mapped::field_definition_body_bytes(definition._descriptor)), 163u);
+    const auto canonical = require_value(mapped::canonicalize_field_descriptor(definition._descriptor));
+    EXPECT_EQ(canonical._logical._enumerators.front()._name, "Low");
+    EXPECT_EQ(definition._descriptor._logical._enumerators.front()._name, "Max");
+    const auto decoded = require_value(mapped::decode_field_definition(golden_enum(), record_offset));
+    EXPECT_EQ(decoded._descriptor._logical, canonical._logical);
+    EXPECT_EQ(decoded._descriptor._name, "Range");
+    EXPECT_TRUE(mapped::field_requires_basic_fields(decoded._descriptor));
+    definition._descriptor._logical._enumerators.back()._name = "Changed";
+    EXPECT_EQ(canonical._logical._enumerators.front()._name, "Low");
+    EXPECT_EQ(decoded._descriptor._logical._enumerators.front()._name, "Low");
+  }
+
+  // The metadata numeric slot is a full u64, never a signed TOML-sized number.
+  // Under uint64 storage, all-one bits are UINT64_MAX rather than minus one.
+  TEST(LogicalMetadata, UnsignedEnumPreservesTheFullUint64Range)
+  {
+    auto definition = enum_definition();
+    auto& field = definition._descriptor;
+    field._base = EFieldBase::BASE_UINT64;
+    field._size = 8;
+    field._logical._enumerators = {{"Max", std::numeric_limits<std::uint64_t>::max()}, {"Low", std::uint64_t{0}}};
+    auto expected = golden_enum();
+    put_integer(expected, 64, 8, 2);
+    put_integer(expected, 68, 8, 4);
+    put_integer(expected, 104, 0, 8);
+    put_integer(expected, 128, std::numeric_limits<std::uint64_t>::max(), 8);
+    EXPECT_EQ(require_value(mapped::encode_field_definition(definition, record_offset)), expected);
+    const auto read = require_value(mapped::decode_field_definition(expected, record_offset));
+    EXPECT_EQ(std::get<std::uint64_t>(read._descriptor._logical._enumerators.front()._value), 0u);
+    EXPECT_EQ(std::get<std::uint64_t>(read._descriptor._logical._enumerators.back()._value),
+              std::numeric_limits<std::uint64_t>::max());
+  }
+
+  // Boolean, bit-field, and ASCII definitions use the same eight-byte tagged
+  // header. Their storage base and declared size supply all width information;
+  // even UINT32_MAX ASCII size describes metadata without allocating a payload.
+  TEST(LogicalMetadata, SimpleLogicalKindsHaveExactEightByteAttributes)
+  {
+    struct Shape
+    {
+      FieldLogicalKind _kind;
+      EFieldBase _base;
+      std::uint32_t _size;
+      std::uint16_t _code;
+    };
+    const std::array cases{
+        Shape{FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 1, 1},
+        Shape{FieldLogicalKind::Bits, EFieldBase::BASE_BYTE, 1, 2},
+        Shape{FieldLogicalKind::Bits, EFieldBase::BASE_UINT16, 2, 2},
+        Shape{FieldLogicalKind::Bits, EFieldBase::BASE_UINT32, 4, 2},
+        Shape{FieldLogicalKind::Bits, EFieldBase::BASE_UINT64, 8, 2},
+        Shape{FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS, 1, 4},
+        Shape{FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS,
+              std::numeric_limits<std::uint32_t>::max(), 4}};
+    for (const auto& shape : cases)
+    {
+      auto definition = field_definition();
+      auto& field = definition._descriptor;
+      field._base = shape._base;
+      field._size = shape._size;
+      field._logical._kind = shape._kind;
+      const auto bytes = require_value(mapped::encode_field_definition(definition, record_offset));
+      EXPECT_EQ(bytes.size(), 106u);
+      EXPECT_EQ(get_integer(bytes, 66, 2), 1u);
+      EXPECT_EQ(get_integer(bytes, 72, 8), 8344u);
+      EXPECT_EQ(get_integer(bytes, 80, 8), 8u);
+      EXPECT_EQ(get_integer(bytes, 88, 2), 1u);
+      EXPECT_EQ(get_integer(bytes, 90, 2), shape._code);
+      EXPECT_EQ(get_integer(bytes, 92, 4), 0u);
+      EXPECT_EQ(get_integer(bytes, 32, 8), 8352u);
+      const auto read = require_value(mapped::decode_field_definition(bytes, record_offset));
+      EXPECT_EQ(read._descriptor._logical, field._logical);
+      EXPECT_EQ(read._descriptor._base, field._base);
+      EXPECT_EQ(read._descriptor._size, field._size);
+    }
+    auto ordinary = field_definition();
+    ordinary._descriptor._name = "TradingEnabled";
+    ordinary._descriptor._base = EFieldBase::BASE_BYTE;
+    ordinary._descriptor._size = 1;
+    EXPECT_FALSE(mapped::field_requires_basic_fields(ordinary._descriptor));
+    const auto read = require_value(mapped::decode_field_definition(
+        require_value(mapped::encode_field_definition(ordinary, record_offset)), record_offset));
+    EXPECT_EQ(read._descriptor._logical._kind, FieldLogicalKind::None);
+  }
+
+  // The newly assigned signed-byte code is appended after the old codes. Its
+  // scalar body still has no attributes, while its one-byte width is mandatory.
+  TEST(LogicalMetadata, Int8AppendsCodeWithoutChangingTheScalarBodyLayout)
+  {
+    auto definition = field_definition();
+    definition._descriptor._base = EFieldBase::BASE_INT8;
+    definition._descriptor._size = 1;
+    auto expected = golden_field();
+    put_integer(expected, 64, 26, 2);
+    put_integer(expected, 68, 1, 4);
+    EXPECT_EQ(require_value(mapped::encode_field_definition(definition, record_offset)), expected);
+    EXPECT_EQ(require_value(mapped::decode_field_definition(expected, record_offset))._descriptor._base,
+              EFieldBase::BASE_INT8);
+    EXPECT_TRUE(mapped::field_requires_basic_fields(definition._descriptor));
+    for (const auto size : {0u, 2u, std::numeric_limits<std::uint32_t>::max()})
+    {
+      definition._descriptor._size = size;
+      expect_error(mapped::validate_field_descriptor(definition._descriptor), ErrorCode::InvalidArgument);
+      auto damaged = expected;
+      put_integer(damaged, 68, size, 4);
+      expect_error(mapped::decode_field_definition(damaged, record_offset), ErrorCode::IoError);
+    }
+  }
+
+  // Representation metadata must agree with its storage base and width. An
+  // enum table cannot be smuggled into a Boolean, ASCII, bits, or ordinary scalar
+  // descriptor; unknown logical kinds are explicit validation failures.
+  TEST(LogicalMetadata, DescriptorKindsRejectInconsistentBasesSizesAndExtraEntries)
+  {
+    auto definition = enum_definition();
+    auto field = definition._descriptor;
+    for (const auto kind : {FieldLogicalKind::None, FieldLogicalKind::Boolean,
+                             FieldLogicalKind::Bits, FieldLogicalKind::FixedAscii})
+    {
+      field._logical._kind = kind;
+      expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+    }
+    field._logical._enumerators.clear();
+    for (const auto kind : {FieldLogicalKind::Boolean, FieldLogicalKind::Bits,
+                             FieldLogicalKind::FixedAscii, FieldLogicalKind::Enumeration,
+                             static_cast<FieldLogicalKind>(99)})
+    {
+      field._logical._kind = kind;
+      expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+    }
+    field._logical._kind = FieldLogicalKind::Bits;
+    field._base = EFieldBase::BASE_UINT16;
+    field._size = 1;
+    expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+    field._logical._kind = FieldLogicalKind::FixedAscii;
+    field._base = EFieldBase::BASE_CHARS;
+    field._size = 0;
+    expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+    field = definition._descriptor;
+    field._base = EFieldBase::BASE_FLOAT64;
+    field._size = 8;
+    expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+  }
+
+  // Enumeration metadata uses int64 or uint64 according to the declared base.
+  // A narrow base still imposes narrow bounds before any persisted conversion.
+  TEST(LogicalMetadata, EnumeratorNumbersEnforceSignednessAndEveryStorageWidth)
+  {
+    struct Shape
+    {
+      EFieldBase _base;
+      unsigned _size;
+      bool _signed;
+    };
+    const std::array cases{
+        Shape{EFieldBase::BASE_INT8, 1, true}, Shape{EFieldBase::BASE_BYTE, 1, false},
+        Shape{EFieldBase::BASE_INT16, 2, true}, Shape{EFieldBase::BASE_UINT16, 2, false},
+        Shape{EFieldBase::BASE_INT32, 4, true}, Shape{EFieldBase::BASE_UINT32, 4, false},
+        Shape{EFieldBase::BASE_INT64, 8, true}, Shape{EFieldBase::BASE_UINT64, 8, false}};
+    for (const auto shape : cases)
+    {
+      auto field = enum_definition()._descriptor;
+      field._base = shape._base;
+      field._size = shape._size;
+      if (shape._signed)
+      {
+        const auto minimum = shape._size == 8 ? std::numeric_limits<std::int64_t>::min() :
+            -(std::int64_t{1} << (shape._size * 8 - 1));
+        const auto maximum = shape._size == 8 ? std::numeric_limits<std::int64_t>::max() :
+            (std::int64_t{1} << (shape._size * 8 - 1)) - 1;
+        field._logical._enumerators = {{"Minimum", minimum}, {"Maximum", maximum}};
+        require_value(mapped::validate_field_descriptor(field));
+        field._logical._enumerators.front()._value = std::uint64_t{0};
+        expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+        if (shape._size != 8)
+        {
+          field._logical._enumerators.front()._value = minimum - 1;
+          expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+          field._logical._enumerators.front()._value = maximum + 1;
+          expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+        }
+      }
+      else
+      {
+        const auto maximum = shape._size == 8 ? std::numeric_limits<std::uint64_t>::max() :
+            (std::uint64_t{1} << (shape._size * 8)) - 1;
+        field._logical._enumerators = {{"Minimum", std::uint64_t{0}}, {"Maximum", maximum}};
+        require_value(mapped::validate_field_descriptor(field));
+        field._logical._enumerators.front()._value = std::int64_t{0};
+        expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+        if (shape._size != 8)
+        {
+          field._logical._enumerators.front()._value = maximum + 1;
+          expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+        }
+      }
+    }
+  }
+
+  // Labels and numbers each identify exactly one entry. Metadata text rules
+  // reject empty labels, embedded NUL, and malformed UTF-8 before ownership.
+  TEST(LogicalMetadata, EnumeratorLabelsAndValuesMustBeValidAndUnique)
+  {
+    for (const auto& label : {std::string{}, std::string{"a\0b", 3}, std::string{"\xc0\xaf", 2}, std::string{"Max"}})
+    {
+      auto field = enum_definition()._descriptor;
+      field._logical._enumerators.back()._name = label;
+      expect_error(mapped::canonicalize_field_descriptor(field), ErrorCode::InvalidArgument);
+    }
+    auto field = enum_definition()._descriptor;
+    field._logical._enumerators.back()._value = std::int64_t{127};
+    expect_error(mapped::field_definition_body_bytes(field), ErrorCode::InvalidArgument);
+    field._logical._enumerators.clear();
+    expect_error(mapped::validate_field_descriptor(field), ErrorCode::InvalidArgument);
+  }
+
+  // A required flag and an owned attribute block are one unit. Unknown flags,
+  // versions/kinds, nonzero reserved bytes, truncated arrays, and forged slices
+  // cannot change a Field's interpretation or escape its immutable record.
+  TEST(LogicalMetadata, StoredAttributesRejectMalformedHeadersAndOwnership)
+  {
+    for (const auto flag : {0u, 2u, 3u, 0x8000u})
+    {
+      auto bytes = golden_enum();
+      put_integer(bytes, 66, flag, 2);
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    for (const auto offset : {72u, 80u, 88u, 90u})
+    {
+      auto bytes = golden_enum();
+      put_integer(bytes, offset, 0, offset < 88 ? 8 : 2);
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    for (const auto offset : {92u, 93u, 95u})
+    {
+      auto bytes = golden_enum();
+      bytes[offset] = std::byte{1};
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    for (const auto count : {std::uint64_t{0}, std::uint64_t{3}, std::numeric_limits<std::uint64_t>::max()})
+    {
+      auto bytes = golden_enum();
+      put_integer(bytes, 96, count, 8);
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    for (const auto length : {std::uint64_t{7}, std::uint64_t{69}, std::uint64_t{71},
+                               std::numeric_limits<std::uint64_t>::max()})
+    {
+      auto bytes = golden_enum();
+      put_integer(bytes, 80, length, 8);
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    for (const auto offset : {112u, 120u, 136u, 144u})
+    {
+      auto bytes = golden_enum();
+      put_integer(bytes, offset, std::numeric_limits<std::uint64_t>::max(), 8);
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+  }
+
+  // The stored signed number must already be canonical sign extension. Merely
+  // masking the low byte would misread 0x80 as -128 or accept extra high bits.
+  // Ordered unique numbers and labels are checked before returning a descriptor.
+  TEST(LogicalMetadata, StoredEnumsRejectNoncanonicalNumbersOrderingAndLabels)
+  {
+    for (const auto value : {std::uint64_t{128}, std::uint64_t{0xff}, std::uint64_t{0x180},
+                              std::uint64_t{127}})
+    {
+      auto bytes = golden_enum();
+      put_integer(bytes, 104, value, 8);
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    auto bytes = golden_enum();
+    put_integer(bytes, 104, 127, 8);
+    put_integer(bytes, 128, 0xffffffffffffff80u, 8);
+    expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    bytes = golden_enum();
+    std::copy_n(bytes.begin() + 152, 3, bytes.begin() + 155);
+    expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    for (const auto invalid : {std::byte{0}, std::byte{0xff}})
+    {
+      bytes = golden_enum();
+      bytes[152] = invalid;
+      expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+    }
+    bytes = golden_enum();
+    put_integer(bytes, 64, 2, 2);
+    put_integer(bytes, 104, 0x100, 8);
+    expect_error(mapped::decode_field_definition(bytes, record_offset), ErrorCode::IoError);
+  }
+
+  // The count is u64 rather than an implicit 16-bit ceiling. A large owned
+  // definition remains bounded by actual record bytes and returns every entry
+  // canonically, even when declarations arrive in reverse numeric order.
+  TEST(LogicalMetadata, LargeEnumeratorTablesPreserveMoreThan65535Entries)
+  {
+    auto definition = enum_definition();
+    auto& field = definition._descriptor;
+    field._base = EFieldBase::BASE_UINT32;
+    field._size = 4;
+    auto& entries = field._logical._enumerators;
+    entries.clear();
+    for (std::uint64_t value = 65536; value != 0; --value)
+    {
+      entries.push_back(EnumeratorDescriptor{"V" + std::to_string(value - 1), value - 1});
+    }
+    const auto bytes = require_value(mapped::encode_field_definition(definition, record_offset));
+    EXPECT_EQ(get_integer(bytes, 96, 8), 65536u);
+    const auto read = require_value(mapped::decode_field_definition(bytes, record_offset));
+    ASSERT_EQ(read._descriptor._logical._enumerators.size(), 65536u);
+    EXPECT_EQ(read._descriptor._logical._enumerators.front()._name, "V0");
+    EXPECT_EQ(read._descriptor._logical._enumerators.back()._name, "V65535");
+    EXPECT_EQ(require_value(mapped::field_definition_body_bytes(field)), bytes.size());
   }
 } // namespace

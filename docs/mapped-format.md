@@ -1,8 +1,8 @@
 # Mapped layout and compatibility contract
 
-Step 1.4 specifies the format for the shared Registry and future mapped queues. This is the proposed **format 2.0**, not a format that the current executable creates. The runnable prototype still uses [format 1](session-format.md). The [public API](api.md) contains process-local objects; its C++ object layout is not a file format.
+This contract covers the native **format 2.0** introduced in milestone 2 and **format 2.1**, used by new Sessions starting in step 3.3 for logical Fields. Existing 2.0 Sessions retain scalar behavior. Sections for later message delivery and storage features remain roadmap contracts until their implementation steps. The legacy prototype uses [format 1](session-format.md). The [public API](api.md) contains process-local objects; its C++ object layout is not a file format.
 
-The byte counts and checked capacity arithmetic are compile-checked in [mapped_format.h](../include/angaria/detail/mapped_format.h). Record encoding, mappings, and attachment validation arrive in the implementation milestones. The [step 1.5 concurrency contract](concurrency.md) assigns the journal, transaction, and recovery protocols, using the reserved space without changing the fixed reservation totals. A record's presence alone never establishes that it committed.
+The byte counts and checked capacity arithmetic are compile-checked in [mapped_format.h](../include/angaria/detail/mapped_format.h). Native metadata codecs, mappings, and attachment validation implement the Registry portions. The [concurrency contract](concurrency.md) assigns the journal, transaction, and recovery protocols, using the reserved space without changing the fixed reservation totals. A record's presence alone never establishes that it committed.
 
 The [terminology glossary](glossary.md) defines the storage, encoding, and recovery terms used here.
 
@@ -71,7 +71,7 @@ Offsets below are from the start of `session.ang`. The initial immutable setting
 | ---: | ---: | --- |
 | 0 | 8 | Magic `ANGARIA\0`. |
 | 8 | 2 | Format major, `2`. This position also distinguishes prototype major `1`. |
-| 10 | 2 | Format minor, `0`. |
+| 10 | 2 | Format minor: `0` for retained 2.0 Sessions, `1` for new 2.1 Sessions. |
 | 12 | 4 | Superblock bytes, `4096`. |
 | 16 | 16 | Session identity. |
 | 32 | 8 | Maximum accounted session bytes. |
@@ -79,7 +79,7 @@ Offsets below are from the start of `session.ang`. The initial immutable setting
 | 48 | 2 | Storage mapping code. |
 | 50 | 2 | Synchronization protocol version. |
 | 52 | 4 | Live ABI profile. |
-| 56 | 8 | Required feature bits. |
+| 56 | 8 | Required feature bits: `0x1` journal; 2.1 additionally requires `0x2` basic Fields, giving mask `0x3`. |
 | 64 | 8 | Optional, safely skippable feature bits. |
 | 72 | 8 | Current session-definition reference. |
 | 80 | 8 | Committed Registry revision root. |
@@ -148,9 +148,9 @@ Entity definitions start with a common 64-byte body: `key:u64`, `created_by:u16`
 | Field | `base_type:u16`, `flags:u16`, `declared_size:u32`, `attributes:ByteSlice`. Attributes are empty for the initial scalar definitions; later required encodings need feature/version negotiation. |
 | Message schema | `message_type:u16`, two reserved bytes, `schema_version:u32`, `fields:ArraySlice` of full `u32` Field IDs. |
 
-Step 2.7's Field and schema bodies each have 88 fixed bytes. Field flags and attributes are zero/empty; its name and documentation follow the fixed body in order. A schema places its encoded Field array immediately after the fixed body, followed by name and documentation. Array order and repetitions are preserved. An empty array has zero offset and count; optional empty documentation likewise uses a zero slice. Short zero padding completes the record allocation. Portable codecs recognize all stable base codes, while the native implementation currently enforces fixed scalar byte widths (1 for char/byte, 2 for 16-bit integers, 4 for 32-bit integers/floats, 8 for 64-bit integers/floats). Later representations require their specified encodings and feature negotiation.
+Step 2.7's Field and schema bodies each have 88 fixed bytes. Ordinary scalar Field flags and attributes are zero/empty; name and documentation follow the fixed body in order. A schema places its encoded Field array immediately after the fixed body, followed by name and documentation. Array order and repetitions are preserved. An empty array has zero offset and count; optional empty documentation likewise uses a zero slice. Short zero padding completes the record allocation. Ordinary scalar byte widths are 1 for char/byte/int8, 2 for 16-bit integers, 4 for 32-bit integers/floats, and 8 for 64-bit integers/floats. Logical Fields use the attributes below; other representations require their specified encodings and feature negotiation.
 
-The [step 3.2 logical Field design](logical-fields.md#planned-persisted-metadata) reserves a future format-2.1 attributes layout, required feature `0x2`, and appended int8 base code 26 for implementation in step 3.3. This review does not change the current format 2.0 decoder, its zero flags/attributes, or codes `0..25`. Its [compatibility boundary](logical-fields.md#compatibility-boundary) requires deliberate 2.0 support and rejects in-place upgrades.
+Step 3.3 implements the [logical Field attributes](logical-fields.md#persisted-metadata) in format 2.1, required feature `0x2`, and appended int8 base code 26. Scalar bodies retain their exact earlier layout. Logical bodies set Field flag `0x0001` and own a versioned attributes block immediately after the 88-byte prefix, followed by name and documentation. The block carries the logical kind and canonical enum mapping. Field-local flags are separate from Session feature bits. The [compatibility boundary](logical-fields.md#compatibility-boundary) retains checked 2.0 support and rejects in-place upgrades or logical records in a 2.0 Session.
 
 Immutable Field definitions have zero envelope predecessor. A new schema version links to the latest retained definition for its message type in registration order, independently of numeric version or allocation-slot order. Definitions in one atomic Registry Append may share a revision; logical record order distinguishes their predecessor chain. Readers require matching body/index/envelope identities and revisions, registered creators, a consistent type/name pairing, and Field references that existed by the schema's registration revision. All versions retain their index entries and original definitions.
 
@@ -232,7 +232,7 @@ These are explicit wire codes, independent of C++ enum ordinals:
 | Destination outcome | `1` accepted, `2` rejected. Unknown is a recovery/API outcome, not a committed acceptance. |
 | Receipt state | `0` unused, `1` pending, `2` issued, `3` acknowledged, `4` lost. |
 
-Field base codes are `0` opaque/none, `1` char, `2` byte, `3` int16, `4` uint16, `5` int32, `6` uint32, `7` int64, `8` uint64, `9` float32, `10` float64, `11` date, `12` timestamp, `13` years, `14` months, `15` days, `16` hours, `17` minutes, `18` seconds, `19` milliseconds, `20` microseconds, `21` nanoseconds, `22` chars, `23` bytes, `24` symbol, `25` string. Declared fixed Field size is `u32`; variable representations use explicit lengths and are not C++ object sizes. Milestones 3 and 9 specify payload/compound encodings and their required feature bits.
+Field base codes are `0` opaque/none, `1` char, `2` byte, `3` int16, `4` uint16, `5` int32, `6` uint32, `7` int64, `8` uint64, `9` float32, `10` float64, `11` date, `12` timestamp, `13` years, `14` months, `15` days, `16` hours, `17` minutes, `18` seconds, `19` milliseconds, `20` microseconds, `21` nanoseconds, `22` chars, `23` bytes, `24` symbol, `25` string, and `26` int8 (2.1/basic Fields only). Existing codes are unchanged. Declared fixed Field size is `u32`; variable representations use explicit lengths and are not C++ object sizes. The [payload contract](message-payload.md) specifies implemented scalar/logical bytes; milestone 9 adds compound encodings.
 
 Persisted rejection reasons use `0` None, `1` InvalidArgument, `2` InvalidState, `3` InvalidConfiguration, `4` ConfigurationMismatch, `5` NotFound, `6` Conflict, `7` CapacityExceeded, `8` OwnershipBusy, `9` WrongOwner, `10` ReadOnlyRegistry, `11` NotActive, `12` UnsupportedPolicy, `13` SchemaConflict, `14` LogFull, `15` StaleDelivery, `16` OutputBufferTooSmall, `17` HistoryUnavailable, `18` IoError, and `19` OutcomeUnknown. Encoders translate explicitly. A committed accepted destination has reason None; an unknown-outcome code cannot establish a committed rejection.
 
@@ -254,7 +254,7 @@ An attaching reader validates magic/version/features/ABI, all directory lengths 
 
 | Version | Meaning |
 | --- | --- |
-| TOML `config_version` | Configuration keys/defaults, currently `1`; independent of binary layout. |
+| TOML `config_version` | Configuration keys/defaults, `1` or `2`; independent of binary layout. |
 | Format major/minor | Portable session/container layout. Major changes require migration. Minor changes can add only negotiated, length-delimited extensions. |
 | Record encoding version | Layout of a particular record kind. Unknown required encodings fail live attachment. |
 | Feature masks | Required codecs/policies/extensions and optional safely skippable information. Missing required bits fail attachment. |

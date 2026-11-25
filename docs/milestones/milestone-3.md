@@ -31,12 +31,18 @@ Step 3.1 is merged into `milestone-3` through [PR #24](https://github.com/smanga
 
 The [logical Field contract](../logical-fields.md) defines one-byte booleans, 8/16/32/64-bit Fields, closed user-defined enumerations, and exact fixed ASCII sequences. It specifies owning immutable metadata over existing storage bases, canonical enum mappings, complete numeric ranges in TOML, byte/value bounds, and allocation/error rules. New code 26 will add the Wiki's missing signed 8-bit scalar while preserving codes `0..25`.
 
-Step 3.3 implements the specified format-2.1/required-feature boundary and configuration version 2 with explicit support for existing 2.0 Sessions and version-1 scalar TOML. No current runtime or persisted behavior changes in step 3.2. The [primer's design section](../primer.md#plan-logical-fields-step-32) introduces these choices without presenting planned APIs as runnable examples.
+Step 3.2 changed no runtime behavior. Step 3.3 implements the specified format-2.1/required-feature boundary and configuration version 2 with explicit support for existing 2.0 Sessions and version-1 scalar TOML.
+
+## Step 3.3 Logical Field implementation
+
+Step 3.2 merged through [PR #25](https://github.com/smangano/angaria/pull/25). Step 3.3 uses framework version **`0.3.3`**. Owning logical metadata now survives registration, canonical retries, snapshots, handle closure, and native crash recovery. The codec enforces exact scalar/logical alternatives and supports initializer-list payload construction plus transactional `encode_into` for caller-owned buffers. Complete message envelopes remain step 3.4 work.
+
+The [tenth primer lesson](../primer.md#10-encode-logical-fields-and-preserve-an-output-buffer) demonstrates TOML version 2, closed enum labels, exact ASCII padding, independent codec lifetime, golden bytes, and unchanged caller output after invalid input. Tests preserve the earlier scalar bytes and 2.0 Session behavior while qualifying required feature negotiation and immutable metadata bounds.
 
 ## Implementation boundaries
 
 The [public API](../api.md), [mapped-format contract](../mapped-format.md), and [concurrency/receipt contract](../concurrency.md) remain authoritative. Payload encoding does not itself create a publication, change Queue progress, or record a delivery. Native send/receive and Queue Set behavior remain with milestones 4–6. Ordinary process/file I/O in the message examples exercises canonical record bytes without adding another Angaria transport or reviving the legacy v0 queue design.
 
-Step 3.1 leaves mapped format 2.0, configuration version 1, existing Field base codes, and the native policy-support boundary unchanged. New basic representations must explicitly review their metadata and compatibility requirements in step 3.2. Canonical message capture inspection belongs to steps 3.5–3.6. General tooling, physically read-only or foreign-profile native Session-file readers, replay, converters, and advanced pooled/compound Fields retain their milestone 9–10 scope.
+Steps 3.1–3.2 retained mapped format 2.0 and configuration version 1. Step 3.3 implements the reviewed 2.1/required-feature boundary and TOML version 2 while preserving existing base codes and earlier schema meaning. Canonical message capture inspection belongs to steps 3.5–3.6. General tooling, physically read-only or foreign-profile native Session-file readers, replay, converters, and advanced pooled/compound Fields retain their milestone 9–10 scope.
 
 [Project roadmap](../../ROADMAP.md) · [Completed milestone 2](milestone-2.md)

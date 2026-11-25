@@ -12,6 +12,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -199,7 +200,8 @@ int main(int argc, char** argv)
     ::alarm(9);
     const std::string mode{argv[1]};
     const auto actor = static_cast<TaskId>(std::stoul(argv[3]));
-    const bool isField = std::string{argv[4]} == "field";
+    const bool logical = std::string{argv[4]} == "logical";
+    const bool isField = logical || std::string{argv[4]} == "field";
     const auto raw = std::stoull(argv[5]);
     const auto version = static_cast<std::uint32_t>(std::stoul(argv[6]));
     const auto point = static_cast<mapped::JournalCheckpoint>(std::stoul(argv[9]));
@@ -222,6 +224,13 @@ int main(int argc, char** argv)
     field._doc = argv[8];
     field._base = EFieldBase::BASE_INT64;
     field._size = 8;
+    if (logical)
+    {
+      field._base = EFieldBase::BASE_UINT64;
+      field._logical._kind = FieldLogicalKind::Enumeration;
+      field._logical._enumerators = {{"Zero", std::uint64_t{0}},
+                                     {"Maximum", std::numeric_limits<std::uint64_t>::max()}};
+    }
     MessageDescriptor schema;
     schema._schema = SchemaId{static_cast<MessageType>(raw), version};
     schema._name = argv[7];
@@ -239,7 +248,8 @@ int main(int argc, char** argv)
         const auto id = require_value(registry.find_field(field._name));
         const auto recorded = require_value(registry.describe_field(id));
         metadata = require_value(registry.metadata(id));
-        if (id != field._id || recorded._base != field._base || recorded._size != 8 || recorded._doc != field._doc)
+        if (id != field._id || recorded._base != field._base || recorded._size != 8 ||
+            recorded._doc != field._doc || recorded._logical != field._logical)
         {
           throw std::runtime_error("independent reader found inconsistent Field metadata");
         }

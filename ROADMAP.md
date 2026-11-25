@@ -107,7 +107,7 @@ Completion is demonstrated by independent processes registering and discovering 
 
 ## 3 General messages and basic inspection
 
-Under implementation. The [milestone 3 review plan](docs/milestones/milestone-3.md) keeps encoding, basic Field representations, generic message headers, and inspection in focused PRs. Step 3.1 implements the portable binary payload codec for existing scalar definitions at framework version `0.3.1`. Step 3.2 reviews the [logical Field metadata and compatibility contract](docs/logical-fields.md) at `0.3.2`, including the signed 8-bit scalar gap; step 3.3 implements those representations.
+Under implementation. The [milestone 3 review plan](docs/milestones/milestone-3.md) keeps encoding, basic Field representations, generic message headers, and inspection in focused PRs. Step 3.1 introduced scalar payloads at `0.3.1`. Step 3.2 reviewed [logical Field metadata and compatibility](docs/logical-fields.md) at `0.3.2`; step 3.3 implements those representations and int8 at `0.3.3`, with TOML version 2, format 2.1, and bounded payload construction. Complete message envelopes are next.
 
 - Implement generic headers and ordered fields driven by registered message definitions.
 - Cover sequence numbers, message/schema identity, payload type and size, producer identity, timestamps, and user flags. Store dequeue and acknowledgment metadata per destination.

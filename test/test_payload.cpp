@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -110,6 +111,29 @@ namespace
   BinaryPayloadCodec codec(const RegistrySnapshot& definitions, std::uint64_t limit = 1024)
   {
     return require_value(BinaryPayloadCodec::from_snapshot(definitions, sample_schema, limit));
+  }
+
+  FieldDescriptor logical_field(FieldLogicalKind kind, EFieldBase base, std::uint32_t size,
+                                   std::uint32_t id = 0xee000001, std::string name = "LogicalValue")
+  {
+    auto descriptor = field(base, size, id, std::move(name));
+    descriptor._logical._kind = kind;
+    return descriptor;
+  }
+
+  FieldDescriptor enum_field(EFieldBase base, std::uint32_t size,
+                              std::vector<EnumeratorDescriptor> entries,
+                              std::uint32_t id = 0xee000001, std::string name = "Side")
+  {
+    auto descriptor = logical_field(FieldLogicalKind::Enumeration, base, size, id, std::move(name));
+    descriptor._logical._enumerators = std::move(entries);
+    return descriptor;
+  }
+
+  RegistrySnapshot one_field_snapshot(FieldDescriptor descriptor)
+  {
+    const auto id = descriptor._id;
+    return snapshot({std::move(descriptor)}, {id});
   }
 
   // The mixture deliberately places wide values after narrow ones. The 42
@@ -478,6 +502,262 @@ namespace
     EXPECT_EQ(require_value(moved.encode(values)), octets({5, 0, 0, 0, 0, 0, 0, 0}));
   }
 
+  // Logical Fields carry meaning in addition to an integer storage width.
+  // These fixtures remain public owning snapshots. Their bytes are hand-written
+  // rather than obtained from the encoder under test.
+  TEST(LogicalPayloadTest, EncodesAnIndependentMixedLogicalFixtureWithoutPadding)
+  {
+    const auto enabled = logical_field(FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 1,
+                                        0xee000001, "Enabled");
+    const auto flags = logical_field(FieldLogicalKind::Bits, EFieldBase::BASE_UINT16, 2,
+                                      0xee000002, "Flags");
+    const auto side = enum_field(EFieldBase::BASE_INT8, 1,
+        {{"Buy", std::int64_t{1}}, {"Sell", std::int64_t{-1}}}, 0xee000003);
+    const auto code = logical_field(FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS, 4,
+                                     0xee000004, "Code");
+    const auto offset = field(EFieldBase::BASE_INT8, 1, 0xee000005, "Offset");
+    const auto definitions = snapshot({offset, code, side, flags, enabled},
+        {enabled._id, flags._id, side._id, code._id, offset._id});
+    const auto encoder = codec(definitions, 9);
+    const std::vector<PayloadValue> values{
+        true, BitFieldValue{0xa501}, EnumValue{std::int8_t{-1}},
+        FixedAsciiValue{std::string{"AB\0 ", 4}}, std::numeric_limits<std::int8_t>::min()};
+    const auto golden = octets({1, 1, 0xa5, 0xff, 'A', 'B', 0, ' ', 0x80});
+    EXPECT_EQ(encoder.payload_size(), 9u);
+    EXPECT_EQ(require_value(encoder.encode(values)), golden);
+    EXPECT_EQ(require_value(encoder.decode(golden)), values);
+    EXPECT_EQ(encoder.fields()[2]._logical._enumerators.front()._name, "Sell");
+    expect_error(BinaryPayloadCodec::from_snapshot(definitions, sample_schema, 8),
+                 ErrorCode::CapacityExceeded, "payload.capacity");
+  }
+
+  TEST(LogicalPayloadTest, BooleanAndOrdinaryByteRemainDistinctEvenWhenTheirNamesSuggestMeaning)
+  {
+    const auto boolean = logical_field(FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 1);
+    const auto encoder = codec(one_field_snapshot(boolean));
+    EXPECT_EQ(require_value(encoder.encode({false})), octets({0}));
+    EXPECT_EQ(require_value(encoder.encode({true})), octets({1}));
+    EXPECT_EQ(require_value(encoder.decode(octets({0}))), (std::vector<PayloadValue>{false}));
+    EXPECT_EQ(require_value(encoder.decode(octets({1}))), (std::vector<PayloadValue>{true}));
+    for (const auto raw : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{2}})
+    {
+      expect_error(encoder.encode({raw}), ErrorCode::InvalidArgument, "payload.values[0]");
+    }
+    for (const auto raw : {2u, 0x80u, 0xffu})
+    {
+      expect_error(encoder.decode(octets({raw})), ErrorCode::InvalidArgument, "payload.values[0]");
+    }
+    const auto ordinary = codec(one_field_snapshot(field(EFieldBase::BASE_BYTE, 1,
+        0xee000001, "TradingEnabled")));
+    EXPECT_EQ(require_value(ordinary.encode({std::uint8_t{0xff}})), octets({0xff}));
+    expect_error(ordinary.encode({true}), ErrorCode::InvalidArgument);
+  }
+
+  TEST(LogicalPayloadTest, BitFieldsUseEachDeclaredWidthAndRejectValuesOutsideIt)
+  {
+    struct BitCase
+    {
+      EFieldBase _base;
+      std::uint32_t _size;
+      std::uint64_t _value;
+      std::vector<std::byte> _golden;
+    };
+    const std::vector<BitCase> cases{
+        {EFieldBase::BASE_BYTE, 1, 0x80, octets({0x80})},
+        {EFieldBase::BASE_UINT16, 2, 0x8001, octets({1, 0x80})},
+        {EFieldBase::BASE_UINT32, 4, 0x80000001, octets({1, 0, 0, 0x80})},
+        {EFieldBase::BASE_UINT64, 8, 0x8000000000000001ull, octets({1, 0, 0, 0, 0, 0, 0, 0x80})}};
+    for (const auto& test : cases)
+    {
+      SCOPED_TRACE(test._size);
+      const auto encoder = codec(one_field_snapshot(logical_field(FieldLogicalKind::Bits, test._base, test._size)));
+      EXPECT_EQ(require_value(encoder.encode({BitFieldValue{test._value}})), test._golden);
+      EXPECT_EQ(require_value(encoder.decode(test._golden)),
+                (std::vector<PayloadValue>{BitFieldValue{test._value}}));
+      expect_error(encoder.encode({std::uint64_t{test._value}}), ErrorCode::InvalidArgument);
+      if (test._size < 8)
+      {
+        expect_error(encoder.encode({BitFieldValue{std::uint64_t{1} << (test._size * 8)}}),
+                     ErrorCode::InvalidArgument);
+      }
+      else
+      {
+        EXPECT_EQ(require_value(encoder.encode({BitFieldValue{std::numeric_limits<std::uint64_t>::max()}})),
+                  octets({0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}));
+      }
+    }
+  }
+
+  TEST(LogicalPayloadTest, SignedEightBitScalarsHaveIndependentTwosComplementBytes)
+  {
+    const auto encoder = codec(scalar_snapshot(EFieldBase::BASE_INT8, 1));
+    const std::array<std::int8_t, 4> values{
+        std::numeric_limits<std::int8_t>::min(), std::int8_t{-1}, std::int8_t{0},
+        std::numeric_limits<std::int8_t>::max()};
+    const std::array<unsigned, 4> bytes{0x80, 0xff, 0, 0x7f};
+    for (std::size_t index = 0; index < values.size(); ++index)
+    {
+      EXPECT_EQ(require_value(encoder.encode({values[index]})), octets({bytes[index]}));
+      EXPECT_EQ(require_value(encoder.decode(octets({bytes[index]}))),
+                (std::vector<PayloadValue>{values[index]}));
+    }
+    expect_error(encoder.encode({std::uint8_t{1}}), ErrorCode::InvalidArgument);
+    expect_error(encoder.encode({char{1}}), ErrorCode::InvalidArgument);
+    expect_error(encoder.encode({std::int16_t{1}}), ErrorCode::InvalidArgument);
+  }
+
+  TEST(LogicalPayloadTest, EnumStoragePreservesEveryIntegerWidthAndItsExactVariant)
+  {
+    struct EnumCase
+    {
+      EFieldBase _base;
+      std::uint32_t _size;
+      IntegerValue _value;
+      EnumerationNumber _metadata;
+      std::vector<std::byte> _golden;
+    };
+    const std::vector<EnumCase> cases{
+        {EFieldBase::BASE_INT8, 1, std::int8_t{-128}, std::int64_t{-128}, octets({0x80})},
+        {EFieldBase::BASE_BYTE, 1, std::uint8_t{255}, std::uint64_t{255}, octets({0xff})},
+        {EFieldBase::BASE_INT16, 2, std::int16_t{-32768}, std::int64_t{-32768}, octets({0, 0x80})},
+        {EFieldBase::BASE_UINT16, 2, std::uint16_t{65535}, std::uint64_t{65535}, octets({0xff, 0xff})},
+        {EFieldBase::BASE_INT32, 4, std::numeric_limits<std::int32_t>::min(),
+         std::int64_t{-2147483648ll}, octets({0, 0, 0, 0x80})},
+        {EFieldBase::BASE_UINT32, 4, std::uint32_t{0x80000000u},
+         std::uint64_t{0x80000000u}, octets({0, 0, 0, 0x80})},
+        {EFieldBase::BASE_INT64, 8, std::numeric_limits<std::int64_t>::min(),
+         std::numeric_limits<std::int64_t>::min(), octets({0, 0, 0, 0, 0, 0, 0, 0x80})},
+        {EFieldBase::BASE_UINT64, 8, std::numeric_limits<std::uint64_t>::max(),
+         std::numeric_limits<std::uint64_t>::max(), octets({0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})}};
+    for (const auto& test : cases)
+    {
+      SCOPED_TRACE(static_cast<unsigned>(test._base));
+      const auto encoder = codec(one_field_snapshot(enum_field(test._base, test._size, {{"Boundary", test._metadata}})));
+      const std::vector<PayloadValue> values{EnumValue{test._value}};
+      EXPECT_EQ(require_value(encoder.encode(values)), test._golden);
+      EXPECT_EQ(require_value(encoder.decode(test._golden)), values);
+    }
+  }
+
+  TEST(LogicalPayloadTest, ClosedEnumsRejectUnnamedValuesAndWrongUnderlyingTypes)
+  {
+    const auto encoder = codec(one_field_snapshot(enum_field(EFieldBase::BASE_BYTE, 1,
+        {{"Sell", std::uint64_t{2}}, {"Buy", std::uint64_t{1}}})));
+    EXPECT_EQ(require_value(encoder.encode({EnumValue{std::uint8_t{1}}})), octets({1}));
+    expect_error(encoder.encode({std::uint8_t{1}}), ErrorCode::InvalidArgument);
+    expect_error(encoder.encode({EnumValue{std::uint16_t{1}}}), ErrorCode::InvalidArgument);
+    expect_error(encoder.encode({EnumValue{std::int8_t{1}}}), ErrorCode::InvalidArgument);
+    expect_error(encoder.encode({EnumValue{std::uint8_t{3}}}), ErrorCode::InvalidArgument);
+    for (const auto unknown : {0u, 3u, 0xffu})
+    {
+      expect_error(encoder.decode(octets({unknown})), ErrorCode::InvalidArgument, "payload.values[0]");
+    }
+    ASSERT_EQ(encoder.fields()[0]._logical._enumerators.size(), 2u);
+    EXPECT_EQ(encoder.fields()[0]._logical._enumerators[0]._name, "Buy");
+    EXPECT_EQ(encoder.fields()[0]._logical._enumerators[1]._name, "Sell");
+  }
+
+  TEST(LogicalPayloadTest, FixedAsciiPreservesControlBytesAndCallerPaddingWithoutCoercion)
+  {
+    const auto encoder = codec(one_field_snapshot(logical_field(FieldLogicalKind::FixedAscii,
+        EFieldBase::BASE_CHARS, 4)));
+    const FixedAsciiValue text{std::string{'A', '\n', '\0', '\x7f'}};
+    const auto golden = octets({'A', 10, 0, 0x7f});
+    EXPECT_EQ(require_value(encoder.encode({text})), golden);
+    EXPECT_EQ(require_value(encoder.decode(golden)), (std::vector<PayloadValue>{text}));
+    EXPECT_EQ(require_value(encoder.encode({FixedAsciiValue{"AB  "}})), octets({'A', 'B', ' ', ' '}));
+    for (const auto& invalid : {std::string{}, std::string{"AB"}, std::string{"ABCDE"},
+                                std::string{'A', 'B', '\0', static_cast<char>(0x80)},
+                                std::string{"\xc3\xa9" "AB", 4}})
+    {
+      expect_error(encoder.encode({FixedAsciiValue{invalid}}), ErrorCode::InvalidArgument);
+    }
+    expect_error(encoder.decode(octets({'A', 'B', 0x80, 0})), ErrorCode::InvalidArgument);
+    expect_error(encoder.decode(octets({0xc3, 0xa9, 'A', 'B'})), ErrorCode::InvalidArgument);
+    expect_error(encoder.encode({char{'A'}}), ErrorCode::InvalidArgument);
+  }
+
+  TEST(LogicalPayloadTest, BoundedConstructionLeavesCallerBytesUnchangedOnEveryInputFailure)
+  {
+    const auto enabled = logical_field(FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 1,
+        0xee000001, "Enabled");
+    const auto code = logical_field(FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS, 2,
+        0xee000002, "Code");
+    const auto encoder = codec(snapshot({enabled, code}, {enabled._id, code._id}), 3);
+    std::array<std::byte, 3> output{std::byte{0xa5}, std::byte{0xa5}, std::byte{0xa5}};
+    const auto original = output;
+    const std::array<PayloadValue, 2> invalid_late{true, FixedAsciiValue{"A"}};
+    expect_error(encoder.encode_into(invalid_late, output), ErrorCode::InvalidArgument);
+    EXPECT_EQ(output, original);
+    const std::array<PayloadValue, 2> invalid_early{std::uint8_t{1}, FixedAsciiValue{"AB"}};
+    expect_error(encoder.encode_into(invalid_early, output), ErrorCode::InvalidArgument);
+    EXPECT_EQ(output, original);
+    const std::array<PayloadValue, 2> correct{true, FixedAsciiValue{"AB"}};
+    expect_error(encoder.encode_into(correct, std::span<std::byte>{output}.first(2)),
+                 ErrorCode::InvalidArgument, "payload.output_size");
+    EXPECT_EQ(output, original);
+    require_value(encoder.encode_into(correct, output));
+    EXPECT_EQ((std::vector<std::byte>{output.begin(), output.end()}), octets({1, 'A', 'B'}));
+    // Initializer-list construction also validates the complete declared bound.
+    EXPECT_EQ(require_value(encoder.encode({false, FixedAsciiValue{"CD"}})), octets({0, 'C', 'D'}));
+    const auto empty = codec(snapshot({}, {}), 0);
+    require_value(empty.encode_into({}, {}));
+  }
+
+  TEST(LogicalPayloadTest, RepeatedLogicalFieldsKeepOrderAndExactByteBudgets)
+  {
+    const auto value = logical_field(FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 1);
+    const auto definitions = snapshot({value}, {value._id, value._id, value._id});
+    const auto encoder = codec(definitions, 3);
+    EXPECT_EQ(require_value(encoder.encode({true, false, true})), octets({1, 0, 1}));
+    EXPECT_EQ(require_value(encoder.decode(octets({1, 0, 1}))),
+              (std::vector<PayloadValue>{true, false, true}));
+    expect_error(BinaryPayloadCodec::from_snapshot(definitions, sample_schema, 2), ErrorCode::CapacityExceeded);
+    auto huge_ascii = logical_field(FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS,
+        std::numeric_limits<std::uint32_t>::max());
+    expect_error(BinaryPayloadCodec::from_snapshot(one_field_snapshot(huge_ascii), sample_schema, 16),
+                 ErrorCode::CapacityExceeded, "payload.capacity");
+  }
+
+  TEST(LogicalPayloadTest, SnapshotCompilationRejectsInvalidLogicalDefinitions)
+  {
+    std::vector<FieldDescriptor> invalid{
+        logical_field(FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 2),
+        logical_field(FieldLogicalKind::Bits, EFieldBase::BASE_UINT32, 3),
+        logical_field(FieldLogicalKind::Bits, EFieldBase::BASE_INT16, 2),
+        logical_field(FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS, 0),
+        logical_field(static_cast<FieldLogicalKind>(0xffff), EFieldBase::BASE_BYTE, 1),
+        enum_field(EFieldBase::BASE_BYTE, 1, {}),
+        enum_field(EFieldBase::BASE_BYTE, 1, {{"Buy", std::uint64_t{1}}, {"Alias", std::uint64_t{1}}}),
+        enum_field(EFieldBase::BASE_BYTE, 1, {{"Buy", std::uint64_t{1}}, {"Buy", std::uint64_t{2}}}),
+        enum_field(EFieldBase::BASE_BYTE, 1, {{"Negative", std::int64_t{-1}}})};
+    for (const auto& descriptor : invalid)
+    {
+      expect_error(BinaryPayloadCodec::from_snapshot(one_field_snapshot(descriptor), sample_schema, 1024),
+                   ErrorCode::InvalidArgument);
+    }
+  }
+
+  TEST(LogicalPayloadTest, CompiledEnumMetadataOwnsItsLabelsAcrossCopiesAndMoves)
+  {
+    auto definitions = one_field_snapshot(enum_field(EFieldBase::BASE_INT16, 2,
+        {{"Positive", std::int64_t{5}}, {"Negative", std::int64_t{-2}}}));
+    auto original = codec(definitions);
+    definitions._fields[0]._descriptor._logical._enumerators.clear();
+    auto copy = original;
+    auto moved = std::move(original);
+    EXPECT_EQ(copy.fields()[0]._logical._enumerators.front()._name, "Negative");
+    EXPECT_EQ(moved.fields()[0]._logical._enumerators.back()._name, "Positive");
+    EXPECT_EQ(require_value(copy.encode({EnumValue{std::int16_t{-2}}})), octets({0xfe, 0xff}));
+    EXPECT_EQ(require_value(moved.decode(octets({5, 0}))),
+              (std::vector<PayloadValue>{EnumValue{std::int16_t{5}}}));
+    std::array<std::byte, 2> output{std::byte{0xa5}, std::byte{0xa5}};
+    const auto before = output;
+    const std::array<PayloadValue, 1> values{EnumValue{std::int16_t{5}}};
+    expect_error(original.encode_into(values, output), ErrorCode::InvalidState, "payload.codec");
+    EXPECT_EQ(output, before);
+  }
+
   class PayloadRegistryTest : public testing::Test
   {
   protected:
@@ -572,5 +852,60 @@ namespace
     const auto new_codec = require_value(BinaryPayloadCodec::from_registry(reader, version_two, 1024));
     EXPECT_EQ(new_codec.payload_size(), 16u);
     expect_error(BinaryPayloadCodec::from_registry(Registry{}, version_one, 1024), ErrorCode::InvalidState);
+  }
+
+  TEST_F(PayloadRegistryTest, LogicalDefinitionsRetainExactHistoricalMeaningAfterAllHandlesClose)
+  {
+    std::optional<BinaryPayloadCodec> older;
+    std::optional<BinaryPayloadCodec> newer;
+    RegistrySnapshot historical;
+    TaskId setup;
+    {
+      auto created = create();
+      setup = created._creator.claim()._task;
+      auto actor = created._creator.registry();
+      auto side = enum_field(EFieldBase::BASE_BYTE, 1,
+          {{"Sell", std::uint64_t{2}}, {"Buy", std::uint64_t{1}}});
+      const auto first_field = require_value(actor.register_field(side));
+      MessageDescriptor status;
+      status._schema = sample_schema;
+      status._name = "Status";
+      status._fields = {first_field};
+      const auto first_schema = require_value(actor.register_message(status));
+      historical = require_value(created._session.registry().snapshot());
+      older.emplace(require_value(BinaryPayloadCodec::from_registry(actor, first_schema, 1)));
+
+      // Enum declaration order is not meaning. Retrying an equivalent mapping
+      // preserves the Registry revision, but adding a value under that identity
+      // is a conflict and cannot change the old codec or retained schema.
+      std::reverse(side._logical._enumerators.begin(), side._logical._enumerators.end());
+      EXPECT_EQ(require_value(actor.register_field(side)), first_field);
+      EXPECT_EQ(require_value(created._session.registry().snapshot())._revision, historical._revision);
+      side._logical._enumerators.push_back({"Auction", std::uint64_t{3}});
+      expect_error(actor.register_field(side), ErrorCode::Conflict);
+      EXPECT_EQ(require_value(created._session.registry().snapshot())._revision, historical._revision);
+
+      side._id = static_cast<FieldId>(0xee000002);
+      side._name = "SideV2";
+      const auto second_field = require_value(actor.register_field(side));
+      status._schema._version = 2;
+      status._fields = {second_field};
+      const auto second_schema = require_value(actor.register_message(status));
+      newer.emplace(require_value(BinaryPayloadCodec::from_registry(actor, second_schema, 1)));
+    }
+    {
+      auto attached = require_value(Session::attach(_root / "session"));
+      auto replacement = require_value(attached.attach_task(setup));
+      EXPECT_EQ(replacement.claim()._incarnation, 2u);
+    }
+    const auto retained = codec(historical, 1);
+    EXPECT_EQ(require_value(retained.encode({EnumValue{std::uint8_t{2}}})), octets({2}));
+    expect_error(older->decode(octets({3})), ErrorCode::InvalidArgument);
+    EXPECT_EQ(require_value(newer->decode(octets({3}))),
+              (std::vector<PayloadValue>{EnumValue{std::uint8_t{3}}}));
+    EXPECT_EQ(older->fields()[0]._logical._enumerators[0]._name, "Buy");
+    EXPECT_EQ(newer->fields()[0]._logical._enumerators[2]._name, "Auction");
+    expect_error(BinaryPayloadCodec::from_snapshot(historical, {sample_schema._type, 2}, 1),
+                 ErrorCode::NotFound, "message.schema");
   }
 } // namespace
