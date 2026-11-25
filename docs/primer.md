@@ -2,9 +2,9 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 3, step 3.5**, framework version **0.3.5**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 3, step 3.6**, framework version **0.3.6**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
-You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and capture portable message records for generic inspection. Sending, publishing, receiving, and acknowledgment arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and exchange completed capture files across processes for generic inspection. Sending, publishing, receiving, and acknowledgment through Angaria Queues arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
 ## A few ideas before the code
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lessons 9–11 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24), [PR #26](https://github.com/smangano/angaria/pull/26), and [PR #27](https://github.com/smangano/angaria/pull/27). Lesson 12 arrives with step 3.5; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
+The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lessons 9–12 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24), [PR #26](https://github.com/smangano/angaria/pull/26), [PR #27](https://github.com/smangano/angaria/pull/27), and [PR #28](https://github.com/smangano/angaria/pull/28). Lesson 13 completes its implementation steps; milestone integration into `main` uses a separate PR. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -49,9 +49,9 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The twelve targets are named `angaria_primer_01_session` through `angaria_primer_12_capture`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The thirteen targets are named `angaria_primer_01_session` through `angaria_primer_13_process_exchange`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
 
-Examples 1–5, 9, 11, and 12 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+Examples 1–5, 9, and 11–13 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
 ```sh
 primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
@@ -596,7 +596,43 @@ Error diagnostics also escape names and paths: a saved newline appears as `\x0a`
 
 The capture is opened read-only. Obtaining its catalog uses normal native `Session::attach` and `Registry::snapshot`, which require a qualified matching native ABI and may perform recovery writes. This is not physically read-only or foreign-profile Session-file inspection. The capture contains message records, not an exported copy of every Registry definition; deleting the Session loses the catalog needed by this workflow.
 
-The application writes ordinary files after constructing records in its own memory. Capture order, repeated IDs, and successful inspection do not establish Queue publication acceptance or delivery. Further multi-process and restart qualification follows in step 3.6; native Queue operations remain with their roadmap milestones.
+The application writes ordinary files after constructing records in its own memory. Capture order, repeated IDs, and successful inspection do not establish Queue publication acceptance or delivery. The next lesson extends this to independent processes and producer replacement; native Queue operations remain with their roadmap milestones.
+
+## 13. Exchange captures across processes and schema changes
+
+Read [13_process_exchange.cpp](../examples/primer/13_process_exchange.cpp), then run its [walkthrough](../test/process_exchange.py):
+
+```sh
+python3 test/process_exchange.py build/angaria_primer_13_process_exchange \
+    build/angaria_inspect --workspace "$primer_workspace/13-exchange"
+```
+
+The script starts independent programs and waits for explicit readiness signals. It keeps their Session and captures in the new workspace so you can inspect them afterward. Omit `--workspace` for a temporary run that cleans up its own files.
+
+First, an initialization process registers `Feed`, two integer Fields, Quote v1, and an empty Heartbeat. A reader copies a `MessageInspector` catalog containing those definitions, closes its native handles, and waits. The reader now owns a picture of the definitions at that moment.
+
+Next, a producer attaches to `Feed` and writes Quote and Heartbeat records. Only after it has flushed and closed the file does it report readiness. The script terminates that producer while it still owns the Task claim, then starts an updater that registers Quote v2. This version uses the same sixteen payload bytes in a different Field order. Replacement producers write v2 and then v1:
+
+| Capture | Quote layout and values | Feed incarnation |
+| --- | --- | ---: |
+| `first/capture.angcap` | v1: price `-2`, quantity `7` | 1 |
+| `new/capture.angcap` | v2: quantity `8`, price `-3` | 2 |
+| `restart/capture.angcap` | v1: price `-4`, quantity `9` | 3 |
+
+Each producer issues publication sequences `1` and `2` for its Quote and Heartbeat. A sequence starts again for a new incarnation. The full publication identity includes both values, so records from the terminated producer remain distinguishable from records written by its replacement.
+
+When released, the waiting reader uses its original catalog to inspect both v1 captures. It rejects v2 with `NotFound`, because that definition was not present when the catalog was copied. Adding v2 to the Session never silently changes an existing inspector's definitions or the meaning of v1 bytes. A newly created inspector can discover the added version.
+
+Finally, after every application process has exited, the script starts the generic CLI separately for each capture. These fresh inspectors find both exact versions in the retained Session. You can repeat one of those reads yourself:
+
+```sh
+./build/angaria_inspect "$primer_workspace/13-exchange/session" \
+    "$primer_workspace/13-exchange/new/capture.angcap"
+```
+
+The example reserves each workspace and phase directory exclusively. Repeating a phase returns `Conflict` and preserves its earlier capture. Use a new workspace for another complete run. The [process-exchange contract](process-exchange.md) lists the individual commands and compatibility checks.
+
+This lesson tests claim replacement after process termination on a running system. The terminated producer's file was already complete. It does not demonstrate recovery of an interrupted capture write or power-loss durability. Ordinary files carry the encoded records between these applications; native Queue send/receive and Queue Set scheduling remain future milestone work.
 
 ## Understand bounds and ordinary failures
 
@@ -622,13 +658,12 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, binary scalar and logical payloads, and portable capture with generic exact-version inspection. Step 3.6 adds further multi-process and restart qualification for those records. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence now completes milestone 3: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 3, remaining step | Qualify portable record exchange and retained-version inspection across processes and restarts. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |

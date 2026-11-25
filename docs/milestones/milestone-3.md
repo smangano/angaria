@@ -51,6 +51,14 @@ Step 3.4 merged through [PR #27](https://github.com/smangano/angaria/pull/27). S
 
 Separate record, aggregate capture, retained/expanded catalog, per-record text, and CLI aggregate-output limits bound work. Tests cover malformed/truncated/unknown records, source Session mismatches, stream errors and completed-record counters, escaping, scalar/logical values, repeated definitions, and owning catalog lifetime. The [twelfth primer lesson](../primer.md#12-capture-and-inspect-multiple-message-types) records multiple types and same-sized Quote versions, then runs the generic CLI after the application exits. Native catalog attachment retains ordinary recovery/profile requirements; native formats and record encoding are unchanged. Step 3.6 extends process/version/restart qualification.
 
+## Step 3.6 Process exchange and milestone qualification
+
+Step 3.5 merged through [PR #28](https://github.com/smangano/angaria/pull/28). Step 3.6 uses framework version **`0.3.6`**. The [thirteenth primer program](../../examples/primer/13_process_exchange.cpp) and [orchestrated walkthrough](../../test/process_exchange.py) exchange completed canonical capture files between independent applications. An owning inspector captured before Quote v2 keeps interpreting v1 after the same-sized, reordered v2 is registered. It rejects v2 as absent rather than substituting a newer layout. Cold generic inspectors decode both versions after all applications exit.
+
+The walkthrough terminates a producer only after it has closed a complete capture, then verifies that replacement producers use new incarnations with their publication sequences reset. Earlier bytes and identities remain intact. Readiness handshakes and bounded waits coordinate processes; tests do not rely on sleeps. Exclusive workspace/phase directories protect earlier artifacts from accidental overwrite.
+
+The [compatibility matrix](../process-exchange.md#compatibility-and-qualification) covers native 2.0 scalar inspection, 2.1 logical definitions, required-feature/native-profile rejection, and canonical record encoding. All thirteen primer programs compile with tests disabled. This completes the milestone's implementation steps; a separate PR integrates `milestone-3` into `main` after review. Native formats, required features, TOML versions, and message-record encoding are unchanged by this step.
+
 ## Implementation boundaries
 
 The [public API](../api.md), [mapped-format contract](../mapped-format.md), and [concurrency/receipt contract](../concurrency.md) remain authoritative. Payload encoding does not itself create a publication, change Queue progress, or record a delivery. Native send/receive and Queue Set behavior remain with milestones 4–6. Ordinary process/file I/O in the message examples exercises canonical record bytes without adding another Angaria transport or reviving the legacy v0 queue design.

@@ -155,6 +155,8 @@ Step 3.5 implements `MessageCaptureWriter`, `MessageCaptureReader`, and `Message
 
 `InspectionLimits` bounds whole-record bytes, retained/expanded catalog definitions, and per-record text. Catalog preflight precedes inspector copies; repeated Field definitions are charged before compiling a selected layout. These size budgets do not measure exact process memory. The `angaria_inspect` CLI adds aggregate capture/output limits and closes native handles before capture I/O. Native catalog attachment can recover/write the Session and requires a compatible profile. See the [complete contract](capture-inspection.md) and [primer lesson 12](primer.md#12-capture-and-inspect-multiple-message-types).
 
+Step 3.6's [process qualification](process-exchange.md) uses these same APIs in independent executables. A retained inspector keeps its original schema catalog while other processes add a version and replace a producer claim. Cold inspectors read every retained version after applications exit. This step adds an example and qualification coverage without changing public API or persisted formats.
+
 ## Messages and receive events
 
 `MessageView` carries an exact schema identity, payload format, immutable byte span, and user flags. Publication borrows input bytes for the duration of the call. A committed message retains its encoded data independently of the caller's input buffer.
