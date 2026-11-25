@@ -16,6 +16,7 @@ The target checks declarations, including future delivery operations. The [progr
 | `angaria/descriptors.h` | Owning descriptors, session options and capacities, policy choices, and metadata views. |
 | `angaria/results.h` | Typed ordinary failures and bounded publication outcome reports. |
 | `angaria/message.h` | Immutable borrowed payload and delivery views, gap events, and timeouts. |
+| `angaria/payload.h` | Owning schema-driven binary scalar payload codecs and exact typed scalar values. |
 | `angaria/registry.h` | Registration, discovery, metadata inspection, activation, and draft ownership changes. |
 | `angaria/runtime.h` | Session, Task, QueueWriter, SourceQueueSet, and PublishingQueueSet handles. |
 
@@ -116,6 +117,16 @@ Step 2.9 implements those three opening operations and each handle's `id()`. Ope
 The application serializes sends touching a common queue and operations on a common Source Queue Set. A thread Task attaches on its current thread while its parent process claim is held by that process. The thread Task and its endpoints retain the parent claim until they close. A process Task supports the application's coordinated sending threads.
 
 The [concurrency contract](concurrency.md) uses per-Task lifetime claims and a crash-released session mutation gate. Initial send, receive, Registry, and delivery-progress operations are blocking. Claim replacement, issuance, acknowledgment, and release use reserved state and require no new log allocation. Immutable payload reads after receive retain their mapping/pin without holding the operation gate.
+
+## Binary scalar payload codecs
+
+Step 3.1 implements `BinaryPayloadCodec`, compiled from an exact `SchemaId` and an explicit payload byte cap. `from_registry` takes one consistent snapshot; `from_snapshot` also accepts a previously captured catalog. The codec owns resolved Field descriptors and their order, so it retains no Session, Task claim, or Registry view. `schema()` and `payload_size()` identify its layout; `fields()` borrows its ordered descriptors for the codec's lifetime.
+
+`ScalarValue` distinguishes char, byte, signed/unsigned 16-/32-/64-bit integers, and float/double. `encode` accepts exactly one matching variant alternative for each Field occurrence and returns owning bytes. `decode` requires exactly the compiled payload length and returns owning values. Fields are packed in schema order with explicit little-endian integer and IEEE floating-point representations; no host struct padding, embedded identities, or numeric coercion supplies missing schema information. Repeated Fields and empty schemas remain meaningful, and newer versions do not change older codecs.
+
+Malformed or ambiguous selected definitions, invalid widths, mismatched values, and incorrect byte lengths return `InvalidArgument`. Missing exact schemas/referenced Fields return `NotFound`; recognized unavailable Field representations return `UnsupportedPolicy`; byte/allocation limits return `CapacityExceeded`. A zero cap is valid for an empty schema. Full layout, lifetime, and error rules are in [the payload contract](message-payload.md), demonstrated by the [ninth primer program](../examples/primer/09_payload.cpp).
+
+This step builds payload bytes. `MessageView` remains the borrowed view that later message construction/publication steps will consume; codec encoding does not issue publication identities or perform delivery.
 
 ## Messages and receive events
 

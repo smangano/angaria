@@ -2,6 +2,8 @@
 
 For a guided introduction before reading test fixtures, use the [programmer primer](../docs/primer.md) and [runnable examples](../examples/primer/). CTest's `primer_examples` checks the first seven lessons, including process ownership and TOML. The eighth lesson runs separately as `registry_walkthrough`, covering concurrent registrars, historical snapshots, owner replacement, and offline Registry inspection.
 
+The ninth lesson runs as `payload_example` and shows schema-driven binary encoding/decoding. Its [codec tests](test_payload.cpp) use independent golden bytes, integer/IEEE boundaries, exact schema versions, malformed inputs, payload bounds, and independent codec lifetime. These payload APIs use the current Registry definitions and remain separate from the legacy Field-template serialization tests.
+
 Start with [test_runtime_session.cpp](test_runtime_session.cpp) for Session creation/lifetimes, [test_task_registration.cpp](test_task_registration.cpp) for logical Task registration, and [test_schema_registry.cpp](test_schema_registry.cpp) for Field and versioned schema definitions. Their test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
 
 A useful reading order is:

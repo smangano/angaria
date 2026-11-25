@@ -44,8 +44,8 @@ Configuration files use TOML. Implement TOML support with [cpptoml](https://gith
 
 - `VERSION` is the single source of the framework's `major.minor.build` version; CMake reads it.
 - During roadmap development, major is `0` and minor is the milestone number.
-- Assign the next unused build number once for every new PR, including fixes, documentation, and milestone integration PRs. Keep the counter increasing across milestones; do not reset it when minor changes.
-- Review fixes, additional commits, and CI reruns within the same PR retain that PR's version. Include the assigned version in its description and check previously assigned PR versions to avoid reusing a build number.
-- Numbering starts with the versioning PR at `0.2.1`; earlier PRs remain unversioned.
+- Starting with milestone 3, reset build to `1` at each new milestone: its first step is `0.<milestone>.1`. Assign the next unused build number within that milestone once for every new PR, including fixes, documentation, and milestone integration PRs.
+- Review fixes, additional commits, and CI reruns within the same PR retain that PR's version. Include the assigned version in its description and check previously assigned versions within the same milestone to avoid reusing a build number.
+- Milestone 2 retains its previously issued versions through `0.2.14`; earlier unversioned PRs remain unversioned. The first milestone-3 step uses `0.3.1`.
 - Set the completed roadmap release to `1.0.0`. Framework versions do not change configuration, mapped-format, schema, or synchronization protocol versions automatically.
 - See [the roadmap's versioning policy](ROADMAP.md#versioning) for examples.
