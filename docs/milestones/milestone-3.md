@@ -1,6 +1,6 @@
 # Milestone 3 General messages and basic inspection
 
-Milestone 2 reached `main` through [PR #23](https://github.com/smangano/angaria/pull/23), release `0.2.14`. Milestone 3 builds general messages from its persistent Registry and immutable schema versions. Staging branch `milestone-3` starts at that merged commit; each focused implementation step uses `milestone-3-<s>` and a PR targeting the staging branch. The completed milestone reaches `main` through a separate integration PR.
+Milestone 2 reached `main` through [PR #23](https://github.com/smangano/angaria/pull/23), release `0.2.14`. Milestone 3 builds general messages from its persistent Registry and immutable schema versions. Staging branch `milestone-3` starts at that merged commit; each focused implementation step uses `milestone-3-<s>` and a PR targeting the staging branch. Integration release **`0.3.7`** brings the completed milestone into `main` through a separate PR.
 
 The first step uses framework version **`0.3.1`**. Build numbering restarts within each milestone under the [versioning policy](../../ROADMAP.md#versioning). Each step updates the [programmer primer](../primer.md), runnable examples, contracts, and appropriate tests.
 
@@ -57,7 +57,15 @@ Step 3.5 merged through [PR #28](https://github.com/smangano/angaria/pull/28). S
 
 The walkthrough terminates a producer only after it has closed a complete capture, then verifies that replacement producers use new incarnations with their publication sequences reset. Earlier bytes and identities remain intact. Readiness handshakes and bounded waits coordinate processes; tests do not rely on sleeps. Exclusive workspace/phase directories protect earlier artifacts from accidental overwrite.
 
-The [compatibility matrix](../process-exchange.md#compatibility-and-qualification) covers native 2.0 scalar inspection, 2.1 logical definitions, required-feature/native-profile rejection, and canonical record encoding. All thirteen primer programs compile with tests disabled. This completes the milestone's implementation steps; a separate PR integrates `milestone-3` into `main` after review. Native formats, required features, TOML versions, and message-record encoding are unchanged by this step.
+The [compatibility matrix](../process-exchange.md#compatibility-and-qualification) covers native 2.0 scalar inspection, 2.1 logical definitions, required-feature/native-profile rejection, and canonical record encoding. All thirteen primer programs compile with tests disabled. This completes the milestone's implementation steps. Native formats, required features, TOML versions, and message-record encoding are unchanged by this step.
+
+## Completion and integration
+
+Step 3.6 merged through [PR #29](https://github.com/smangano/angaria/pull/29). Integration release **`0.3.7`** combines the six reviewed steps without changing their runtime behavior or introducing another implementation step. The completed scope includes scalar/logical payloads, exact immutable schemas, canonical headers/records, bounded capture streams, generic inspection, and independent-process qualification.
+
+The completion review covers all thirteen [primer lessons](../primer.md), their tests-disabled build, the [native compatibility matrix](../process-exchange.md#compatibility-and-qualification), and the full 498-test suite on Linux and macOS for x86_64 and ARM64. The integration PR records validation for its exact commit. Framework integration versioning does not change native formats 2.0/2.1, TOML versions 1/2, record encoding version 1, or synchronization protocol.
+
+Native Queue payload operations begin in milestone 4. Source/Publishing Queue Set delivery behavior, advanced Fields, additional serializers, replay, catalog export, and foreign-profile/physically-read-only native tooling remain assigned to their later roadmap milestones.
 
 ## Implementation boundaries
 

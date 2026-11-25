@@ -6,7 +6,7 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1 and [2](docs/milestones/milestone-2.md) are complete. [Milestone 3](docs/milestones/milestone-3.md) adds general message construction, capture, and inspection through exact Registry definitions; native Queue transport follows in later milestones.
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1, [2](docs/milestones/milestone-2.md), and [3](docs/milestones/milestone-3.md) are complete. Milestone 3 adds general message construction, capture, and inspection through exact Registry definitions; native Queue transport follows in later milestones.
 
 The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR and, from milestone 3, build numbering starting at `1` for each milestone. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
 
@@ -111,7 +111,7 @@ Step 3.6, framework version **`0.3.6`**, adds [independent-process exchange qual
 python3 test/process_exchange.py build/angaria_primer_13_process_exchange build/angaria_inspect
 ```
 
-Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. This completes the milestone-3 implementation steps; integration of the staging branch into `main` uses a separate PR. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
+Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. Framework version **`0.3.7`** integrates the completed milestone-3 staging branch into `main`. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
 
 ## Run the restart walkthrough
 

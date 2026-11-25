@@ -6,7 +6,7 @@ Step 1.3 defines Angaria's process-local C++ types and the operations that subse
 cmake --build build --target angaria_api_contract
 ```
 
-The target checks declarations, including future delivery operations. The [programmer primer](primer.md) contains runnable examples of the implemented Session and Registry API. General message implementation follows in milestone 3, mapped queues in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its separate earlier implementation.
+The target checks declarations, including future delivery operations. The [programmer primer](primer.md) contains runnable examples of Session and Registry use, scalar/logical payload encoding, canonical message records, capture, and generic inspection. Native mapped Queue payload operations follow in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its separate earlier implementation.
 
 ## Headers
 

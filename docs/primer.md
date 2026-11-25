@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 3, step 3.6**, framework version **0.3.6**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and exchange completed capture files across processes for generic inspection. Sending, publishing, receiving, and acknowledgment through Angaria Queues arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lessons 9–12 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24), [PR #26](https://github.com/smangano/angaria/pull/26), [PR #27](https://github.com/smangano/angaria/pull/27), and [PR #28](https://github.com/smangano/angaria/pull/28). Lesson 13 completes its implementation steps; milestone integration into `main` uses a separate PR. Use the guide and examples from the same checkout so commands match the API you build.
+All thirteen lessons are included in milestone-3 integration release `0.3.7` on `main`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -137,7 +137,7 @@ Quote v2 Fields: PriceTicks Quantity Instrument
 
 The program prints the retained schema Field lists and demonstrates immutable registration. Retrying the same definition succeeds. Changing the ordered Fields or documentation of an existing schema produces `SchemaConflict`; the example checks the documentation case. Give a changed schema a new version instead.
 
-These are **definitions**, not encoded quote payloads. This example does not construct or transmit a quote. Lesson 9 uses these definitions for binary scalar encoding. General message inspection follows in the remaining milestone-3 steps, with more Field families following in milestone 9.
+These are **definitions**, not encoded quote payloads. This example does not construct or transmit a quote. Lesson 9 uses these definitions for binary scalar encoding, and lessons 12–13 inspect captured records through those definitions. More Field families follow in milestone 9.
 
 ## 4. Connect one producer to one consumer
 

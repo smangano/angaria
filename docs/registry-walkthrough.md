@@ -147,4 +147,4 @@ That historical snapshot still shows the earlier Publishing destination. Its `_c
 
 After all application processes exit, the inspector still discovers the saved Registry. In a healthy, settled Session these inspections leave the log unchanged. If an earlier writer was interrupted, ordinary Session attachment may first complete recovery.
 
-Milestone 2 qualifies Registry registration, inspection, ownership, and recovery on the tested native profiles. Message encoding begins in milestone 3; actual message delivery, Queue Set scheduling, waiting alternatives, and general replay tools follow their own roadmap milestones.
+Milestone 2 qualifies Registry registration, inspection, ownership, and recovery on the tested native profiles. Milestone 3 adds [message encoding](message-payload.md), [canonical records](message-record.md), and [capture exchange with generic inspection](process-exchange.md). Native message delivery, Queue Set scheduling, waiting alternatives, and general replay tools follow their own roadmap milestones.

@@ -61,6 +61,6 @@ The [inspection tests](../test/test_inspection.cpp), [schema tests](../test/test
 
 Applications exchange completed ordinary files after constructing records in memory. Captures preserve framing, values, exact schemas, and publication identities; they do not establish Queue admission, delivery, acknowledgment, log replay, or power-loss durability. Termination occurs only after a producer finishes its capture, so this scenario qualifies claim replacement rather than recovery of torn capture writes.
 
-The native catalog still requires a qualified matching ABI and normal `Session::attach` recovery access. Physically read-only/foreign-profile native readers and catalog export remain later tooling. Native mapped Queue payload operations follow milestone 4; Source and Publishing Queue Set behavior follow milestones 5–6. Completion of step 3.6 is followed by a separate integration PR from `milestone-3` into `main`.
+The native catalog still requires a qualified matching ABI and normal `Session::attach` recovery access. Physically read-only/foreign-profile native readers and catalog export remain later tooling. Native mapped Queue payload operations follow milestone 4; Source and Publishing Queue Set behavior follow milestones 5–6. Integration release `0.3.7` brings the completed milestone from `milestone-3` into `main`.
 
 [Primer lesson 13](primer.md#13-exchange-captures-across-processes-and-schema-changes) · [Milestone 3 plan](milestones/milestone-3.md) · [Roadmap](../ROADMAP.md)

@@ -6,7 +6,7 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), and [milestone 2](docs/milestones/milestone-2.md) is complete through its eleven reviewed steps. [Milestone 3](docs/milestones/milestone-3.md) is under implementation, beginning with schema-driven binary scalar payloads. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), [milestone 2](docs/milestones/milestone-2.md) through its eleven reviewed steps, and [milestone 3](docs/milestones/milestone-3.md) through its six reviewed steps and integration release `0.3.7`. Milestone 4 begins native mapped message transport. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Living programmer primer
 
@@ -107,10 +107,10 @@ Completion is demonstrated by independent processes registering and discovering 
 
 ## 3 General messages and basic inspection
 
-Implementation steps complete on the staging branch, pending milestone integration into `main`. The [milestone 3 review plan](docs/milestones/milestone-3.md) records six focused steps. Steps 3.1–3.3 implement scalar/logical payloads, TOML version 2, and format 2.1. Step 3.4 adds [canonical message records](docs/message-record.md), with exact Session/schema context and bounded portable headers. Step 3.5 adds [capture streams and generic inspection](docs/capture-inspection.md), retaining exact Registry definitions and independent record/catalog/text bounds. Step 3.6, version `0.3.6`, [qualifies process exchange](docs/process-exchange.md), producer replacement, retained schema versions, and inspection after application exit.
+Complete. Framework version `0.3.7` integrates the six reviewed steps recorded in the [milestone 3 review plan](docs/milestones/milestone-3.md) into `main`. Steps 3.1–3.3 implement scalar/logical payloads, TOML version 2, and format 2.1. Step 3.4 adds [canonical message records](docs/message-record.md), with exact Session/schema context and bounded portable headers. Step 3.5 adds [capture streams and generic inspection](docs/capture-inspection.md), retaining exact Registry definitions and independent record/catalog/text bounds. Step 3.6, version `0.3.6`, [qualifies process exchange](docs/process-exchange.md), producer replacement, retained schema versions, and inspection after application exit.
 
 - Implement generic headers and ordered fields driven by registered message definitions.
-- Cover sequence numbers, message/schema identity, payload type and size, producer identity, timestamps, and user flags. Store dequeue and acknowledgment metadata per destination.
+- Cover sequence numbers, message/schema identity, payload type and size, producer identity, timestamps, and user flags. Define dequeue and acknowledgment metadata per destination in the receipt contract; native execution follows the Queue milestones.
 - Implement explicit binary encoding for booleans, basic bit fields, signed and unsigned integers, floating-point values, fixed character strings, and enumerations.
 - Keep immutable schema versions addressable by recorded messages.
 - Extend the inspector to decode multiple application-defined types using the Registry.
