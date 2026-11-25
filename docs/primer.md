@@ -2,9 +2,9 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 3, step 3.4**, framework version **0.3.4**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 3, step 3.5**, framework version **0.3.5**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
-You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and wrap payloads in portable message records. Sending, publishing, receiving, and acknowledgment arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and capture portable message records for generic inspection. Sending, publishing, receiving, and acknowledgment arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
 ## A few ideas before the code
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lessons 9 and 10 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24) and [PR #26](https://github.com/smangano/angaria/pull/26). Lesson 11 arrives with the step-3.4 branch; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
+The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lessons 9–11 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24), [PR #26](https://github.com/smangano/angaria/pull/26), and [PR #27](https://github.com/smangano/angaria/pull/27). Lesson 12 arrives with step 3.5; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -49,9 +49,9 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The eleven targets are named `angaria_primer_01_session` through `angaria_primer_11_message_record`, matching their source filenames.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The twelve targets are named `angaria_primer_01_session` through `angaria_primer_12_capture`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
 
-Examples 1–5, 9, and 11 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+Examples 1–5, 9, 11, and 12 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
 ```sh
 primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
@@ -531,6 +531,71 @@ Record encoding only: no messages were sent.
 
 `retained.view().message()` provides a `MessageView` whose payload is the original 16 application bytes. This adapter borrows the owning record, so keep that record alive too. It supplies the view shape used by future transport operations; this lesson makes no Queue call. The portable 80-byte header is separate from the native arena's storage and receipt records. Recognition of JSON, XML, CSV, or Text in a record header also does not provide a serializer for those formats; typed decoding here uses the Binary payload codec.
 
+## 12. Capture and inspect multiple message types
+
+Read [12_capture.cpp](../examples/primer/12_capture.cpp), then run these two programs:
+
+```sh
+./build/angaria_primer_12_capture "$primer_workspace/12-capture"
+./build/angaria_inspect "$primer_workspace/12-capture/session" \
+    "$primer_workspace/12-capture/capture.angcap"
+```
+
+A **capture** is a saved sequence of portable message records. This example writes four records into an ordinary binary file. The application's Session directory retains the Registry definitions needed to interpret them. Keep both the capture file and that source Session directory.
+
+The first program creates a new workspace exclusively. Inside it, the program creates `session` and `capture.angcap`, registers the application Fields and message schemas, issues publication identities, and writes through `MessageCaptureWriter`:
+
+```cpp
+auto writer = primer::value(MessageCaptureWriter::create(output, 1024, 4096));
+primer::value(writer.append(header, payload));
+```
+
+The first limit bounds one complete record; the second bounds the complete capture. The file contains the same 80-byte-header records from lesson 11, one after another. Ordinary capture writes do not have the native Session's transaction journal: an I/O failure may leave an incomplete final record. The reader reports that error instead of guessing where a later record might begin.
+
+The producer prints a Session identity that changes each time you make a new workspace, followed by these fixed lines:
+
+```text
+Captured records: 4
+Capture bytes: 371
+Retained schemas: Quote v1, Quote v2, Order v1, Heartbeat v1
+Capture encoding only: no messages were sent.
+```
+
+Quote version 1 stores `PriceTicks` then `Quantity`. Version 2 reverses their order, so both versions still occupy sixteen payload bytes. The inspector must choose the exact version recorded in each header. Substituting the newest version for the older record would interpret its bytes incorrectly.
+
+The second command starts the generic [inspection tool](../tools/inspect.cpp). It includes no application-specific Quote or Order C++ type. It attaches to the source Session, copies an owning Field/schema catalog into `MessageInspector`, and closes the Session handles before reading the capture. A **catalog** here is the retained collection of Field and message-schema definitions. Those definitions supply names, types, order, enum labels, and exact versions.
+
+The tool shows the two Quote layouts separately. It also renders Order's logical values and an empty Heartbeat:
+
+```text
+  [0] "PriceTicks" int64 = -2
+  [1] "Quantity" uint64 = 7
+```
+
+```text
+  [0] "Quantity" uint64 = 8
+  [1] "PriceTicks" int64 = -3
+```
+
+```text
+  [0] "Side" enum<byte> = "Buy" (1)
+  [1] "Quantity" uint64 = 9
+  [2] "Instrument" chars<6> = "IBM\x00 \x0a"
+  [3] "Flags" bits16 = 0x8001
+  [4] "Enabled" bool = true
+  [5] "Adjustment" int8 = -128
+```
+
+Each group has a header identifying the message, source Session, producer, exact schema, sequence, timestamp, and flags. Heartbeat has only that header because its schema has no Fields. `\x00` and `\x0a` show the instrument's saved NUL and newline bytes. Names and enum labels are escaped too, so controls cannot masquerade as extra output lines. Fixed ASCII padding and control bytes remain visible.
+
+`MessageInspector` checks the source Session identity independently of the record, then selects its exact registered schema. Missing versions return `NotFound`; a different Session returns `SchemaConflict`. Generic binary interpretation preserves each Field's logical rules. Other known payload formats can be captured as opaque bytes, but their serializers and semantic inspectors are later work.
+
+The command has separate limits for record bytes, total capture bytes, retained/expanded catalog bytes, text per record, and total printed output. Run `./build/angaria_inspect --help` for the defaults and named overrides. For example, adding `--max-record-bytes 95` rejects the first 96-byte Quote before allocating its payload. Errors identify the record index and starting byte offset. If a later record fails, earlier complete records may already have been printed; a nonzero exit status means inspection did not finish successfully.
+
+The capture is opened read-only. Obtaining its catalog uses normal native `Session::attach` and `Registry::snapshot`, which require a qualified matching native ABI and may perform recovery writes. This is not physically read-only or foreign-profile Session-file inspection. The capture contains message records, not an exported copy of every Registry definition; deleting the Session loses the catalog needed by this workflow.
+
+The application writes ordinary files after constructing records in its own memory. Capture order, repeated IDs, and successful inspection do not establish Queue publication acceptance or delivery. Further multi-process and restart qualification follows in step 3.6; native Queue operations remain with their roadmap milestones.
+
 ## Understand bounds and ordinary failures
 
 Angaria targets small, bounded systems. Capacities reserve room for Tasks, queues, both kinds of Queue Sets, memberships, Fields, and schema versions. Named setters make adjustments readable:
@@ -555,13 +620,13 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, binary scalar and logical payloads, and complete portable message records with bounded construction. The remaining milestone-3 steps add generic capture inspection and process exchange of those records. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, binary scalar and logical payloads, and portable capture with generic exact-version inspection. Step 3.6 adds further multi-process and restart qualification for those records. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 3, remaining steps | Capture and inspect exact schema versions, then exchange portable records across processes. |
+| 3, remaining step | Qualify portable record exchange and retained-version inspection across processes and restarts. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |

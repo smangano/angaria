@@ -62,7 +62,7 @@ Every header/record encode or decode takes a mandatory `maxRecordBytes` budget. 
 | `decode_view(record, cap)` | `MessageRecordView` with an owning header value and a borrowed payload span. Requires exactly one complete record. |
 | `decode(record, cap)` | `MessageRecord` with its own header and payload vector, independent of the encoded input's lifetime. |
 
-Whole-record decoding rejects truncated payloads, trailing bytes, concatenated records, and inconsistent lengths. There is no implicit stream resynchronization. A future capture reader can read 80 bytes, validate its header and announced size against a budget, then read that payload and validate the complete record.
+Whole-record decoding rejects truncated payloads, trailing bytes, concatenated records, and inconsistent lengths. There is no implicit stream resynchronization. Step 3.5's [capture reader](capture-inspection.md) reads 80 bytes, validates its header and announced size against record/aggregate budgets, then reads that payload as one record.
 
 The codec recognizes all five stable format codes as **opaque application bytes**. It does not validate JSON/XML/CSV/text syntax or implement serializers for those formats. Recognizing their framing also does not enable future Queue policies or payload encoders. Binary value validation is a separate operation below.
 
@@ -74,7 +74,7 @@ For example, retain the source Session identity and payload codec while setting 
 
 The helper also validates manually constructed `MessageRecordView` metadata and declared byte count before interpreting payloads. The payload codec enforces exact byte size and scalar/logical representation constraints, including Boolean canonical bytes, closed enum values, and ASCII bounds. A different same-sized schema version is still rejected before values are read.
 
-Neither this explicit context nor `from_snapshot` authenticates a caller-provided definition set. Applications must select the correct Registry/retained definitions for that Session. No cryptographic integrity or live ownership check is implied by successful decoding. Generic capture/definition inspection follows step 3.5.
+Neither this explicit context nor `from_snapshot` authenticates a caller-provided definition set. Applications must select the correct Registry/retained definitions for that Session. No cryptographic integrity or live ownership check is implied by successful decoding. Step 3.5's [generic inspector](capture-inspection.md) retains this independent Session context while resolving exact schemas from owning definitions.
 
 ## Ownership and existing message views
 
