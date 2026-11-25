@@ -33,6 +33,9 @@ def main():
             session = Path(root) / "session"
             result = run(executable, session)
             check(result.returncode == 0, f"Payload lesson failed: {result.stdout!r} {result.stderr!r}")
+            # Match complete lines so numeric prefixes and extra hex bytes
+            # cannot masquerade as the expected sizes, versions, or payload.
+            output_lines = result.stdout.splitlines()
             for marker in (
                 "Quote v1 bytes: 16",
                 "Quote v1 hex: fe ff ff ff ff ff ff ff 07 00 00 00 00 00 00 00",
@@ -43,7 +46,7 @@ def main():
                 "Codecs remain usable after Session handles close.",
                 "Payload encoding only: no messages were sent.",
             ):
-                check(marker in result.stdout, f"Payload lesson omitted {marker!r}: {result.stdout!r}")
+                check(marker in output_lines, f"Payload lesson omitted exact line {marker!r}: {result.stdout!r}")
 
             # Repeating a tutorial command must preserve the reader's saved
             # Session. Only the temporary parent created here is cleaned up.
