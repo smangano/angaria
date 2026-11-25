@@ -16,6 +16,7 @@ The target checks declarations, including future delivery operations. The [progr
 | `angaria/descriptors.h` | Owning descriptors, session options and capacities, policy choices, and metadata views. |
 | `angaria/results.h` | Typed ordinary failures and bounded publication outcome reports. |
 | `angaria/message.h` | Immutable borrowed payload and delivery views, gap events, and timeouts. |
+| `angaria/message_record.h` | Portable message headers/records, bounded framing, owning/borrowed decoding, and exact binary schema context. |
 | `angaria/payload.h` | Owning schema-driven binary payload codecs, exact scalar/logical values, and bounded construction. |
 | `angaria/registry.h` | Registration, discovery, metadata inspection, activation, and draft ownership changes. |
 | `angaria/runtime.h` | Session, Task, QueueWriter, SourceQueueSet, and PublishingQueueSet handles. |
@@ -126,9 +127,19 @@ Step 3.1 implements `BinaryPayloadCodec`, compiled from an exact `SchemaId` and 
 
 `PayloadValue` distinguishes char, byte, signed int8 and signed/unsigned 16-/32-/64-bit integers, float/double, `bool`, `BitFieldValue`, `EnumValue`, and `FixedAsciiValue`. `ScalarValue` remains an alias for `PayloadValue`; earlier scalar examples still compile. Exhaustive variant visitors need cases for the new alternatives. Enum values wrap an `IntegerValue` of the exact underlying width/sign; fixed ASCII owns its text bytes. `encode` accepts exactly one matching alternative for each Field occurrence and returns owning bytes. `decode` requires exactly the compiled payload length and returns owning values. Fields are packed in schema order with explicit little-endian integer and IEEE floating-point representations. Repeated Fields and empty schemas remain meaningful, and newer versions do not change older codecs.
 
-`encode({values...})` provides initializer-list construction under the codec's byte cap. `encode_into(values, output)` requires a byte span of exactly `payload_size()` bytes and returns `OperationResult`; all validation/allocation completes before copying, so errors leave caller output unchanged. These APIs construct application-memory payloads. Message envelopes arrive in step 3.4, and Queue transport follows later milestones.
+`encode({values...})` provides initializer-list construction under the codec's byte cap. `encode_into(values, output)` requires a byte span of exactly `payload_size()` bytes and returns `OperationResult`; all validation/allocation completes before copying, so errors leave caller output unchanged. These APIs construct application-memory payloads. Step 3.4 wraps them in portable message records below; Queue transport follows later milestones.
 
 Malformed or ambiguous selected definitions, invalid widths, mismatched values, and incorrect byte lengths return `InvalidArgument`. Missing exact schemas/referenced Fields return `NotFound`; recognized unavailable Field representations return `UnsupportedPolicy`; byte/allocation limits return `CapacityExceeded`. A zero cap is valid for an empty schema. Full layout, lifetime, and error rules are in [the payload contract](message-payload.md), demonstrated by the [ninth primer program](../examples/primer/09_payload.cpp).
+
+## Canonical message records
+
+Step 3.4 implements `MessageHeader`, `MessageRecord`, `MessageRecordView`, and `MessageRecordCodec`. The header owns an exact schema, payload format/byte count, full producer `PublicationId`, initial publication UTC time, and user flags. Encoding version 1 uses an explicit 80-byte little-endian header followed immediately by the payload. This portable record has no native offsets or destination receipts and leaves native Session formats 2.0/2.1 unchanged.
+
+Every header/record encode or decode requires `maxRecordBytes`, including header and payload. `encode_header` and `decode_header` operate on exactly 80 header bytes and validate the announced total before payload allocation. `encode` returns owning record bytes; `decode_view` borrows only the input payload; `decode` owns an independent header/vector. Whole-record decoding requires exactly one complete record. `encode_into` accepts the exact output span and preserves it on errors, including overlapping payload/output spans.
+
+All five stable payload-format codes are preserved as opaque bytes; JSON/XML/CSV/text serializers are not implied. `decode_binary(record, codec, schemaSession)` additionally requires Binary, the exact codec schema, and a matching independently retained source Session identity. A same-numbered schema from another Session or a different same-sized version returns `SchemaConflict`. The supplied definitions remain caller-selected, with no authentication of their origin or proof of publication admission.
+
+`MessageRecord::view()` is allowed on lvalues and borrows their payload storage. `MessageRecordView::message()` adapts to the existing borrowed `MessageView` while retaining the same backing-storage lifetime. Initial publication time is distinct from `DeliveryView`'s per-destination enqueue/dequeue metadata. Complete bytes, errors, lifetime, and receipt boundaries are specified in [the message-record contract](message-record.md) and demonstrated by [primer lesson 11](primer.md#11-wrap-a-payload-in-a-message-record).
 
 This step builds payload bytes. `MessageView` remains the borrowed view that later message construction/publication steps will consume; codec encoding does not issue publication identities or perform delivery.
 

@@ -1,6 +1,6 @@
 # Binary payloads
 
-Milestone 3 implements `BinaryPayloadCodec` in [angaria/payload.h](../include/angaria/payload.h): step 3.1 introduced scalar values, and step 3.3 adds basic logical Fields and int8. A **payload** is the application data carried by a message. The codec converts the values of one exact registered schema into bytes and back. Message envelopes, storage, publication, and delivery follow their implementation steps.
+Milestone 3 implements `BinaryPayloadCodec` in [angaria/payload.h](../include/angaria/payload.h): step 3.1 introduced scalar values, and step 3.3 adds basic logical Fields and int8. A **payload** is the application data carried by a message. The codec converts the values of one exact registered schema into bytes and back. Step 3.4 adds the [portable message envelope](message-record.md); storage, publication, and delivery follow their implementation steps.
 
 The [ninth primer example](../examples/primer/09_payload.cpp) registers two Quote versions. The [tenth example](../examples/primer/10_logical_fields.cpp) uses TOML version 2 and logical values, including an exact caller-owned output buffer. Both operate without a Queue. See the [milestone 3 review plan](milestones/milestone-3.md) for the remaining work.
 
@@ -53,7 +53,7 @@ fe ff ff ff ff ff ff ff 07 00 00 00 00 00 00 00
 
 Appending a uint32 `Instrument` Field to Quote v2 produces a 20-byte payload. Registering that new immutable schema does not change the earlier 16-byte layout.
 
-Payload bytes do not contain their `SchemaId`. Keep the exact message type and version with the bytes in the surrounding application context. Decoding with a different same-sized schema can produce different values; the bytes alone cannot identify that mistake. A later message envelope supplies the surrounding metadata.
+Payload bytes do not contain their `SchemaId`. Keep the exact message type, version, and source Session with the bytes in the surrounding application context. Decoding with a different same-sized schema can produce different values; the bytes alone cannot identify that mistake. Step 3.4's [message record](message-record.md#decode-with-exact-schema-context) supplies this context and checks it before typed binary decoding.
 
 ## Encode, decode, and lifetime
 

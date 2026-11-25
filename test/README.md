@@ -6,6 +6,8 @@ The ninth lesson runs as `payload_example` and shows schema-driven binary encodi
 
 The tenth lesson runs as `logical_fields_example` using [TOML version 2](../examples/primer/logical-fields.toml). It encodes Boolean, bit-field, enum, fixed-ASCII, and int8 values and preserves a caller buffer on errors. Logical metadata tests check independent wire bytes and corruption, including 65,536 enum entries. Registry/process tests check canonical retries, exact metadata budgets, historical definitions, legacy 2.0 support, logical crash recovery, and incompatible-profile rejection before recovery writes.
 
+The eleventh lesson runs as `message_record_example` and uses [the record tests](test_message_record.cpp) to illustrate header framing, complete publication identity, header-plus-payload caps, owning/borrowed lifetime, and exact Session/schema context. Hand-authored wire fixtures are distinct from the real Registry/history scenario. Successful framing or ID issuance is never presented as publication acceptance or delivery.
+
 Start with [test_runtime_session.cpp](test_runtime_session.cpp) for Session creation/lifetimes, [test_task_registration.cpp](test_task_registration.cpp) for logical Task registration, and [test_schema_registry.cpp](test_schema_registry.cpp) for Field and versioned schema definitions. Their test comments describe the application scenario, the relevant lifetime or failure rule, and any private setup used to reach that state. Test helpers at the beginning manage temporary files, independent processes, and deliberate corruption; they are test infrastructure rather than application initialization code.
 
 A useful reading order is:

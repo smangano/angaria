@@ -24,6 +24,8 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 | Term | Meaning in Angaria |
 | --- | --- |
 | **Codec** | Code that encodes process-local values into specified bytes and decodes those bytes into values. The superblock codec also validates immutable metadata and section geometry. It does not serialize native C++ object layouts. |
+| **Message record** | A portable 80-byte header plus application payload, defined by the [message-record contract](message-record.md). It carries a complete publication identity and exact schema context without native offsets or destination receipt state. Encoding it does not admit a publication. |
+| **Opaque payload** | Bytes preserved without interpreting their contents. A message record can frame a known payload format without implementing its serializer or validating that format's application syntax. |
 | **Little-endian** | Integer encoding in which the least significant byte is stored first, at the lowest byte offset. |
 | **Logical representation** | A Field's meaning and value constraints beyond its storage bytes: for example, a Boolean permits only zero and one. The [logical Field contract](logical-fields.md) describes its required metadata, implemented in step 3.3. |
 | **Storage base** | The underlying integer or character representation and fixed byte width used by a Field. Logical metadata can constrain it without changing an existing base code's meaning. |

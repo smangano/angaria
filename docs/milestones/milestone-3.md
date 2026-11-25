@@ -35,9 +35,15 @@ Step 3.2 changed no runtime behavior. Step 3.3 implements the specified format-2
 
 ## Step 3.3 Logical Field implementation
 
-Step 3.2 merged through [PR #25](https://github.com/smangano/angaria/pull/25). Step 3.3 uses framework version **`0.3.3`**. Owning logical metadata now survives registration, canonical retries, snapshots, handle closure, and native crash recovery. The codec enforces exact scalar/logical alternatives and supports initializer-list payload construction plus transactional `encode_into` for caller-owned buffers. Complete message envelopes remain step 3.4 work.
+Step 3.2 merged through [PR #25](https://github.com/smangano/angaria/pull/25). Step 3.3 uses framework version **`0.3.3`**. Owning logical metadata now survives registration, canonical retries, snapshots, handle closure, and native crash recovery. The codec enforces exact scalar/logical alternatives and supports initializer-list payload construction plus transactional `encode_into` for caller-owned buffers.
 
 The [tenth primer lesson](../primer.md#10-encode-logical-fields-and-preserve-an-output-buffer) demonstrates TOML version 2, closed enum labels, exact ASCII padding, independent codec lifetime, golden bytes, and unchanged caller output after invalid input. Tests preserve the earlier scalar bytes and 2.0 Session behavior while qualifying required feature negotiation and immutable metadata bounds.
+
+## Step 3.4 Canonical message records
+
+Step 3.3 merged through [PR #26](https://github.com/smangano/angaria/pull/26). Step 3.4 uses framework version **`0.3.4`** and implements [portable message headers and record codecs](../message-record.md). Each record carries full publication identity, exact schema, format/size, initial publication time, and user flags. Bounded header/whole-record decoding distinguishes owning and borrowed results, rejects malformed framing, and preserves caller output on failure.
+
+Typed binary decoding also checks independently supplied source Session context and exact schema version, including same-sized version and cross-Session mismatches. Destination acceptance/enqueue, dequeue, and acknowledgment remain receipt metadata. The [eleventh primer lesson](../primer.md#11-wrap-a-payload-in-a-message-record) demonstrates real ID issuance and Registry definitions without implying publication acceptance. Native mapped formats, feature masks, and Publication layout remain unchanged. Capture/inspection follows in step 3.5.
 
 ## Implementation boundaries
 

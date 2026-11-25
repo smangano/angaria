@@ -2,9 +2,9 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 3, step 3.3**, framework version **0.3.3**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide follows the implemented public API through **milestone 3, step 3.4**, framework version **0.3.4**. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
-You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, and encode scalar and basic logical payloads. Sending, publishing, receiving, acknowledgment, and complete message envelopes arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and wrap payloads in portable message records. Sending, publishing, receiving, and acknowledgment arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
 ## A few ideas before the code
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lesson 9 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24). Lesson 10 arrives with step 3.3; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
+The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lessons 9 and 10 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24) and [PR #26](https://github.com/smangano/angaria/pull/26). Lesson 11 arrives with the step-3.4 branch; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -49,9 +49,9 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The ten targets are named `angaria_primer_01_session` through `angaria_primer_10_logical_fields`, matching their source filenames.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The eleven targets are named `angaria_primer_01_session` through `angaria_primer_11_message_record`, matching their source filenames.
 
-Examples 1–5 and 9 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+Examples 1–5, 9, and 11 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
 ```sh
 primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
@@ -394,7 +394,7 @@ Quote version 2 adds `Instrument`, making its payload four bytes longer. The ear
 
 The encoded byte vector and decoded value vector also own their data. Use `std::get<std::int64_t>(decoded[0])` to read the first value, and `std::get<std::uint64_t>(decoded[1])` for the second. Decoding requires the exact byte count; it rejects both truncated input and extra trailing bytes.
 
-Keep the exact schema identity alongside the payload. These bytes contain neither their message type nor their version. A codec for another same-sized schema cannot determine that you supplied the wrong data. A complete message envelope will carry the surrounding metadata in a later step.
+Keep the exact schema identity alongside the payload. These bytes contain neither their message type nor their version. A codec for another same-sized schema cannot determine that you supplied the wrong data. [Lesson 11](#11-wrap-a-payload-in-a-message-record) adds a portable header carrying the exact schema and source Session identity.
 
 This lesson runs in application memory. The [payload format guide](message-payload.md) lists supported scalar types and error rules. Queue transport, publication, receiving, and acknowledgment follow their roadmap steps.
 
@@ -466,7 +466,70 @@ Field definitions remain immutable. Changing an enum mapping, width, or logical 
 
 New Sessions use mapped format 2.1 and advertise required logical-Field support at creation. This library also attaches to existing format-2.0 scalar Sessions, but adding logical Fields or int8 to them returns `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
 
-This example constructs and validates payloads in application memory. Complete message envelopes and Queue delivery arrive in their later steps.
+This example constructs and validates payloads in application memory. Lesson 11 adds a portable message envelope; Queue delivery follows its roadmap milestones.
+
+## 11. Wrap a payload in a message record
+
+Read [11_message_record.cpp](../examples/primer/11_message_record.cpp), then run:
+
+```sh
+./build/angaria_primer_11_message_record "$primer_workspace/11-message-record"
+```
+
+A **header** holds the information needed to interpret a payload. A portable **message record** stores that header followed by the payload bytes. The [record contract](message-record.md) specifies an 80-byte header, including the exact message type/version, payload format and length, full publication identity, initial publication time, and application flags. This Quote still has a 16-byte payload, so its complete record occupies 96 bytes.
+
+The preparation helper creates a Session, registers the same price/quantity Fields used in lesson 9, and compiles Quote version 1. It then fills the header:
+
+```cpp
+MessageHeader header;
+header._schema = schema;
+header._format = PayloadFormat::Binary;
+header._publication = primer::value(created._creator.next_publication_id());
+header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{42}};
+header._flags = 0x80000001u;
+header._payloadBytes = codec.payload_size();
+```
+
+The **publication identity** contains the Session ID, producer Task ID, that Task claim's incarnation, and a producer-local sequence. `next_publication_id()` persists an issued sequence before returning it. Issuing an ID does not send a message or establish that a publication has been accepted. The record codec checks the shape of these values; it cannot prove that a claim is live or a sequence was issued by its stated Session.
+
+The timestamp is a caller-supplied count of UTC nanoseconds since the Unix epoch. This example deliberately uses 42 so its output is repeatable. It represents the record's initial publication time. Each destination can accept a delivery later, and each has its own dequeue and acknowledgment history. Those destination-specific times do not belong to this immutable header.
+
+After the helper returns, every Session, Registry, and Task handle is closed. The main function constructs a payload with price `-2` and quantity `7`, then encodes its complete record:
+
+```cpp
+constexpr std::uint64_t record_limit = 96;
+const auto bytes = primer::value(MessageRecordCodec::encode(
+    prepared._header, payload, record_limit));
+const auto borrowed = primer::value(MessageRecordCodec::decode_view(bytes, record_limit));
+const auto values = primer::value(MessageRecordCodec::decode_binary(
+    borrowed, prepared._codec, prepared._schemaSession));
+```
+
+`record_limit` includes both header and payload. A limit of 95 rejects this record with `CapacityExceeded`. `decode_header` checks exactly the first 80 bytes and the announced total against this budget, which lets a reader check the declared size before allocating a payload buffer. Header parsing alone does not prove the payload is present; full record decoding checks the exact complete length, including rejection of extra trailing bytes.
+
+`decode_binary` requires the Binary format, an exact schema match, and the expected source Session identity. A type/version pair is local to a Session: another Session can register the same pair with different Fields. The helper therefore saves `created._session.identity()` independently of the record. Reading a Session ID from the record and passing it back as the expected identity would not check the schema's source. These checks compare declared metadata with your supplied context; they do not authenticate a sender. Deliberately changing the decoded view's version to 2 fails with `SchemaConflict`, even though the payload still has 16 bytes.
+
+Look for these complete output lines:
+
+```text
+Message record bytes: 96
+Header bytes: 80 Payload bytes: 16
+Schema: Quote type=1 version=1
+Producer: Task=1 incarnation=1 sequence=1
+Publication time (demo): 42 ns
+User flags: 2147483649
+Decoded Quote: PriceTicks=-2 Quantity=7
+Wrong schema version: SchemaConflict
+Record cap 95: CapacityExceeded
+Borrowed MessageView payload bytes: 16
+Owning record survives input buffer release: yes
+Record and payload codecs remain usable after Session handles close.
+Record encoding only: no messages were sent.
+```
+
+`decode_view` returns a header value plus a **borrowed span** into the input record's payload bytes. Keep that input buffer alive and unchanged while using the span. `decode` instead copies the payload into an owning `MessageRecord`. The example destroys the original encoded buffer, then successfully decodes the owning record's retained payload.
+
+`retained.view().message()` provides a `MessageView` whose payload is the original 16 application bytes. This adapter borrows the owning record, so keep that record alive too. It supplies the view shape used by future transport operations; this lesson makes no Queue call. The portable 80-byte header is separate from the native arena's storage and receipt records. Recognition of JSON, XML, CSV, or Text in a record header also does not provide a serializer for those formats; typed decoding here uses the Binary payload codec.
 
 ## Understand bounds and ordinary failures
 
@@ -492,13 +555,13 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, and binary scalar and logical payload encoding with bounded construction. Later milestone-3 steps add complete message metadata and generic inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, binary scalar and logical payloads, and complete portable message records with bounded construction. The remaining milestone-3 steps add generic capture inspection and process exchange of those records. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 3, remaining steps | Build complete messages and inspect exact schema versions. |
+| 3, remaining steps | Capture and inspect exact schema versions, then exchange portable records across processes. |
 | 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |
