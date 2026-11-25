@@ -132,6 +132,8 @@ Step 2.7 implements the equivalent programmatic Field/schema registrations and i
 
 Applications may register definitions programmatically within the same reserved capacities. TOML declarations supply initial registrations.
 
+Step 3.2's [logical Field design](logical-fields.md#planned-toml-version-2) specifies a future configuration version 2 for booleans, bit fields, enumerations, fixed ASCII, and the missing int8 scalar. Its design fragment is not accepted by the current loader. Version 1 and the implemented scalar declarations above remain authoritative until step 3.3 implements the extension.
+
 ## Registration and activation
 
 A new session validates the complete configuration and resolves defaults before applying its initial Registry declarations. Registration and relationship updates commit atomically so an interrupted update exposes a consistent Registry revision.

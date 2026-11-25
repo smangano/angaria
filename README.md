@@ -92,6 +92,8 @@ The default run uses temporary storage. To retain a Session for manual inspectio
 
 Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Message headers, inspection, and additional basic Field representations follow the [milestone 3 steps](docs/milestones/milestone-3.md).
 
+Step 3.2, framework version `0.3.2`, defines the [basic logical Field contract](docs/logical-fields.md): booleans, bit fields, closed enumerations, and fixed ASCII, with their planned TOML and compatibility rules. It also identifies the missing signed 8-bit scalar. Implementation follows in step 3.3; the current loader, persisted format, and payload codec retain their existing support.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

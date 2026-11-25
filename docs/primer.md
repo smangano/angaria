@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 3, step 3.1**, framework version **0.3.1**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+This guide accompanies framework version **0.3.2**, through **milestone 3, step 3.2**. The runnable public API reaches step 3.1; step 3.2 documents the next logical Field representations before their implementation in step 3.3. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, and encode scalar payloads. Sending, publishing, receiving, acknowledgment, and complete message envelopes arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -32,7 +32,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lesson 9 is introduced by the `milestone-3-1` PR and reaches `milestone-3` after that PR is merged; the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
+The first eight lessons are available in the milestone-2 release, version `0.2.14`, on `main`. Lesson 9 reached the `milestone-3` staging branch through [PR #24](https://github.com/smangano/angaria/pull/24); the completed milestone will later integrate into `main`. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -398,6 +398,27 @@ Keep the exact schema identity alongside the payload. These bytes contain neithe
 
 This lesson runs in application memory. The [payload format guide](message-payload.md) lists supported scalar types and error rules. Queue transport, publication, receiving, and acknowledgment follow their roadmap steps.
 
+## Plan logical Fields (step 3.2)
+
+This section explains the [logical Field design](logical-fields.md) reviewed in step 3.2. Its new representations become runnable in step 3.3. The current Registry, TOML loader, and payload codec still support the scalar Fields demonstrated above.
+
+A Field's **logical meaning** tells a reader how to interpret its stored bytes. For example, one byte could hold an ordinary number, a true-or-false answer, or several independent flags. The Registry needs that distinction so a general inspection program can explain a message without knowing the application's C++ types.
+
+| Planned representation | Meaning and byte rules |
+| --- | --- |
+| Boolean | A true-or-false value occupying one byte: `00` means false and `01` means true. Other byte values are errors. |
+| Bit field | A group of 8, 16, 32, or 64 independent bits, stored in little-endian order. Bit 0 is the least significant bit; setting it gives the numeric value 1. Larger 128- and 256-bit Fields follow in milestone 9. |
+| Enumeration | A fixed-width integer with registered names for its allowed values. For example, `Side` could define `Buy = 1` and `Sell = 2`. This is a **closed enumeration**: a value such as 3 is rejected when it has no registered entry. |
+| Fixed ASCII data | Exactly `N` bytes, each in the ASCII range `00` through `7f`. The declared size counts bytes. It does not count Unicode characters. |
+
+Fixed ASCII data has no automatic padding, trimming, or truncation. For a four-byte Field, the caller could supply `ABCD` or supply `AB` followed by two chosen padding bytes. A NUL byte, whose value is zero, is permitted and preserved like any other ASCII byte; it does not terminate the Field. A consumer reads the declared number of bytes.
+
+The existing base codes 0 through 25 keep their meanings. Planned logical metadata records the additional interpretation and requires reader support. A reader must recognize that interpretation before treating the stored value as a boolean, bit field, or enumeration.
+
+Field definitions remain immutable. Changing an enumeration's entries, a Field's width, or its logical meaning requires a new Field ID and name, followed by a new message-schema version that references it. Adding a message version alone cannot edit a Field used by an earlier schema. Earlier payloads keep their original definitions.
+
+The design document includes proposed TOML declarations and compatibility rules. Those declarations are design examples; the current loader does not accept them. The nine programs above remain the runnable learning path until step 3.3 adds the corresponding APIs and examples.
+
 ## Understand bounds and ordinary failures
 
 Angaria targets small, bounded systems. Capacities reserve room for Tasks, queues, both kinds of Queue Sets, memberships, Fields, and schema versions. Named setters make adjustments readable:
@@ -422,7 +443,7 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, and binary scalar payload encoding. The remaining milestone-3 steps add the other basic representations, complete message metadata, and generic inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence now reaches TOML setup, independent-process Registry use, current/historical snapshots, and binary scalar payload encoding. Step 3.2 records the logical Field design; step 3.3 adds its runnable representations. Later milestone-3 steps add complete message metadata and generic inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
