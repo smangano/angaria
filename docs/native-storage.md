@@ -211,6 +211,8 @@ Task definitions are immutable and retain no predecessor links. The shared loade
 
 The [mixed-process suite](../test/test_registry_qualification.cpp) and [worker](../test/native_registry_worker.cpp) combine TOML bootstrap, registration/discovery of every entity kind, observer snapshots before/during/after updates, ownership contention, process termination/replacement, representative Queue/schema commit cuts, and repeated interrupted recovery. Existing Task, schema, topology, activation, journal, and native-ordering suites supply the detailed domain matrices. The public [Registry walkthrough](registry-walkthrough.md) demonstrates the same application concepts without fault hooks.
 
+Step 3.6's [message exchange walkthrough](process-exchange.md) extends public qualification to completed canonical captures, retained schema catalogs, and producer replacement. Its compatibility matrix includes native 2.0 scalar inspection alongside the existing 2.1 logical-definition and unsupported-profile checks. The walkthrough uses ordinary files for record exchange; it does not add native Queue payload operations or change the qualified ABI profiles.
+
 The native adapter recognizes these little-endian 64-bit profiles, each requiring an always-lock-free eight-byte atomic implementation:
 
 | OS and CPU | ABI profile | Hosted qualification job |

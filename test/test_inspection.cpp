@@ -1,8 +1,10 @@
 // Generic value inspection uses only retained Registry metadata, not application
 // C++ message types. Most cases use explicitly fabricated owning public snapshots;
-// the final case separately exercises a real native Session and claim lifetime.
+// the final cases separately exercise real native Sessions and claim lifetimes.
 #include "angaria/inspection.h"
 #include "angaria/runtime.h"
+#include "mapped_superblock.h"
+#include "native_file.h"
 
 #include <gtest/gtest.h>
 
@@ -426,6 +428,80 @@ namespace
     }
     std::filesystem::path _root;
   };
+
+  // Private compatibility setup follows the predecessor scalar layout: close
+  // all owners before recording its 2.0 profile. This is a test fixture, never
+  // an application downgrade/migration API. The public inspector then reads
+  // that native catalog and retains its meaning after every native owner exits.
+  TEST_F(InspectionRegistryTest, LegacyScalarCatalogInspectsCanonicalRecordsWithoutUpgradingItsProfile)
+  {
+    namespace mapped = angaria::detail::mapped;
+    const auto directory = _root / "legacy";
+    SessionId identity;
+    std::vector<std::byte> first;
+    std::vector<std::byte> replacement;
+    std::optional<MessageInspector> retained;
+    {
+      SessionOptions options;
+      options._name = "Legacy scalar inspection";
+      options._directory = directory;
+      options._maxLogBytes = 1048576;
+      options._limits = CapacityLimits::empty().tasks(1).fields(2).message_schemas(1);
+      TaskDescriptor setup;
+      setup._name = "Setup";
+      auto created = value(Session::create(options, setup));
+      identity = created._session.identity();
+      auto registry = created._creator.registry();
+      const auto price = value(registry.register_field(field(1, "Price", EFieldBase::BASE_INT64, 8)));
+      const auto quantity = value(registry.register_field(field(2, "Quantity", EFieldBase::BASE_UINT64, 8)));
+      MessageDescriptor quote;
+      quote._schema = quote_schema;
+      quote._name = "Quote";
+      quote._fields = {price, quantity};
+      value(registry.register_message(quote));
+      const auto codec = value(BinaryPayloadCodec::from_registry(created._session.registry(), quote_schema, 16));
+      const auto payload = value(codec.encode({std::int64_t{-2}, std::uint64_t{7}}));
+      auto metadata = header(payload.size(), quote_schema, identity);
+      metadata._publication = value(created._creator.next_publication_id());
+      first = value(MessageRecordCodec::encode(metadata, payload, 96));
+    }
+    {
+      auto file = value(mapped::NativeFile::open_existing(directory / "session.ang", mapped::FileAccess::ReadWrite));
+      const std::array<std::byte, 2> minor{};
+      const std::array<std::byte, 8> features{std::byte{1}};
+      value(file.write_exact(10, minor));
+      value(file.write_exact(56, features));
+    }
+    {
+      auto session = value(Session::attach(directory));
+      EXPECT_EQ(session.identity(), identity);
+      auto producer = value(session.attach_task(TaskId{1}));
+      EXPECT_EQ(producer.claim()._incarnation, 2u);
+      const auto codec = value(BinaryPayloadCodec::from_registry(session.registry(), quote_schema, 16));
+      const auto payload = value(codec.encode({std::int64_t{-3}, std::uint64_t{8}}));
+      auto metadata = header(payload.size(), quote_schema, identity);
+      metadata._publication = value(producer.next_publication_id());
+      replacement = value(MessageRecordCodec::encode(metadata, payload, 96));
+      retained.emplace(value(MessageInspector::from_session(session)));
+    }
+    EXPECT_NE(value(retained->inspect(first)).find("  [0] \"Price\" int64 = -2\n  [1] \"Quantity\" uint64 = 7\n"),
+              std::string::npos);
+    const auto text = value(retained->inspect(replacement));
+    EXPECT_NE(text.find("incarnation=2 sequence=1"), std::string::npos);
+    EXPECT_NE(text.find("  [0] \"Price\" int64 = -3\n  [1] \"Quantity\" uint64 = 8\n"), std::string::npos);
+
+    // Neither attaching nor compiling/using the inspector upgrades native
+    // formats. Claim replacement is allowed because no inspector kept a lease.
+    auto session = value(Session::attach(directory));
+    auto producer = value(session.attach_task(TaskId{1}));
+    EXPECT_EQ(producer.claim()._incarnation, 3u);
+    auto file = value(mapped::NativeFile::open_existing(directory / "session.ang", mapped::FileAccess::ReadOnly));
+    mapped::SuperblockBytes bytes{};
+    value(file.read_exact(0, bytes));
+    const auto profile = value(mapped::decode_superblock(bytes));
+    EXPECT_EQ(profile._formatMinor, 0u);
+    EXPECT_EQ(profile._requiredFeatures, mapped::journal_feature);
+  }
 
   // Source applications have exited before inspection. Retained schema versions
   // and copied inspector metadata outlive every Session/Task/Registry wrapper;

@@ -83,6 +83,6 @@ The CLI closes its native Session handle after obtaining the owning catalog and 
 
 Diagnostics on stderr escape control/non-ASCII bytes as `\xhh` and literal backslashes as `\\` in paths, messages, and delegated exception text. Each failure has one diagnostic line, so a malformed value paired with a control-bearing Field name cannot add terminal commands or forged error lines. The library's structured `Error` retains its original text; escaping is applied when the CLI displays it.
 
-The [primer's capture lesson](primer.md#12-capture-and-inspect-multiple-message-types) shows creation and inspection as separate commands after the creator exits. Step 3.6 extends process/version/restart qualification; native Queue transport, generalized log replay, catalog export/converters, and foreign/physically-read-only native-file tools retain their roadmap scope.
+The [primer's capture lesson](primer.md#12-capture-and-inspect-multiple-message-types) shows creation and inspection as separate commands after the creator exits. Step 3.6's [process exchange lesson](process-exchange.md) qualifies retained catalogs across schema additions and producer replacement. Native Queue transport, generalized log replay, catalog export/converters, and foreign/physically-read-only native-file tools retain their roadmap scope.
 
 [Message records](message-record.md) · [Payloads](message-payload.md) · [Milestone 3 plan](milestones/milestone-3.md)

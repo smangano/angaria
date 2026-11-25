@@ -6,7 +6,7 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1 and [2](docs/milestones/milestone-2.md) are complete. [Milestone 3](docs/milestones/milestone-3.md) begins general message construction with schema-driven binary scalar payloads.
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1 and [2](docs/milestones/milestone-2.md) are complete. [Milestone 3](docs/milestones/milestone-3.md) adds general message construction, capture, and inspection through exact Registry definitions; native Queue transport follows in later milestones.
 
 The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR and, from milestone 3, build numbering starting at `1` for each milestone. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
 
@@ -16,7 +16,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through twelve runnable programs, from creating a Session to configuring fan-out, inspecting Registry history across processes, and capturing messages for generic inspection. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through thirteen runnable programs, from creating a Session to configuring fan-out, inspecting Registry history, and exchanging captured records across processes and producer replacements. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -104,6 +104,14 @@ Step 3.5, framework version **`0.3.5`**, adds [bounded capture streams and gener
 ```
 
 Use a new workspace directory. Keep its native Session catalog alongside the capture; attaching that catalog requires a supported native profile and can perform recovery. The CLI closes native handles before reading the capture. Record, capture, catalog, per-record text, and aggregate output limits bound inspection; ordinary capture I/O does not establish Queue acceptance or delivery.
+
+Step 3.6, framework version **`0.3.6`**, adds [independent-process exchange qualification](docs/process-exchange.md) and the [thirteenth primer program](examples/primer/13_process_exchange.cpp). It keeps an old catalog alive across a same-sized schema addition, replaces a terminated producer after its capture is complete, and inspects every exact version after applications exit:
+
+```sh
+python3 test/process_exchange.py build/angaria_primer_13_process_exchange build/angaria_inspect
+```
+
+Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. This completes the milestone-3 implementation steps; integration of the staging branch into `main` uses a separate PR. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
 
 ## Run the restart walkthrough
 
