@@ -2,7 +2,9 @@
 #include "angaria/inspection.h"
 #include "angaria/runtime.h"
 
+#include <array>
 #include <charconv>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -62,6 +64,44 @@ namespace
     case ErrorCode::OutcomeUnknown: return "OutcomeUnknown";
     }
     return "UnknownError";
+  }
+
+  // Error paths/messages can contain Registry names or caller pathnames.
+  // Escape at the terminal boundary without allocating another error string,
+  // including when reporting an allocation failure from a delegated operation.
+  void write_diagnostic_text(std::ostream& output, std::string_view text)
+  {
+    constexpr std::string_view digits{"0123456789abcdef"};
+    std::array<char, 1024> buffer{};
+    std::size_t used{};
+    for (const auto character : text)
+    {
+      // Reserve enough room for one escaped byte. Chunking avoids flushing
+      // stderr for every character of a long Registry name or pathname.
+      if (buffer.size() - used < 4)
+      {
+        output.write(buffer.data(), static_cast<std::streamsize>(used));
+        used = 0;
+      }
+      const auto byte = static_cast<unsigned char>(character);
+      if (byte == '\\')
+      {
+        buffer[used++] = '\\';
+        buffer[used++] = '\\';
+      }
+      else if (byte >= 0x20 && byte <= 0x7e)
+      {
+        buffer[used++] = character;
+      }
+      else
+      {
+        buffer[used++] = '\\';
+        buffer[used++] = 'x';
+        buffer[used++] = digits[byte >> 4];
+        buffer[used++] = digits[byte & 0x0f];
+      }
+    }
+    output.write(buffer.data(), static_cast<std::streamsize>(used));
   }
 
   [[noreturn]] void fail(ErrorCode code, std::string path, std::string message)
@@ -221,8 +261,11 @@ int main(int argc, char** argv)
   }
   catch (const ToolFailure& failure)
   {
-    std::cerr << error_name(failure._error._code) << " at " << failure._error._path
-              << ": " << failure._error._message << '\n';
+    std::cerr << error_name(failure._error._code) << " at ";
+    write_diagnostic_text(std::cerr, failure._error._path);
+    std::cerr << ": ";
+    write_diagnostic_text(std::cerr, failure._error._message);
+    std::cerr << '\n';
   }
   catch (const std::bad_alloc&)
   {
@@ -230,7 +273,9 @@ int main(int argc, char** argv)
   }
   catch (const std::exception& error)
   {
-    std::cerr << "IoError at cli: " << error.what() << '\n';
+    std::cerr << "IoError at cli: ";
+    write_diagnostic_text(std::cerr, error.what());
+    std::cerr << '\n';
   }
   return 1;
 }

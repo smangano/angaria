@@ -592,6 +592,8 @@ Each group has a header identifying the message, source Session, producer, exact
 
 The command has separate limits for record bytes, total capture bytes, retained/expanded catalog bytes, text per record, and total printed output. Run `./build/angaria_inspect --help` for the defaults and named overrides. For example, adding `--max-record-bytes 95` rejects the first 96-byte Quote before allocating its payload. Errors identify the record index and starting byte offset. If a later record fails, earlier complete records may already have been printed; a nonzero exit status means inspection did not finish successfully.
 
+Error diagnostics also escape names and paths: a saved newline appears as `\x0a`, rather than starting another diagnostic line. This applies even when an invalid payload causes an error containing its Field name.
+
 The capture is opened read-only. Obtaining its catalog uses normal native `Session::attach` and `Registry::snapshot`, which require a qualified matching native ABI and may perform recovery writes. This is not physically read-only or foreign-profile Session-file inspection. The capture contains message records, not an exported copy of every Registry definition; deleting the Session loses the catalog needed by this workflow.
 
 The application writes ordinary files after constructing records in its own memory. Capture order, repeated IDs, and successful inspection do not establish Queue publication acceptance or delivery. Further multi-process and restart qualification follows in step 3.6; native Queue operations remain with their roadmap milestones.

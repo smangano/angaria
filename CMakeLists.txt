@@ -121,6 +121,9 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_registry_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_registry_worker PRIVATE angaria)
 
+  add_executable(angaria_capture_diagnostic_worker test/capture_diagnostic_worker.cpp)
+  target_link_libraries(angaria_capture_diagnostic_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_field.cpp
@@ -237,6 +240,7 @@ if(BUILD_TESTING)
     NAME capture_example
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/capture_example.py"
             "$<TARGET_FILE:angaria_primer_12_capture>" "$<TARGET_FILE:angaria_inspect>"
+            "$<TARGET_FILE:angaria_capture_diagnostic_worker>"
   )
   set_tests_properties(capture_example PROPERTIES TIMEOUT 60)
   add_test(
