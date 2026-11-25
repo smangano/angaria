@@ -110,6 +110,7 @@ namespace angaria::detail
     {
     case EFieldBase::BASE_CHAR:
     case EFieldBase::BASE_BYTE:
+    case EFieldBase::BASE_INT8:
       width = 1;
       break;
     case EFieldBase::BASE_INT16:
@@ -126,6 +127,13 @@ namespace angaria::detail
     case EFieldBase::BASE_FLOAT64:
       width = 8;
       break;
+    case EFieldBase::BASE_CHARS:
+      if (descriptor._logical._kind == FieldLogicalKind::FixedAscii)
+      {
+        width = descriptor._size;
+        break;
+      }
+      runtime_fail(ErrorCode::UnsupportedPolicy, "field.base", "Untagged character arrays have no implemented logical representation");
     case EFieldBase::BASE_NONE:
     case EFieldBase::BASE_DATE:
     case EFieldBase::BASE_TIMESTAMP:
@@ -138,7 +146,6 @@ namespace angaria::detail
     case EFieldBase::BASE_MILLISECS:
     case EFieldBase::BASE_MICROSECS:
     case EFieldBase::BASE_NANOSECS:
-    case EFieldBase::BASE_CHARS:
     case EFieldBase::BASE_BYTES:
     case EFieldBase::BASE_SYMBOL:
     case EFieldBase::BASE_STRING:
@@ -172,6 +179,11 @@ namespace angaria::detail
         runtime_fail(ErrorCode::IoError, "field.index", "Field identity, name, or immutable definition chain is inconsistent");
       }
       check_registration(definition._registration, index, envelope, actors);
+      if (mapped::field_requires_basic_fields(descriptor) &&
+          (access._session->_controller->configuration()._requiredFeatures & mapped::basic_fields_feature) == 0)
+      {
+        runtime_fail(ErrorCode::IoError, "field.feature", "Stored Field requires basic_fields_v1 in its Session profile");
+      }
       runtime_validate_field_policy(descriptor, ErrorCode::IoError);
       fields.push_back(LoadedField{std::move(definition), index._reference, index._offset});
     }

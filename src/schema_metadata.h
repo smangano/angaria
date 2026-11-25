@@ -27,6 +27,9 @@ namespace angaria::detail::mapped
   // Pure metadata preflight. Native support/size policy and Registry reference
   // resolution are checked by the runtime, not by these portable codecs.
   OperationResult validate_field_descriptor(const FieldDescriptor& descriptor);
+  Result<FieldDescriptor> canonicalize_field_descriptor(const FieldDescriptor& descriptor);
+  Result<std::uint64_t> field_definition_body_bytes(const FieldDescriptor& descriptor);
+  bool field_requires_basic_fields(const FieldDescriptor& descriptor);
   OperationResult validate_message_descriptor(const MessageDescriptor& descriptor);
   Result<std::vector<std::byte>> encode_field_definition(const FieldDefinition& definition,
                                                         std::uint64_t recordOffset);

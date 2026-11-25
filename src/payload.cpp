@@ -4,6 +4,7 @@
 #include "runtime_state.h"
 #include "schema_metadata.h"
 
+#include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -51,7 +52,7 @@ namespace angaria
       }
     }
 
-    bool matches(EFieldBase base, const ScalarValue& value)
+    bool scalar_matches(EFieldBase base, const PayloadValue& value)
     {
       switch (base)
       {
@@ -59,6 +60,8 @@ namespace angaria
         return std::holds_alternative<char>(value);
       case EFieldBase::BASE_BYTE:
         return std::holds_alternative<std::uint8_t>(value);
+      case EFieldBase::BASE_INT8:
+        return std::holds_alternative<std::int8_t>(value);
       case EFieldBase::BASE_INT16:
         return std::holds_alternative<std::int16_t>(value);
       case EFieldBase::BASE_UINT16:
@@ -78,6 +81,126 @@ namespace angaria
       default:
         return false;
       }
+    }
+
+    bool integer_matches(EFieldBase base, const IntegerValue& value)
+    {
+      switch (base)
+      {
+      case EFieldBase::BASE_INT8:
+        return std::holds_alternative<std::int8_t>(value);
+      case EFieldBase::BASE_BYTE:
+        return std::holds_alternative<std::uint8_t>(value);
+      case EFieldBase::BASE_INT16:
+        return std::holds_alternative<std::int16_t>(value);
+      case EFieldBase::BASE_UINT16:
+        return std::holds_alternative<std::uint16_t>(value);
+      case EFieldBase::BASE_INT32:
+        return std::holds_alternative<std::int32_t>(value);
+      case EFieldBase::BASE_UINT32:
+        return std::holds_alternative<std::uint32_t>(value);
+      case EFieldBase::BASE_INT64:
+        return std::holds_alternative<std::int64_t>(value);
+      case EFieldBase::BASE_UINT64:
+        return std::holds_alternative<std::uint64_t>(value);
+      default:
+        return false;
+      }
+    }
+
+    EnumerationNumber enumeration_number(const IntegerValue& value)
+    {
+      return std::visit([](auto integer) -> EnumerationNumber
+      {
+        if constexpr (std::is_signed_v<decltype(integer)>)
+        {
+          return static_cast<std::int64_t>(integer);
+        }
+        else
+        {
+          return static_cast<std::uint64_t>(integer);
+        }
+      }, value);
+    }
+
+    bool declared_enumerator(const FieldDescriptor& field, const IntegerValue& value)
+    {
+      const auto number = enumeration_number(value);
+      const auto& entries = field._logical._enumerators;
+      const auto entry = std::lower_bound(entries.begin(), entries.end(), number,
+          [](const EnumeratorDescriptor& candidate, const EnumerationNumber& selected)
+          {
+            return candidate._value < selected;
+          });
+      return entry != entries.end() && entry->_value == number;
+    }
+
+    [[noreturn]] void invalid_value(const FieldDescriptor& field, std::size_t index, const char* message)
+    {
+      detail::runtime_fail(ErrorCode::InvalidArgument, "payload.values[" + std::to_string(index) + "]",
+                           "Field " + field._name + ": " + message);
+    }
+
+    void validate_value(const FieldDescriptor& field, const PayloadValue& value, std::size_t index)
+    {
+      switch (field._logical._kind)
+      {
+      case FieldLogicalKind::None:
+        if (!scalar_matches(field._base, value))
+        {
+          invalid_value(field, index, "Value alternative must exactly match the scalar storage base");
+        }
+        return;
+      case FieldLogicalKind::Boolean:
+        if (!std::holds_alternative<bool>(value))
+        {
+          invalid_value(field, index, "A Boolean requires an explicit bool value");
+        }
+        return;
+      case FieldLogicalKind::Bits:
+      {
+        const auto* bits = std::get_if<BitFieldValue>(&value);
+        if (!bits)
+        {
+          invalid_value(field, index, "A bit field requires BitFieldValue");
+        }
+        if (field._size < 8 && bits->_value >= (std::uint64_t{1} << (field._size * 8)))
+        {
+          invalid_value(field, index, "Bit-field value exceeds its declared width");
+        }
+        return;
+      }
+      case FieldLogicalKind::Enumeration:
+      {
+        const auto* selected = std::get_if<EnumValue>(&value);
+        if (!selected || !integer_matches(field._base, selected->_value))
+        {
+          invalid_value(field, index, "An enum requires EnumValue with the exact underlying integer alternative");
+        }
+        if (!declared_enumerator(field, selected->_value))
+        {
+          invalid_value(field, index, "Enum number has no registered label");
+        }
+        return;
+      }
+      case FieldLogicalKind::FixedAscii:
+      {
+        const auto* text = std::get_if<FixedAsciiValue>(&value);
+        if (!text || text->_text.size() != field._size)
+        {
+          invalid_value(field, index, "Fixed ASCII requires exactly the declared number of bytes");
+        }
+        for (const auto byte : text->_text)
+        {
+          if (static_cast<unsigned char>(byte) > 0x7f)
+          {
+            invalid_value(field, index, "Fixed ASCII contains a byte outside 00..7f");
+          }
+        }
+        return;
+      }
+      }
+      detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unknown logical Field kind");
     }
 
     template <typename Unsigned>
@@ -150,27 +273,31 @@ namespace angaria
       }
     }
 
-    void write_scalar(std::span<std::byte> output, std::size_t offset, const ScalarValue& value)
+    void write_scalar(std::span<std::byte> output, std::size_t offset, const PayloadValue& value)
     {
-      std::visit([&](auto scalar)
+      std::visit([&](const auto& scalar)
       {
-        using Type = decltype(scalar);
+        using Type = std::remove_cvref_t<decltype(scalar)>;
         if constexpr (std::is_same_v<Type, char>)
         {
           write_integer(output, offset, std::bit_cast<std::uint8_t>(scalar));
         }
-        else if constexpr (std::is_integral_v<Type>)
+        else if constexpr (std::is_integral_v<Type> && !std::is_same_v<Type, bool>)
         {
           write_integer(output, offset, static_cast<std::make_unsigned_t<Type>>(scalar));
         }
-        else
+        else if constexpr (std::is_floating_point_v<Type>)
         {
           write_float(output, offset, scalar);
+        }
+        else
+        {
+          detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Logical value reached the scalar encoder");
         }
       }, value);
     }
 
-    ScalarValue read_scalar(EFieldBase base, std::span<const std::byte> input, std::size_t offset)
+    PayloadValue read_scalar(EFieldBase base, std::span<const std::byte> input, std::size_t offset)
     {
       switch (base)
       {
@@ -178,6 +305,8 @@ namespace angaria
         return ScalarValue{std::in_place_type<char>, std::bit_cast<char>(read_integer<std::uint8_t>(input, offset))};
       case EFieldBase::BASE_BYTE:
         return ScalarValue{std::in_place_type<std::uint8_t>, read_integer<std::uint8_t>(input, offset)};
+      case EFieldBase::BASE_INT8:
+        return ScalarValue{std::in_place_type<std::int8_t>, read_signed<std::int8_t>(input, offset)};
       case EFieldBase::BASE_INT16:
         return ScalarValue{std::in_place_type<std::int16_t>, read_signed<std::int16_t>(input, offset)};
       case EFieldBase::BASE_UINT16:
@@ -197,6 +326,120 @@ namespace angaria
       default:
         detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unsupported Field base");
       }
+    }
+
+    void write_field(std::span<std::byte> output, std::size_t offset,
+                       const FieldDescriptor& field, const PayloadValue& value)
+    {
+      switch (field._logical._kind)
+      {
+      case FieldLogicalKind::None:
+        write_scalar(output, offset, value);
+        return;
+      case FieldLogicalKind::Boolean:
+        output[offset] = std::get<bool>(value) ? std::byte{1} : std::byte{};
+        return;
+      case FieldLogicalKind::Bits:
+      {
+        const auto bits = std::get<BitFieldValue>(value)._value;
+        for (std::size_t byte = 0; byte < field._size; ++byte)
+        {
+          output[offset + byte] = static_cast<std::byte>((bits >> (byte * 8)) & 0xffu);
+        }
+        return;
+      }
+      case FieldLogicalKind::Enumeration:
+        std::visit([&](auto integer)
+        {
+          using Unsigned = std::make_unsigned_t<decltype(integer)>;
+          write_integer(output, offset, static_cast<Unsigned>(integer));
+        }, std::get<EnumValue>(value)._value);
+        return;
+      case FieldLogicalKind::FixedAscii:
+      {
+        const auto& text = std::get<FixedAsciiValue>(value)._text;
+        for (std::size_t byte = 0; byte < text.size(); ++byte)
+        {
+          output[offset + byte] = static_cast<std::byte>(static_cast<unsigned char>(text[byte]));
+        }
+        return;
+      }
+      }
+      detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unknown logical Field kind");
+    }
+
+    IntegerValue read_enum_integer(EFieldBase base, std::span<const std::byte> input, std::size_t offset)
+    {
+      switch (base)
+      {
+      case EFieldBase::BASE_INT8:
+        return read_signed<std::int8_t>(input, offset);
+      case EFieldBase::BASE_BYTE:
+        return read_integer<std::uint8_t>(input, offset);
+      case EFieldBase::BASE_INT16:
+        return read_signed<std::int16_t>(input, offset);
+      case EFieldBase::BASE_UINT16:
+        return read_integer<std::uint16_t>(input, offset);
+      case EFieldBase::BASE_INT32:
+        return read_signed<std::int32_t>(input, offset);
+      case EFieldBase::BASE_UINT32:
+        return read_integer<std::uint32_t>(input, offset);
+      case EFieldBase::BASE_INT64:
+        return read_signed<std::int64_t>(input, offset);
+      case EFieldBase::BASE_UINT64:
+        return read_integer<std::uint64_t>(input, offset);
+      default:
+        detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains invalid enum storage");
+      }
+    }
+
+    PayloadValue read_field(const FieldDescriptor& field, std::span<const std::byte> input,
+                             std::size_t offset, std::size_t index)
+    {
+      switch (field._logical._kind)
+      {
+      case FieldLogicalKind::None:
+        return read_scalar(field._base, input, offset);
+      case FieldLogicalKind::Boolean:
+      {
+        const auto byte = std::to_integer<unsigned>(input[offset]);
+        if (byte > 1)
+        {
+          invalid_value(field, index, "Boolean wire byte must be 00 or 01");
+        }
+        return byte == 1;
+      }
+      case FieldLogicalKind::Bits:
+      {
+        std::uint64_t bits{};
+        for (std::size_t byte = 0; byte < field._size; ++byte)
+        {
+          bits |= std::uint64_t{std::to_integer<std::uint8_t>(input[offset + byte])} << (byte * 8);
+        }
+        return BitFieldValue{bits};
+      }
+      case FieldLogicalKind::Enumeration:
+      {
+        auto number = read_enum_integer(field._base, input, offset);
+        if (!declared_enumerator(field, number))
+        {
+          invalid_value(field, index, "Enum wire number has no registered label");
+        }
+        return EnumValue{std::move(number)};
+      }
+      case FieldLogicalKind::FixedAscii:
+      {
+        for (std::size_t byte = 0; byte < field._size; ++byte)
+        {
+          if (std::to_integer<unsigned>(input[offset + byte]) > 0x7f)
+          {
+            invalid_value(field, index, "Fixed ASCII wire byte is outside 00..7f");
+          }
+        }
+        return FixedAsciiValue{std::string{reinterpret_cast<const char*>(input.data() + offset), field._size}};
+      }
+      }
+      detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unknown logical Field kind");
     }
   } // namespace
 
@@ -347,7 +590,8 @@ namespace angaria
       ordered.reserve(selected->_fields.size());
       for (const auto id : selected->_fields)
       {
-        ordered.push_back(*referenced.at(id));
+        ordered.push_back(detail::runtime_value(
+            detail::mapped::canonicalize_field_descriptor(*referenced.at(id))));
       }
       return BinaryPayloadCodec{schema, std::move(ordered), size};
     }
@@ -380,7 +624,7 @@ namespace angaria
     }
   }
 
-  Result<std::vector<std::byte>> BinaryPayloadCodec::encode(std::span<const ScalarValue> values) const
+  Result<std::vector<std::byte>> BinaryPayloadCodec::encode(std::span<const PayloadValue> values) const
   {
     try
     {
@@ -391,17 +635,13 @@ namespace angaria
       }
       for (std::size_t index = 0; index < values.size(); ++index)
       {
-        if (!matches(_fields[index]._base, values[index]))
-        {
-          detail::runtime_fail(ErrorCode::InvalidArgument, "payload.values[" + std::to_string(index) + "]",
-                               "Value alternative must exactly match the declared scalar Field base");
-        }
+        validate_value(_fields[index], values[index], index);
       }
       std::vector<std::byte> result(static_cast<std::size_t>(_payloadSize));
       std::size_t offset{};
       for (std::size_t index = 0; index < values.size(); ++index)
       {
-        write_scalar(result, offset, values[index]);
+        write_field(result, offset, _fields[index], values[index]);
         offset += _fields[index]._size;
       }
       return result;
@@ -412,7 +652,35 @@ namespace angaria
     }
   }
 
-  Result<std::vector<ScalarValue>> BinaryPayloadCodec::decode(std::span<const std::byte> payload) const
+  Result<std::vector<std::byte>> BinaryPayloadCodec::encode(std::initializer_list<PayloadValue> values) const
+  {
+    return encode(std::span<const PayloadValue>{values.begin(), values.size()});
+  }
+
+  OperationResult BinaryPayloadCodec::encode_into(std::span<const PayloadValue> values,
+                                                  std::span<std::byte> output) const
+  {
+    try
+    {
+      check_valid();
+      if (output.size() != _payloadSize)
+      {
+        detail::runtime_fail(ErrorCode::InvalidArgument, "payload.output_size",
+                             "Output byte count must exactly match the schema");
+      }
+      // Complete validation and temporary allocation before touching caller
+      // storage. No failing later Field can leave an earlier prefix written.
+      const auto encoded = detail::runtime_value(encode(values));
+      std::copy(encoded.begin(), encoded.end(), output.begin());
+      return std::monostate{};
+    }
+    catch (...)
+    {
+      return payload_error();
+    }
+  }
+
+  Result<std::vector<PayloadValue>> BinaryPayloadCodec::decode(std::span<const std::byte> payload) const
   {
     try
     {
@@ -421,12 +689,13 @@ namespace angaria
       {
         detail::runtime_fail(ErrorCode::InvalidArgument, "payload.size", "Payload byte count must exactly match the schema");
       }
-      std::vector<ScalarValue> result;
+      std::vector<PayloadValue> result;
       result.reserve(_fields.size());
       std::size_t offset{};
-      for (const auto& field : _fields)
+      for (std::size_t index = 0; index < _fields.size(); ++index)
       {
-        result.push_back(read_scalar(field._base, payload, offset));
+        const auto& field = _fields[index];
+        result.push_back(read_field(field, payload, offset, index));
         offset += field._size;
       }
       return result;

@@ -51,6 +51,17 @@ namespace angaria::detail::mapped
     std::optional<Error> validate_configuration(const SuperblockConfiguration& configuration,
                                                 ErrorCode code)
     {
+      if (configuration._formatMinor > format_minor)
+      {
+        return failure(code, "superblock.format", "Unsupported format version; expected 2.0 or 2.1");
+      }
+      const bool basic = (configuration._requiredFeatures & basic_fields_feature) != 0;
+      if ((configuration._requiredFeatures & journal_feature) == 0 ||
+          basic != (configuration._formatMinor == 1))
+      {
+        return failure(code, "superblock.required_features",
+                       "Format 2.0 requires the journal; 2.1 also requires basic_fields_v1");
+      }
       if (configuration._session == SessionId{})
       {
         return failure(code, "superblock.session", "Session identity must be nonzero");
@@ -118,7 +129,7 @@ namespace angaria::detail::mapped
     SuperblockBytes bytes{};
     std::copy(MAGIC.begin(), MAGIC.end(), bytes.begin());
     write_integer<std::uint16_t>(bytes, 8, format_major);
-    write_integer<std::uint16_t>(bytes, 10, format_minor);
+    write_integer<std::uint16_t>(bytes, 10, configuration._formatMinor);
     write_integer<std::uint32_t>(bytes, 12, superblock_bytes);
     write_integer<std::uint64_t>(bytes, 16, configuration._session._high);
     write_integer<std::uint64_t>(bytes, 24, configuration._session._low);
@@ -176,9 +187,9 @@ namespace angaria::detail::mapped
       return malformed("superblock.magic", "Invalid ANGARIA magic");
     }
     if (read_integer<std::uint16_t>(bytes, 8) != format_major ||
-        read_integer<std::uint16_t>(bytes, 10) != format_minor)
+        read_integer<std::uint16_t>(bytes, 10) > format_minor)
     {
-      return malformed("superblock.format", "Unsupported format version; expected 2.0");
+      return malformed("superblock.format", "Unsupported format version; expected 2.0 or 2.1");
     }
     if (read_integer<std::uint32_t>(bytes, 12) != superblock_bytes)
     {
@@ -198,6 +209,7 @@ namespace angaria::detail::mapped
     }
 
     SuperblockConfiguration configuration;
+    configuration._formatMinor = read_integer<std::uint16_t>(bytes, 10);
     configuration._session._high = read_integer<std::uint64_t>(bytes, 16);
     configuration._session._low = read_integer<std::uint64_t>(bytes, 24);
     configuration._maxLogBytes = read_integer<std::uint64_t>(bytes, 32);
@@ -263,6 +275,10 @@ namespace angaria::detail::mapped
     if (supported._liveAbiProfile == 0 || supported._synchronizationVersion == 0)
     {
       return failure(ErrorCode::InvalidArgument, "compatibility", "The native adapter must declare its profile and protocol");
+    }
+    if (configuration._formatMinor > supported._maxFormatMinor)
+    {
+      return failure(ErrorCode::IoError, "superblock.format", "Format minor exceeds the reader's supported profile");
     }
     if (configuration._liveAbiProfile != supported._liveAbiProfile)
     {

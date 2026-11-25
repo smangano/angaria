@@ -47,6 +47,10 @@ namespace
   mapped::SuperblockConfiguration fixture_configuration()
   {
     mapped::SuperblockConfiguration configuration;
+    // Keep the independently authored 2.0 fixture unchanged. New native
+    // Sessions default to 2.1; both profiles have explicit qualification below.
+    configuration._formatMinor = 0;
+    configuration._requiredFeatures = mapped::journal_feature;
     configuration._session._high = 0x0807060504030201;
     configuration._session._low = 0x8877665544332211;
     configuration._maxLogBytes = 0x0000000203040506;
@@ -513,5 +517,56 @@ namespace
     --ceilings._stringPoolBytes;
     supported._capacityCeilings = ceilings;
     expect_error(mapped::check_live_compatibility(configuration, supported), ErrorCode::IoError);
+  }
+
+  // The new profile advertises logical metadata before its first Field exists.
+  // A reader limited to 2.0 or lacking the feature must reject that Session.
+  TEST(MappedSuperblock, BasicFieldsProfileIsExplicitAndNegotiated)
+  {
+    auto current = fixture_configuration();
+    current._formatMinor = 1;
+    current._requiredFeatures = 3;
+    const auto encoded = mapped::encode_initial_superblock(current);
+    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(encoded));
+    const auto& bytes = std::get<mapped::SuperblockBytes>(encoded);
+    EXPECT_EQ(get_integer(bytes, 10, 2), 1u);
+    EXPECT_EQ(get_integer(bytes, 56, 8), 3u);
+    const auto decoded = mapped::decode_superblock(bytes);
+    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
+    EXPECT_EQ(std::get<mapped::SuperblockConfiguration>(decoded)._formatMinor, 1u);
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(
+        mapped::check_live_compatibility(current, fixture_support())));
+
+    auto legacy = fixture_support();
+    legacy._maxFormatMinor = 0;
+    legacy._supportedRequiredFeatures = 1;
+    expect_error(mapped::check_live_compatibility(current, legacy), ErrorCode::IoError);
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(
+        mapped::check_live_compatibility(fixture_configuration(), legacy)));
+    legacy._maxFormatMinor = 1;
+    expect_error(mapped::check_live_compatibility(current, legacy), ErrorCode::IoError);
+  }
+
+  // A feature flag alone cannot reinterpret 2.0, and a 2.1 header cannot omit
+  // required logical semantics. These are malformed profiles, not optional data.
+  TEST(MappedSuperblock, FormatAndBasicFieldFeatureCannotDisagree)
+  {
+    auto bytes = golden_superblock();
+    for (const auto [minor, features] :
+         {std::pair{0u, 3u}, std::pair{1u, 1u}, std::pair{1u, 2u}, std::pair{2u, 3u}})
+    {
+      SCOPED_TRACE(minor);
+      SCOPED_TRACE(features);
+      auto changed = bytes;
+      put_integer(changed, 10, minor, 2);
+      put_integer(changed, 56, features, 8);
+      expect_error(mapped::decode_superblock(changed), ErrorCode::IoError);
+    }
+    auto configuration = fixture_configuration();
+    configuration._requiredFeatures = 3;
+    expect_error(mapped::encode_initial_superblock(configuration), ErrorCode::InvalidConfiguration);
+    configuration._formatMinor = 1;
+    configuration._requiredFeatures = 1;
+    expect_error(mapped::encode_initial_superblock(configuration), ErrorCode::InvalidConfiguration);
   }
 } // namespace

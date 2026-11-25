@@ -16,7 +16,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through nine runnable programs, from creating a Session to configuring fan-out, inspecting Registry history across processes, and encoding binary payloads. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through ten runnable programs, from creating a Session to configuring fan-out, inspecting Registry history across processes, and encoding scalar and logical payloads. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -58,7 +58,7 @@ Relative Session directories resolve from the TOML file's parent directory. Crea
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines format 2.0, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, and publication identity issuance are implemented. Message delivery and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines retained format 2.0, current format 2.1, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, and publication identity issuance are implemented. Message delivery and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Publication, delivery, and notification behavior follow in their implementation milestones.
 
@@ -74,7 +74,7 @@ Step 2.5 integrates [public Session creation and attachment](docs/native-storage
 
 Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registration) through a live Task's Registry. Exact descriptors return the existing identity without writing; conflicting descriptors, exhausted capacities, and insufficient log space preserve existing registrations. Process and Thread Tasks can be registered before attachment, and each successful new registration commits one immutable definition and Registry revision. Tests cover concurrent registrars, independent discovery, and interrupted registration/recovery.
 
-Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. The current native implementation supports fixed-width scalar Fields; step 3.1 adds their payload encoding below, while additional Field representations follow their roadmap steps. Step 2.10 integrates TOML loading below.
+Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. Step 3.1 adds scalar payload encoding below, and step 3.3 adds basic logical Fields. Step 2.10 integrates TOML loading below.
 
 Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-and-queue-sets), shared typed Queue Set identities, ownership checks, and atomic Source membership registration. Independent-process tests exercise discovery, concurrent registration, and interrupted multi-record updates. Activation, ring allocation, and endpoints follow their roadmap steps.
 
@@ -90,9 +90,9 @@ python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/p
 
 The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities. The ninth lesson adds payload encoding; delivery follows its roadmap milestones.
 
-Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Message headers, inspection, and additional basic Field representations follow the [milestone 3 steps](docs/milestones/milestone-3.md).
+Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Message headers and inspection follow the [milestone 3 steps](docs/milestones/milestone-3.md).
 
-Step 3.2, framework version `0.3.2`, defines the [basic logical Field contract](docs/logical-fields.md): booleans, bit fields, closed enumerations, and fixed ASCII, with their planned TOML and compatibility rules. It also identifies the missing signed 8-bit scalar. Implementation follows in step 3.3; the current loader, persisted format, and payload codec retain their existing support.
+Step 3.2 reviewed the [basic logical Field contract](docs/logical-fields.md). Step 3.3, framework version **`0.3.3`**, implements booleans, 8/16/32/64-bit Fields, closed enumerations, fixed ASCII, and signed int8, including immutable Registry metadata and TOML version 2. New Sessions use format 2.1; existing 2.0 Sessions retain scalar behavior. The [tenth primer program](examples/primer/10_logical_fields.cpp) encodes logical values and demonstrates bounded caller-buffer construction with unchanged output on errors. Complete message envelopes follow step 3.4.
 
 ## Run the restart walkthrough
 
