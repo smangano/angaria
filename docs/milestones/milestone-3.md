@@ -9,8 +9,8 @@ The first step uses framework version **`0.3.1`**. Build numbering restarts with
 | Step | Branch | Scope | Completion criterion |
 | --- | --- | --- | --- |
 | 3.1 | `milestone-3-1` | Compile exact registered schemas into owning, bounded binary scalar codecs. | Independent golden bytes verify packed little-endian encoding, signed/unsigned bounds, IEEE floating-point bits, ordered/repeated Fields, empty schemas, errors, and retained exact versions. The ninth primer program encodes and decodes quotes. |
-| 3.2 | `milestone-3-2` | Describe basic logical Fields: booleans, bit fields, enumerations, and fixed character data. | Review their metadata, TOML representation, bounds, and required compatibility/feature rules before extending persisted definitions. Preserve existing base codes and earlier schema meaning. |
-| 3.3 | `milestone-3-3` | Encode/decode the new basic Field representations and provide convenient bounded message construction. | Exact types and representation constraints are enforced; invalid values preserve caller-visible state. Generic inspection can distinguish the logical representations using registered metadata. |
+| 3.2 | `milestone-3-2` | Describe basic logical Fields: booleans, bit fields, enumerations, and fixed ASCII data. | Review their metadata, TOML representation, bounds, and required compatibility/feature rules before extending persisted definitions. Preserve existing base codes and earlier schema meaning; identify the missing signed 8-bit base. |
+| 3.3 | `milestone-3-3` | Implement the reviewed metadata/configuration/profile extensions, encode/decode basic logical Fields and int8, and provide convenient bounded message construction. | Exact types and representation constraints are enforced; invalid values preserve caller-visible state. Generic inspection can distinguish the logical representations using registered metadata. Prior scalar definitions and format-2.0 Sessions retain their meaning. |
 | 3.4 | `milestone-3-4` | Implement canonical generic message headers and record codecs. | Checked bytes carry exact schema identity, payload format/size, producer/publication identity and sequence, enqueue time, and user flags. Destination-specific dequeue/acknowledgment metadata follows the existing receipt contract and is never confused with immutable payload data. |
 | 3.5 | `milestone-3-5` | Capture and inspect several application-defined message types through retained Registry definitions. | An inspector decodes canonical message bytes without application-specific C++ types. It selects exact schema versions and rejects malformed/truncated/unknown records with precise diagnostics. |
 | 3.6 | `milestone-3-6` | Qualify general-message exchange and retained-version inspection across processes. | Producer/reader examples exchange canonical message records through ordinary process/file I/O, survive schema-version additions, and remain inspectable after applications exit. Complete native-profile CI, compatibility checks, and the primer milestone review. |
@@ -24,6 +24,14 @@ Later step boundaries can be split further if a representation or format change 
 The initial codec covers the already registered native scalar bases: char, byte, signed/unsigned 16-/32-/64-bit integers, and 32-/64-bit IEEE floating point. It writes explicit little-endian bytes in schema order, including repeated Fields, without C++ struct padding or embedded type tags. Empty schemas produce empty payloads. Value counts, exact C++ alternatives, declared scalar widths, and encoded lengths are checked. Unsupported representations return errors until implemented in their assigned steps.
 
 The [payload format](../message-payload.md) specifies the bytes and ownership/error rules. The [ninth primer example](../../examples/primer/09_payload.cpp) demonstrates v1/v2 quotes and independent codec lifetime; tests use hand-authored byte fixtures in addition to round trips.
+
+## Step 3.2 Logical Field contract
+
+Step 3.1 is merged into `milestone-3` through [PR #24](https://github.com/smangano/angaria/pull/24). Step 3.2 uses framework version **`0.3.2`** and is the design review before implementation.
+
+The [logical Field contract](../logical-fields.md) defines one-byte booleans, 8/16/32/64-bit Fields, closed user-defined enumerations, and exact fixed ASCII sequences. It specifies owning immutable metadata over existing storage bases, canonical enum mappings, complete numeric ranges in TOML, byte/value bounds, and allocation/error rules. New code 26 will add the Wiki's missing signed 8-bit scalar while preserving codes `0..25`.
+
+Step 3.3 implements the specified format-2.1/required-feature boundary and configuration version 2 with explicit support for existing 2.0 Sessions and version-1 scalar TOML. No current runtime or persisted behavior changes in step 3.2. The [primer's design section](../primer.md#plan-logical-fields-step-32) introduces these choices without presenting planned APIs as runnable examples.
 
 ## Implementation boundaries
 
