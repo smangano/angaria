@@ -43,7 +43,8 @@ Test support remains separate from production encoding so expected bytes cannot 
 | [source_fixture.h](../test/source_fixture.h), [native_log_budget.h](../test/native_log_budget.h) | Public Source setup shared by delivery/lifecycle/deadline tests, plus a separately labeled private exact-log-budget fixture reused by public and private progress qualification. |
 | [native_fixture.h](../test/native_fixture.h) | Private native observation, snapshots, claim-name capture, and deliberate atomic corruption setup. |
 | [process_support.h](../test/process_support.h) | Test pipe reports, continuation, bounded reads/waits, SIGPIPE handling, and status/descriptor mechanics. Worker ownership stays in the fixture. |
-| [example_support.h](../examples/primer/example_support.h), [example_formatting.h](../examples/primer/example_formatting.h) | Primer failure/configuration conventions and related byte/Session-identity presentation. |
+
+The runnable primer intentionally spells out public configuration and result checks in each lesson. Its former generic result/configuration wrappers and shared presentation header have been removed. Application-specific functions may propagate an `Error` through `Result<T>` or `OperationResult`; output-only formatting uses the standard library locally. This keeps each teaching program self-contained without depending on Angaria's private helpers.
 
 ## Intentional local adapters
 
@@ -56,6 +57,6 @@ Some similarly named functions have different responsibilities. Their shared mec
 - Quoted inspection text escapes quotes; diagnostic text leaves printable quotes intact. Shared escaping retains that policy choice, each caller's byte budget, and its line boundaries.
 - Test process constructors and command lines describe different scenarios. Fixture methods remain thin adapters for their owned PID/descriptors and diagnostics. The controller's process-group/reaped state and the Session worker's per-poll timeout remain distinct from aggregate-deadline readers.
 - Raw wire fixtures, Task/schema/topology profiles, and expected values stay explicit in their suites. Coincidentally equal fixture capacities can evolve independently; they are not production capacity defaults.
-- Primer and declaration-example Result wrappers format errors differently. They keep their respective presentation policies rather than changing example output during cleanup.
+- Compile-only interface-review examples may use presentation shortcuts described in their own review contract. Runnable primer programs show public Result checks directly and do not share generic unwrappers with those proposals.
 
 The shared-helper tests cover unaligned and variable-width bytes, signed boundaries, empty/nonzero ranges, arithmetic overflow, move-only Results, wire-code/Field semantics, and escaping across streaming boundaries. Existing format, ownership, recovery, and primer tests remain the behavioral baseline. All shared headers are also compiled independently to check their includes.

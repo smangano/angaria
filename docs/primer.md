@@ -84,15 +84,30 @@ options._defaults._ringCapacity = 8;
 angaria::TaskDescriptor creator;
 creator._name = "Setup";
 
-auto created = primer::value(angaria::Session::create(options, creator));
-const auto metadata = primer::value(created._session.metadata());
+auto created_result = angaria::Session::create(options, creator);
+if (const auto* error = std::get_if<angaria::Error>(&created_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto created = std::get<angaria::CreatedSession>(std::move(created_result));
+
+auto metadata_result = created._session.metadata();
+if (const auto* error = std::get_if<angaria::Error>(&metadata_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto metadata = std::get<angaria::SessionMetadata>(std::move(metadata_result));
 ```
 
 `CreatedSession` contains a Session handle and an attached creator Task handle. A **handle** is a C++ object that keeps the resources for an operation alive. Here, `created._session` gives access to the Session, and `created._creator` acts as its initial Task.
 
-The small [example support header](../examples/primer/example_support.h) supplies two helpers. Later examples reuse the configuration above through `session_options`, including the 1 MiB log limit and ring capacity of eight entries. `value` checks Angaria results so the examples stay readable.
+Each runnable program includes public Angaria headers directly. Programmatic setup spells out the application's `SessionOptions`, including the 1 MiB log limit, named capacities, and eight-entry ring. These are lesson choices, not hidden framework defaults. TOML lessons explicitly call `create_from_file` or `attach_from_file` with their documented configuration file.
 
-Most fallible operations return `Result<T>`, which is a `std::variant<T, Error>`. A variant holds one alternative at a time: either the requested value or an error. `primer::value` returns the value or throws a `std::runtime_error` containing the failure information. Each example catches exceptions at the top of `main`, prints the error, and exits unsuccessfully. A larger application can inspect the `Error` directly and choose whether to retry, ask for different settings, or stop.
+Most fallible operations return `Result<T>`, an alias for `std::variant<T, Error>`. A variant holds either the requested value or an `Error`. First use `std::get_if<angaria::Error>` to check for failure. Only then extract the value with `std::get<T>(std::move(result))`; moving is necessary for ownership handles such as Session and Task. Some programs use `std::get<0>` after the same error check: alternative zero is the successful `T`. `OperationResult` has `std::monostate` as its successful alternative and usually needs only the error check.
+
+The examples handle expected errors by comparing `ErrorCode` values. Unexpected errors propagate from application-specific functions as `Result<T>` or `OperationResult`, and `main` prints diagnostics and exits unsuccessfully. No generic helper converts Angaria errors into exceptions. Standard file and other C++ operations can still throw; their catch blocks handle those separate failures. The snippets below use main-style `return 1` branches; the linked source programs show the complete function boundaries and cleanup scopes. Later snippets with unqualified Angaria types assume a local `using namespace angaria;`, as their full programs do.
 
 The output reports the Session's name, framework version, creator Task ID, and Task capacity. For this fresh Session, `Setup` has Task ID 1 and the Task capacity is eight. The framework version comes from the built library, so later releases will print a newer value. IDs are local to a Session; do not use an ID from one Session in another.
 
@@ -276,17 +291,41 @@ cp examples/primer/configuration.toml "$primer_workspace/07-configuration/settin
 
 The file says `directory = "primer-session"`. A relative Session path starts from the **configuration file's parent directory**, so this creates `$primer_workspace/07-configuration/primer-session`. It does not depend on the shell's current directory. To repeat the lesson, use a new parent directory; creation refuses an existing Session.
 
-The main API sequence is short:
+The public API sequence makes configuration loading and error handling explicit:
 
 ```cpp
 {
-  auto created = primer::value(angaria::Session::create_from_file(argv[1], argv[2]));
+  auto created_result = angaria::Session::create_from_file(argv[1], argv[2]);
+  if (const auto* error = std::get_if<angaria::Error>(&created_result))
+  {
+    std::cerr << error->_path << ": " << error->_message << '\n';
+    return 1;
+  }
+  auto created = std::get<angaria::CreatedSession>(std::move(created_result));
   auto registry = created._session.registry();
-  const auto queue = primer::value(registry.find_queue("FeedToConsumer"));
-  const auto state = primer::value(registry.state(queue));
+  auto queue_result = registry.find_queue("FeedToConsumer");
+  if (const auto* error = std::get_if<angaria::Error>(&queue_result))
+  {
+    std::cerr << error->_path << ": " << error->_message << '\n';
+    return 1;
+  }
+  auto queue = std::get<angaria::QueueId>(std::move(queue_result));
+  auto state_result = registry.state(queue);
+  if (const auto* error = std::get_if<angaria::Error>(&state_result))
+  {
+    std::cerr << error->_path << ": " << error->_message << '\n';
+    return 1;
+  }
+  auto state = std::get<angaria::EntityState>(std::move(state_result));
 } // The creator claim closes when its last owning handle closes.
 
-auto attached = primer::value(angaria::Session::attach_from_file(argv[1]));
+auto attached_result = angaria::Session::attach_from_file(argv[1]);
+if (const auto* error = std::get_if<angaria::Error>(&attached_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto attached = std::get<angaria::Session>(std::move(attached_result));
 ```
 
 The second creation argument is the name of a **Process Task declared in the file**. Here it is `Setup`. The creator uses its declared Task entry; the loader does not add a hidden extra participant. All initial registrations are attributed to that creator. Other declared Tasks start offline.
@@ -331,7 +370,13 @@ A **Registry revision** numbers a committed definition change. A **snapshot** co
 
 ```cpp
 auto registry = session.registry();
-auto snapshot = primer::value(registry.snapshot());
+auto snapshot_result = registry.snapshot();
+if (const auto* error = std::get_if<angaria::Error>(&snapshot_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto snapshot = std::get<angaria::RegistrySnapshot>(std::move(snapshot_result));
 for (const auto& message : snapshot._messages)
 {
   std::cout << message._descriptor._name
@@ -344,7 +389,13 @@ The copy owns its strings and lists. It remains usable after the original Regist
 `snapshot._revision` identifies the copied definitions. Passing an earlier saved revision returns the definitions from that point:
 
 ```cpp
-auto earlier = primer::value(registry.snapshot(saved_revision));
+auto earlier_result = registry.snapshot(saved_revision);
+if (const auto* error = std::get_if<angaria::Error>(&earlier_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto earlier = std::get<angaria::RegistrySnapshot>(std::move(earlier_result));
 ```
 
 Entities added later are absent, and a changed Publishing set retains its old destinations in the historical copy. `_currentRevision` reports the current committed Registry revision observed by the call. Source and destination order is preserved; the top-level entity lists use numeric identity order, with message schemas ordered by type and version.
@@ -367,12 +418,30 @@ The program registers `PriceTicks` as int64, `Quantity` as uint64, and `Instrume
 
 ```cpp
 constexpr std::uint64_t payload_limit = 64;
-auto codec = primer::value(angaria::BinaryPayloadCodec::from_registry(
-    session.registry(), quote_schema, payload_limit));
+auto codec_result = angaria::BinaryPayloadCodec::from_registry(
+    session.registry(), quote_schema, payload_limit);
+if (const auto* error = std::get_if<angaria::Error>(&codec_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto codec = std::get<angaria::BinaryPayloadCodec>(std::move(codec_result));
 const std::array<angaria::ScalarValue, 2> values{
     std::int64_t{-2}, std::uint64_t{7}};
-const auto bytes = primer::value(codec.encode(values));
-const auto decoded = primer::value(codec.decode(bytes));
+auto bytes_result = codec.encode(values);
+if (const auto* error = std::get_if<angaria::Error>(&bytes_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto bytes = std::get<std::vector<std::byte>>(std::move(bytes_result));
+auto decoded_result = codec.decode(bytes);
+if (const auto* error = std::get_if<angaria::Error>(&decoded_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto decoded = std::get<std::vector<angaria::PayloadValue>>(std::move(decoded_result));
 ```
 
 The named byte limit reserves no storage by itself. It tells the codec the largest payload this application is willing to build. This schema needs 16 bytes, so a limit of 15 fails with `CapacityExceeded` while compiling it.
@@ -442,9 +511,15 @@ Enum declarations can use TOML integers or canonical decimal strings. This prese
 The program compiles the exact `OrderSettings` schema with a 64-byte payload limit, then closes every Session, Registry, and Task handle. The owning codec retains its Field definitions and enum labels. It constructs the payload with:
 
 ```cpp
-const auto payload = primer::value(codec.encode({
+auto payload_result = codec.encode({
     true, BitFieldValue{0x8001}, EnumValue{std::uint8_t{1}},
-    FixedAsciiValue{"IBM   "}, std::int8_t{-128}}));
+    FixedAsciiValue{"IBM   "}, std::int8_t{-128}});
+if (const auto* error = std::get_if<angaria::Error>(&payload_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto payload = std::get<std::vector<std::byte>>(std::move(payload_result));
 ```
 
 Fixed ASCII has no automatic terminator, padding, trimming, or truncation. `IBM` needs three explicit spaces to fill the six-byte Field here. A NUL byte is also permitted and preserved; it does not end the Field. Larger 128- and 256-bit Fields, UTF-8 pooled strings, and additional text representations follow in milestone 9.
@@ -486,7 +561,14 @@ The preparation helper creates a Session, registers the same price/quantity Fiel
 MessageHeader header;
 header._schema = schema;
 header._format = PayloadFormat::Binary;
-header._publication = primer::value(created._creator.next_publication_id());
+auto publication_result = created._creator.next_publication_id();
+if (const auto* error = std::get_if<angaria::Error>(&publication_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto publication = std::get<PublicationId>(std::move(publication_result));
+header._publication = publication;
 header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{42}};
 header._flags = 0x80000001u;
 header._payloadBytes = codec.payload_size();
@@ -500,11 +582,29 @@ After the helper returns, every Session, Registry, and Task handle is closed. Th
 
 ```cpp
 constexpr std::uint64_t record_limit = 96;
-const auto bytes = primer::value(MessageRecordCodec::encode(
-    prepared._header, payload, record_limit));
-const auto borrowed = primer::value(MessageRecordCodec::decode_view(bytes, record_limit));
-const auto values = primer::value(MessageRecordCodec::decode_binary(
-    borrowed, prepared._codec, prepared._schemaSession));
+auto bytes_result = MessageRecordCodec::encode(
+    prepared._header, payload, record_limit);
+if (const auto* error = std::get_if<angaria::Error>(&bytes_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto bytes = std::get<std::vector<std::byte>>(std::move(bytes_result));
+auto borrowed_result = MessageRecordCodec::decode_view(bytes, record_limit);
+if (const auto* error = std::get_if<angaria::Error>(&borrowed_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto borrowed = std::get<MessageRecordView>(std::move(borrowed_result));
+auto values_result = MessageRecordCodec::decode_binary(
+    borrowed, prepared._codec, prepared._schemaSession);
+if (const auto* error = std::get_if<angaria::Error>(&values_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto values = std::get<std::vector<PayloadValue>>(std::move(values_result));
 ```
 
 `record_limit` includes both header and payload. A limit of 95 rejects this record with `CapacityExceeded`. `decode_header` checks exactly the first 80 bytes and the announced total against this budget, which lets a reader check the declared size before allocating a payload buffer. Header parsing alone does not prove the payload is present; full record decoding checks the exact complete length, including rejection of extra trailing bytes.
@@ -531,7 +631,7 @@ Record encoding only: no messages were sent.
 
 `decode_view` returns a header value plus a **borrowed span** into the input record's payload bytes. Keep that input buffer alive and unchanged while using the span. `decode` instead copies the payload into an owning `MessageRecord`. The example destroys the original encoded buffer, then successfully decodes the owning record's retained payload.
 
-`retained.view().message()` provides a `MessageView` whose payload is the original 16 application bytes. This adapter borrows the owning record, so keep that record alive too. It supplies the view shape used by future transport operations; this lesson makes no Queue call. The portable 80-byte header is separate from the native arena's storage and receipt records. Recognition of JSON, XML, CSV, or Text in a record header also does not provide a serializer for those formats; typed decoding here uses the Binary payload codec.
+`retained.view().message()` provides a `MessageView` whose payload is the original 16 application bytes. This adapter borrows the owning record, so keep that record alive too. It supplies the view shape accepted by direct send in lesson 14; this lesson makes no Queue call. The portable 80-byte header is separate from the native arena's storage and receipt records. Recognition of JSON, XML, CSV, or Text in a record header also does not provide a serializer for those formats; typed decoding here uses the Binary payload codec.
 
 ## 12. Capture and inspect multiple message types
 
@@ -548,8 +648,19 @@ A **capture** is a saved sequence of portable message records. This example writ
 The first program creates a new workspace exclusively. Inside it, the program creates `session` and `capture.angcap`, registers the application Fields and message schemas, issues publication identities, and writes through `MessageCaptureWriter`:
 
 ```cpp
-auto writer = primer::value(MessageCaptureWriter::create(output, 1024, 4096));
-primer::value(writer.append(header, payload));
+auto writer_result = MessageCaptureWriter::create(output, 1024, 4096);
+if (const auto* error = std::get_if<angaria::Error>(&writer_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto writer = std::get<MessageCaptureWriter>(std::move(writer_result));
+auto append_result = writer.append(header, payload);
+if (const auto* error = std::get_if<angaria::Error>(&append_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
 ```
 
 The first limit bounds one complete record; the second bounds the complete capture. The file contains the same 80-byte-header records from lesson 11, one after another. Ordinary capture writes do not have the native Session's transaction journal: an I/O failure may leave an incomplete final record. The reader reports that error instead of guessing where a later record might begin.
@@ -598,7 +709,7 @@ Error diagnostics also escape names and paths: a saved newline appears as `\x0a`
 
 The capture is opened read-only. Obtaining its catalog uses normal native `Session::attach` and `Registry::snapshot`, which require a qualified matching native ABI and may perform recovery writes. This is not physically read-only or foreign-profile Session-file inspection. The capture contains message records, not an exported copy of every Registry definition; deleting the Session loses the catalog needed by this workflow.
 
-The application writes ordinary files after constructing records in its own memory. Capture order, repeated IDs, and successful inspection do not establish Queue publication acceptance or delivery. The next lesson extends this to independent processes and producer replacement; native Queue operations remain with their roadmap milestones.
+The application writes ordinary files after constructing records in its own memory. Capture order, repeated IDs, and successful inspection do not establish Queue publication acceptance or delivery. The next lesson extends this to independent processes and producer replacement; lessons 14–15 demonstrate the implemented native Queue APIs.
 
 ## 13. Exchange captures across processes and schema changes
 
@@ -649,13 +760,36 @@ This program registers a Feed producer, a Strategy consumer, and their connectio
 The send sequence uses the same message model as the approved public interface:
 
 ```cpp
-auto writer = primer::value(created._creator.open_writer("FeedToStrategy"));
+auto writer_result = created._creator.open_writer("FeedToStrategy");
+if (const auto* error = std::get_if<angaria::Error>(&writer_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto writer = std::get<QueueWriter>(std::move(writer_result));
 MessageHeader header;
 header._schema = schema;
 header._payloadBytes = bytes.size();
 MessageView message{header, bytes};
-auto id = primer::value(created._creator.next_publication_id());
-auto outcome = primer::value(writer.send(id, message));
+auto id_result = created._creator.next_publication_id();
+if (const auto* error = std::get_if<angaria::Error>(&id_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto id = std::get<PublicationId>(std::move(id_result));
+auto outcome_result = writer.send(id, message);
+if (const auto* error = std::get_if<angaria::Error>(&outcome_result))
+{
+  if (error->_code == ErrorCode::OutcomeUnknown)
+  {
+    // Retain id and resolve it with publication_status; do not issue another ID.
+    std::cerr << "OutcomeUnknown for sequence " << id._sequence << '\n';
+  }
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto outcome = std::get<PublicationOutcome>(std::move(outcome_result));
 ```
 
 A **MessageView** holds its header by value and borrows the payload vector. Keep that vector alive and unchanged while sending. Angaria copies accepted bytes into its stored Publication. The explicit issued ID and Angaria's clock establish the new stored identity and publication time; the caller's input header stays unchanged. Binary bytes must match the exact registered schema, including logical Field constraints.
@@ -695,15 +829,53 @@ This program sends three Quotes before Strategy attaches. The Queue's ring holds
 Open the consumer's Source once, then inspect the receive result:
 
 ```cpp
-auto consumer = primer::value(created._session.attach_task("Strategy"));
-auto inputs = primer::value(consumer.open_source_set("StrategyInputs"));
+auto consumer_result = created._session.attach_task("Strategy");
+if (const auto* error = std::get_if<angaria::Error>(&consumer_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto consumer = std::get<Task>(std::move(consumer_result));
+auto inputs_result = consumer.open_source_set("StrategyInputs");
+if (const auto* error = std::get_if<angaria::Error>(&inputs_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto inputs = std::get<SourceQueueSet>(std::move(inputs_result));
 auto event = inputs.receive();
+if (const auto* error = std::get_if<Error>(&event))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
 if (auto* delivery = std::get_if<Delivery>(&event))
 {
   const auto header = delivery->_message._header;
-  auto saved = primer::value(delivery->_message.copy_message(64));
-  primer::value(inputs.acknowledge(delivery->_token));
+  auto saved_result = delivery->_message.copy_message(64);
+  if (const auto* error = std::get_if<angaria::Error>(&saved_result))
+  {
+    std::cerr << error->_path << ": " << error->_message << '\n';
+    return 1;
+  }
+  auto saved = std::get<Message>(std::move(saved_result));
+  auto acknowledgment = inputs.acknowledge(delivery->_token);
+  if (const auto* error = std::get_if<Error>(&acknowledgment))
+  {
+    // OutcomeUnknown ends the old borrow; recover before borrowing again.
+    std::cerr << error->_path << ": " << error->_message << '\n';
+    return 1;
+  }
   // saved owns its bytes and preserves header after the borrow ends.
+}
+else if (std::holds_alternative<ReceiveTimeout>(event))
+{
+  std::cout << "No message available in this attempt.\n";
+}
+else
+{
+  std::cerr << "Unexpected delivery gap for this recovery-only example.\n";
+  return 1;
 }
 ```
 

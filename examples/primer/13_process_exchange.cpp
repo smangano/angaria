@@ -1,9 +1,7 @@
 // Independent processes exchange completed capture files while the Registry
 // retains exact schema versions. This example does not call Queue delivery APIs.
-#include "example_support.h"
-#include "example_formatting.h"
+#include "angaria/runtime.h"
 #include "angaria/capture.h"
-#include "angaria/detail/text_escaping.h"
 #include "angaria/inspection.h"
 
 #include <array>
@@ -51,75 +49,167 @@ namespace
     return workspace / phase / "capture.angcap";
   }
 
-  SchemaId register_quote(Registry& registry, std::uint32_t version)
+  Result<SchemaId> register_quote(Registry& registry, std::uint32_t version)
   {
     MessageDescriptor descriptor;
     descriptor._schema = {static_cast<MessageType>(1), version};
     descriptor._name = "Quote";
     descriptor._fields = version == 1 ? std::vector{price_field, quantity_field}
                                        : std::vector{quantity_field, price_field};
-    return primer::value(registry.register_message(descriptor));
+    auto register_message_result = registry.register_message(descriptor);
+    if (const auto* error = std::get_if<Error>(&register_message_result))
+    {
+      return *error;
+    }
+    return std::get<0>(std::move(register_message_result));
   }
 
-  void initialize(const std::filesystem::path& workspace)
+  OperationResult initialize(const std::filesystem::path& workspace)
   {
     reserve_directory(workspace);
     TaskDescriptor setup;
     setup._name = "Setup";
-    auto options = primer::session_options(workspace / "session", "Process message exchange");
+    SessionOptions options;
+    options._name = "Process message exchange";
+    options._directory = workspace / "session";
+    options._maxLogBytes = 1024 * 1024;
     options._limits = CapacityLimits::empty().tasks(2).fields(2).message_schemas(3);
-    auto created = primer::value(Session::create(options, setup));
+    options._defaults._ringCapacity = 8;
+    auto create_result = Session::create(options, setup);
+    if (const auto* error = std::get_if<Error>(&create_result))
+    {
+      return *error;
+    }
+    auto created = std::get<0>(std::move(create_result));
     auto registry = created._creator.registry();
     TaskDescriptor feed;
     feed._name = "Feed";
-    const auto producer = primer::value(registry.register_task(feed));
+    auto register_task_result = registry.register_task(feed);
+    if (const auto* error = std::get_if<Error>(&register_task_result))
+    {
+      return *error;
+    }
+    const auto producer = std::get<0>(std::move(register_task_result));
 
     FieldDescriptor price;
     price._id = price_field;
     price._name = "PriceTicks";
     price._base = EFieldBase::BASE_INT64;
     price._size = 8;
-    primer::value(registry.register_field(price));
+    auto register_field_result = registry.register_field(price);
+    if (const auto* error = std::get_if<Error>(&register_field_result))
+    {
+      return *error;
+    }
+
     FieldDescriptor quantity;
     quantity._id = quantity_field;
     quantity._name = "Quantity";
     quantity._base = EFieldBase::BASE_UINT64;
     quantity._size = 8;
-    primer::value(registry.register_field(quantity));
-    register_quote(registry, 1);
+    auto register_field_result_2 = registry.register_field(quantity);
+    if (const auto* error = std::get_if<Error>(&register_field_result_2))
+    {
+      return *error;
+    }
+
+    auto register_quote_result = register_quote(registry, 1);
+    if (const auto* error = std::get_if<Error>(&register_quote_result))
+    {
+      return *error;
+    }
+
     MessageDescriptor heartbeat;
     heartbeat._schema = {static_cast<MessageType>(2), 1};
     heartbeat._name = "Heartbeat";
-    primer::value(registry.register_message(heartbeat));
-    std::cout << "SESSION " << primer::session_text(created._session.identity()) << '\n'
-              << "INITIALIZED revision=" << primer::value(registry.snapshot())._revision
+    auto register_message_result_2 = registry.register_message(heartbeat);
+    if (const auto* error = std::get_if<Error>(&register_message_result_2))
+    {
+      return *error;
+    }
+
+    auto snapshot_result = registry.snapshot();
+    if (const auto* error = std::get_if<Error>(&snapshot_result))
+    {
+      return *error;
+    }
+    const auto session_id = created._session.identity();
+    std::ostringstream identity;
+    identity.imbue(std::locale::classic());
+    identity << std::hex << std::setfill('0') << std::setw(16) << session_id._high
+             << std::setw(16) << session_id._low;
+    std::cout << "SESSION " << identity.str() << '\n'
+              << "INITIALIZED revision=" << std::get<0>(std::move(snapshot_result))._revision
               << " feed=" << static_cast<unsigned>(producer) << '\n';
+    return std::monostate{};
   }
 
-  void upgrade(const std::filesystem::path& workspace)
+  OperationResult upgrade(const std::filesystem::path& workspace)
   {
-    auto session = primer::value(Session::attach(workspace / "session"));
-    auto setup = primer::value(session.attach_task(primer::value(session.registry().find_task("Setup"))));
+    auto attach_result = Session::attach(workspace / "session");
+    if (const auto* error = std::get_if<Error>(&attach_result))
+    {
+      return *error;
+    }
+    auto session = std::get<0>(std::move(attach_result));
+    auto find_task_result = session.registry().find_task("Setup");
+    if (const auto* error = std::get_if<Error>(&find_task_result))
+    {
+      return *error;
+    }
+    auto attach_task_result = session.attach_task(std::get<0>(std::move(find_task_result)));
+    if (const auto* error = std::get_if<Error>(&attach_task_result))
+    {
+      return *error;
+    }
+    auto setup = std::get<0>(std::move(attach_task_result));
     auto registry = setup.registry();
     // Version 2 has the same byte width, but changes Field order. Registration
     // adds a definition; it cannot replace the meaning of an existing version.
-    register_quote(registry, 2);
-    std::cout << "UPGRADED version=2 revision=" << primer::value(registry.snapshot())._revision << '\n';
+    auto register_quote_result_2 = register_quote(registry, 2);
+    if (const auto* error = std::get_if<Error>(&register_quote_result_2))
+    {
+      return *error;
+    }
+
+    auto snapshot_result_2 = registry.snapshot();
+    if (const auto* error = std::get_if<Error>(&snapshot_result_2))
+    {
+      return *error;
+    }
+    std::cout << "UPGRADED version=2 revision=" << std::get<0>(std::move(snapshot_result_2))._revision << '\n';
+    return std::monostate{};
   }
 
-  void append(MessageCaptureWriter& writer, Task& producer, const BinaryPayloadCodec& codec,
+  OperationResult append(MessageCaptureWriter& writer, Task& producer, const BinaryPayloadCodec& codec,
                  std::initializer_list<PayloadValue> values)
   {
-    const auto payload = primer::value(codec.encode(values));
+    auto encode_result = codec.encode(values);
+    if (const auto* error = std::get_if<Error>(&encode_result))
+    {
+      return *error;
+    }
+    const auto payload = std::get<0>(std::move(encode_result));
     MessageHeader header;
     header._schema = codec.schema();
-    header._publication = primer::value(producer.next_publication_id());
+    auto next_publication_id_result = producer.next_publication_id();
+    if (const auto* error = std::get_if<Error>(&next_publication_id_result))
+    {
+      return *error;
+    }
+    header._publication = std::get<0>(std::move(next_publication_id_result));
     // Fixed application-chosen timestamps make the walkthrough reproducible.
     // They do not establish native acceptance or delivery times.
     header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
         static_cast<std::int64_t>(100 + header._publication._sequence)}};
     header._payloadBytes = payload.size();
-    primer::value(writer.append(header, payload));
+    auto append_result = writer.append(header, payload);
+    if (const auto* error = std::get_if<Error>(&append_result))
+    {
+      return *error;
+    }
+
+    return std::monostate{};
   }
 
   void wait_for_signal()
@@ -131,7 +221,7 @@ namespace
     }
   }
 
-  void produce(const std::filesystem::path& workspace, std::string_view phase, bool hold)
+  OperationResult produce(const std::filesystem::path& workspace, std::string_view phase, bool hold)
   {
     const auto version = phase == "new" ? 2u : 1u;
     const auto directory = workspace / phase;
@@ -142,30 +232,85 @@ namespace
     {
       throw std::runtime_error("Conflict at workspace: The phase output already exists");
     }
-    auto session = primer::value(Session::attach(workspace / "session"));
+    auto attach_result_2 = Session::attach(workspace / "session");
+    if (const auto* error = std::get_if<Error>(&attach_result_2))
+    {
+      return *error;
+    }
+    auto session = std::get<0>(std::move(attach_result_2));
     auto registry = session.registry();
-    const auto quote = primer::value(BinaryPayloadCodec::from_registry(
-        registry, primer::value(registry.find_message("Quote", version)), 16));
-    const auto heartbeat = primer::value(BinaryPayloadCodec::from_registry(
-        registry, primer::value(registry.find_message("Heartbeat", 1)), 0));
-    auto feed = primer::value(session.attach_task(primer::value(registry.find_task("Feed"))));
+    auto find_message_result = registry.find_message("Quote", version);
+    if (const auto* error = std::get_if<Error>(&find_message_result))
+    {
+      return *error;
+    }
+    auto from_registry_result = BinaryPayloadCodec::from_registry(
+        registry, std::get<0>(std::move(find_message_result)), 16);
+    if (const auto* error = std::get_if<Error>(&from_registry_result))
+    {
+      return *error;
+    }
+    const auto quote = std::get<0>(std::move(from_registry_result));
+    auto find_message_result_2 = registry.find_message("Heartbeat", 1);
+    if (const auto* error = std::get_if<Error>(&find_message_result_2))
+    {
+      return *error;
+    }
+    auto from_registry_result_2 = BinaryPayloadCodec::from_registry(
+        registry, std::get<0>(std::move(find_message_result_2)), 0);
+    if (const auto* error = std::get_if<Error>(&from_registry_result_2))
+    {
+      return *error;
+    }
+    const auto heartbeat = std::get<0>(std::move(from_registry_result_2));
+    auto find_task_result_2 = registry.find_task("Feed");
+    if (const auto* error = std::get_if<Error>(&find_task_result_2))
+    {
+      return *error;
+    }
+    auto attach_task_result_2 = session.attach_task(std::get<0>(std::move(find_task_result_2)));
+    if (const auto* error = std::get_if<Error>(&attach_task_result_2))
+    {
+      return *error;
+    }
+    auto feed = std::get<0>(std::move(attach_task_result_2));
     reserve_directory(directory);
     std::ofstream output(capture_path(workspace, phase), std::ios::binary);
     if (!output)
     {
       throw std::runtime_error("IoError at capture: Cannot create the capture in its new directory");
     }
-    auto writer = primer::value(MessageCaptureWriter::create(output, 96, 176));
+    auto create_result_2 = MessageCaptureWriter::create(output, 96, 176);
+    if (const auto* error = std::get_if<Error>(&create_result_2))
+    {
+      return *error;
+    }
+    auto writer = std::get<0>(std::move(create_result_2));
     if (version == 2)
     {
-      append(writer, feed, quote, {std::uint64_t{8}, std::int64_t{-3}});
+      auto append_result_2 = append(writer, feed, quote, {std::uint64_t{8}, std::int64_t{-3}});
+      if (const auto* error = std::get_if<Error>(&append_result_2))
+      {
+        return *error;
+      }
+
     }
     else
     {
-      append(writer, feed, quote, {
+      auto append_result_3 = append(writer, feed, quote, {
           std::int64_t{phase == "first" ? -2 : -4}, std::uint64_t{phase == "first" ? 7u : 9u}});
+      if (const auto* error = std::get_if<Error>(&append_result_3))
+      {
+        return *error;
+      }
+
     }
-    append(writer, feed, heartbeat, {});
+    auto append_result_4 = append(writer, feed, heartbeat, {});
+    if (const auto* error = std::get_if<Error>(&append_result_4))
+    {
+      return *error;
+    }
+
     output.flush();
     output.close();
     if (!output)
@@ -184,32 +329,63 @@ namespace
       wait_for_signal();
       std::cout << "RELEASED producer\n";
     }
+    return std::monostate{};
   }
 
-  MessageInspector retained_catalog(const std::filesystem::path& workspace)
+  Result<MessageInspector> retained_catalog(const std::filesystem::path& workspace)
   {
-    auto session = primer::value(Session::attach(workspace / "session"));
+    auto attach_result_3 = Session::attach(workspace / "session");
+    if (const auto* error = std::get_if<Error>(&attach_result_3))
+    {
+      return *error;
+    }
+    auto session = std::get<0>(std::move(attach_result_3));
     InspectionLimits limits;
     limits._maxRecordBytes = 96;
     limits._maxCatalogBytes = 4096;
     limits._maxTextBytes = 4096;
-    return primer::value(MessageInspector::from_session(session, limits));
+    auto from_session_result = MessageInspector::from_session(session, limits);
+    if (const auto* error = std::get_if<Error>(&from_session_result))
+    {
+      return *error;
+    }
+    return std::get<0>(std::move(from_session_result));
     // The Session and Registry snapshot are gone before the caller signals
     // READY. Only owning Field/schema definitions remain in the inspector.
   }
 
-  std::string inspect_capture(const MessageInspector& inspector, const std::filesystem::path& path)
+  Result<std::string> inspect_capture(const MessageInspector& inspector, const std::filesystem::path& path)
   {
     std::ifstream input(path, std::ios::binary);
     if (!input)
     {
       throw std::runtime_error("IoError at capture: Cannot open the completed capture");
     }
-    auto reader = primer::value(MessageCaptureReader::create(input, 96, 176));
-    std::string text;
-    while (auto record = primer::value(reader.read_next()))
+    auto create_result_3 = MessageCaptureReader::create(input, 96, 176);
+    if (const auto* error = std::get_if<Error>(&create_result_3))
     {
-      text += primer::value(inspector.inspect(record->view()));
+      return *error;
+    }
+    auto reader = std::get<0>(std::move(create_result_3));
+    std::string text;
+    for (;;)
+    {
+      auto next = reader.read_next();
+      if (const auto* error = std::get_if<Error>(&next))
+      {
+        return *error;
+      }
+      auto record = std::get<0>(std::move(next));
+      if (!record)
+      {
+        break;
+      }
+      auto inspect_result = inspector.inspect(record->view());
+      if (const auto* error = std::get_if<Error>(&inspect_result))
+      {
+        return *error;
+      }
+      text += std::get<0>(std::move(inspect_result));
     }
     if (reader.records_read() != 2)
     {
@@ -218,14 +394,24 @@ namespace
     return text;
   }
 
-  void retain(const std::filesystem::path& workspace)
+  OperationResult retain(const std::filesystem::path& workspace)
   {
-    const auto inspector = retained_catalog(workspace);
+    auto retained_catalog_result = retained_catalog(workspace);
+    if (const auto* error = std::get_if<Error>(&retained_catalog_result))
+    {
+      return *error;
+    }
+    const auto inspector = std::get<0>(std::move(retained_catalog_result));
     std::cout << "READY retained" << std::endl;
     wait_for_signal();
     for (const auto phase : {"first", "restart"})
     {
-      const auto text = inspect_capture(inspector, capture_path(workspace, phase));
+      auto inspect_capture_result = inspect_capture(inspector, capture_path(workspace, phase));
+      if (const auto* error = std::get_if<Error>(&inspect_capture_result))
+      {
+        return *error;
+      }
+      const auto text = std::get<0>(std::move(inspect_capture_result));
       std::cout << "RETAINED phase=" << phase << '\n' << text;
     }
     std::ifstream input(capture_path(workspace, "new"), std::ios::binary);
@@ -233,25 +419,58 @@ namespace
     {
       throw std::runtime_error("IoError at capture: Cannot open the new-version capture");
     }
-    auto reader = primer::value(MessageCaptureReader::create(input, 96, 176));
-    const auto record = primer::value(reader.read_next());
+    auto create_result_4 = MessageCaptureReader::create(input, 96, 176);
+    if (const auto* error = std::get_if<Error>(&create_result_4))
+    {
+      return *error;
+    }
+    auto reader = std::get<0>(std::move(create_result_4));
+    auto read_next_result = reader.read_next();
+    if (const auto* error = std::get_if<Error>(&read_next_result))
+    {
+      return *error;
+    }
+    const auto record = std::get<0>(std::move(read_next_result));
     if (!record)
     {
       throw std::runtime_error("Expected a new-version Quote record");
     }
     const auto attempted = inspector.inspect(record->view());
     const auto* error = std::get_if<Error>(&attempted);
-    if (!error || error->_code != ErrorCode::NotFound || error->_path != "inspection.schema")
+    if (!error)
     {
-      throw std::runtime_error("The retained catalog must reject absent Quote v2 with NotFound");
+      return Error{ErrorCode::InvalidState,
+          "Expected the retained catalog to reject absent Quote v2 with NotFound", "lesson.retained_catalog"};
+    }
+    if (error->_code != ErrorCode::NotFound || error->_path != "inspection.schema")
+    {
+      return *error;
     }
     std::cout << "REJECTED phase=new code=NotFound record=0 offset=0\n";
+    return std::monostate{};
   }
 
   void report_failure(std::string_view text)
   {
-    // Use the same bounded, printable diagnostic encoding as the inspection CLI.
-    angaria::detail::write_diagnostic_text(std::cerr, text);
+    // Output-only application formatting: keep paths and errors on one
+    // printable line without depending on Angaria implementation headers.
+    constexpr std::string_view digits{"0123456789abcdef"};
+    for (const auto character : text)
+    {
+      const auto byte = static_cast<unsigned char>(character);
+      if (byte == '\\')
+      {
+        std::cerr << "\\\\";
+      }
+      else if (byte >= 0x20 && byte <= 0x7e)
+      {
+        std::cerr.put(character);
+      }
+      else
+      {
+        std::cerr << "\\x" << digits[byte >> 4] << digits[byte & 0xf];
+      }
+    }
     std::cerr << '\n';
   }
 
@@ -266,19 +485,53 @@ namespace
 
 int main(int argc, char** argv)
 {
+  using namespace angaria;
   try
   {
     if (argc == 3 && std::string_view{argv[1]} == "init")
     {
-      initialize(argv[2]);
+      auto initialize_result = initialize(argv[2]);
+      if (const auto* error = std::get_if<Error>(&initialize_result))
+      {
+        if (error->_code == ErrorCode::Conflict)
+        {
+          std::cerr << "Conflict: ";
+        }
+        report_failure("Error " + std::to_string(static_cast<unsigned>(error->_code)) +
+                       " at " + error->_path + ": " + error->_message);
+        return 1;
+      }
+
     }
     else if (argc == 3 && std::string_view{argv[1]} == "upgrade")
     {
-      upgrade(argv[2]);
+      auto upgrade_result = upgrade(argv[2]);
+      if (const auto* error = std::get_if<Error>(&upgrade_result))
+      {
+        if (error->_code == ErrorCode::Conflict)
+        {
+          std::cerr << "Conflict: ";
+        }
+        report_failure("Error " + std::to_string(static_cast<unsigned>(error->_code)) +
+                       " at " + error->_path + ": " + error->_message);
+        return 1;
+      }
+
     }
     else if (argc == 3 && std::string_view{argv[1]} == "retain")
     {
-      retain(argv[2]);
+      auto retain_result = retain(argv[2]);
+      if (const auto* error = std::get_if<Error>(&retain_result))
+      {
+        if (error->_code == ErrorCode::Conflict)
+        {
+          std::cerr << "Conflict: ";
+        }
+        report_failure("Error " + std::to_string(static_cast<unsigned>(error->_code)) +
+                       " at " + error->_path + ": " + error->_message);
+        return 1;
+      }
+
     }
     else if ((argc == 4 || argc == 5) && std::string_view{argv[1]} == "produce")
     {
@@ -289,7 +542,18 @@ int main(int argc, char** argv)
         usage();
         return 1;
       }
-      produce(argv[2], phase, argc == 5);
+      auto produce_result = produce(argv[2], phase, argc == 5);
+      if (const auto* error = std::get_if<Error>(&produce_result))
+      {
+        if (error->_code == ErrorCode::Conflict)
+        {
+          std::cerr << "Conflict: ";
+        }
+        report_failure("Error " + std::to_string(static_cast<unsigned>(error->_code)) +
+                       " at " + error->_path + ": " + error->_message);
+        return 1;
+      }
+
     }
     else
     {

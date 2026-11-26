@@ -18,7 +18,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.9** adds the receive, acknowledgment/release, and explicit Source-close path to the implemented direct-send, named setup, and shared message-header model; the review's status table identifies the remaining work.
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). Its fifteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). Its fifteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
