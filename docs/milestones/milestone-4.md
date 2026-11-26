@@ -66,6 +66,14 @@ Public factories select core **2.2/0x7**. Exact schema and Binary admission, com
 
 The [fourteenth primer lesson](../../examples/primer/14_direct_send.cpp) sends to an offline consumer and looks up acceptance after producer replacement. Receive, acknowledgment/release, and Source close remain step 4.7; advanced schemas and message replay retain their roadmap milestones.
 
+## Step 4.7 Source receive and lifecycle
+
+Framework **0.4.9** implements [basic Source delivery](../native-receive.md): receive, exact-token acknowledgment/release, stable borrowed payloads, full MessageHeader context, and owning message copies. Repeated receive preserves the in-flight token/time/address; retained Queue history supplies messages after ring overwrite. Fresh selection supports at most one Active Queue, with multiple-input policies left to milestone 5.
+
+Zero-time polls and finite waits use nonblocking gate attempts; checked monotonic deadlines prevent fresh issuance after expiration. Recovery and an already started mutation still finish consistently. Explicit close uses Active/Closing/Closed states, reports failure, and releases exact unfinished work. Destruction/move replacement use preallocated deferred reservations when cleanup fails; new Task delivery/progress and Source reopening reconcile them before proceeding. Status and identical-send lookups remain available without cleanup mutation. No Task cycle or payload ownership is retained by a deferred marker.
+
+The [fifteenth primer lesson](../../examples/primer/15_receive.cpp) demonstrates backlog recovery, release/redelivery, complete-header copying, acknowledgment, close/reopen, and decoding an owning copy after all runtime handles close. Public, fault-injection, deadline, and independent consumer-process tests qualify these operations, including progress at an exactly full log and inherited/wrong-thread rejection. Native format **2.2/0x7**, portable record version 1, and the synchronization protocol remain unchanged. Configured allowed loss follows in step 4.8.
+
 ## Qualification and completion
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.

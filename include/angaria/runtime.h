@@ -19,6 +19,7 @@ namespace angaria
     class QueueWriterState;
     class SourceQueueSetState;
     class PublishingQueueSetState;
+    struct SourceAccess;
     struct ConfigurationPlan;
   } // namespace detail
 
@@ -50,8 +51,9 @@ namespace angaria
   class SourceQueueSet
   {
   public:
-    SourceQueueSet(SourceQueueSet&&) noexcept = default;
-    SourceQueueSet& operator=(SourceQueueSet&&) noexcept = default;
+    ~SourceQueueSet();
+    SourceQueueSet(SourceQueueSet&&) noexcept;
+    SourceQueueSet& operator=(SourceQueueSet&&) noexcept;
     SourceQueueSet(const SourceQueueSet&) = delete;
     SourceQueueSet& operator=(const SourceQueueSet&) = delete;
 
@@ -59,9 +61,11 @@ namespace angaria
     ReceiveResult receive(std::chrono::nanoseconds timeout = std::chrono::nanoseconds{0});
     OperationResult acknowledge(const DeliveryToken& token);
     OperationResult release(const DeliveryToken& token);
+    OperationResult close();
 
   private:
     friend class Task;
+    friend struct detail::SourceAccess;
     explicit SourceQueueSet(std::shared_ptr<detail::SourceQueueSetState> state);
     std::shared_ptr<detail::SourceQueueSetState> _state;
   };

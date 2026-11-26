@@ -88,7 +88,13 @@ The core API call is:
 
 ```cpp
 auto registry = session.registry();
-auto snapshot = primer::value(registry.snapshot());
+auto snapshot_result = registry.snapshot();
+if (const auto* error = std::get_if<angaria::Error>(&snapshot_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto snapshot = std::get<angaria::RegistrySnapshot>(std::move(snapshot_result));
 ```
 
 A **snapshot** is an owning copy of the complete Registry at one committed revision. It contains ordinary C++ strings and vectors. Later updates do not change an earlier snapshot object. One snapshot is captured under the Session's mutation gate, so its Queue assignments and Source member lists describe the same committed state.
@@ -96,7 +102,13 @@ A **snapshot** is an owning copy of the complete Registry at one committed revis
 Its `_revision` names the captured definitions. `_currentRevision` gives the current committed Registry revision observed by that call. Without an argument, they are equal. An explicit revision asks for earlier retained definitions:
 
 ```cpp
-auto earlier = primer::value(registry.snapshot(saved_revision));
+auto earlier_result = registry.snapshot(saved_revision);
+if (const auto* error = std::get_if<angaria::Error>(&earlier_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto earlier = std::get<angaria::RegistrySnapshot>(std::move(earlier_result));
 ```
 
 The historical copy includes the last committed state of every entity that existed at that revision. An atomic update is visible as a whole. Entities registered later are absent. Schema versions remain separate entries. Snapshot lists use numeric identity order, with message schemas ordered by type and version; Source and Publishing membership lists preserve their recorded order.

@@ -5,7 +5,9 @@
 #include "angaria/payload.h"
 #include "delivery_state.h"
 #include "mapped_payload.h"
+#include "payload_runtime.h"
 #include "registry_access.h"
+#include "source_runtime_state.h"
 #include "topology_state.h"
 
 #include <algorithm>
@@ -156,14 +158,8 @@ namespace angaria::detail
       auto schema = runtime_schema(access, header._schema);
       if (header._format == PayloadFormat::Binary)
       {
-        RegistrySnapshot snapshot;
-        snapshot._messages.push_back({schema._definition._descriptor, schema._definition._registration});
-        for (const auto& field : runtime_fields(access))
-        {
-          snapshot._fields.push_back({field._definition._descriptor, field._definition._registration});
-        }
-        const auto codec = runtime_value(BinaryPayloadCodec::from_snapshot(snapshot, header._schema,
-            access._session->_controller->configuration()._maxLogBytes));
+        const auto codec = runtime_payload_codec(access, schema,
+            access._session->_controller->configuration()._maxLogBytes);
         runtime_value(codec.validate(message._payload));
       }
       return schema;
@@ -172,9 +168,16 @@ namespace angaria::detail
 
   PublicationReport runtime_send(RuntimeAccess& access, const TaskClaim& producer,
                                     QueueId queue, PublicationId publication, MessageView message,
-                                    std::span<DestinationOutcome> outcomes)
+                                    std::span<DestinationOutcome> outcomes,
+                                    const std::shared_ptr<TaskState>& actor)
   {
     const auto context = producer_context(access, producer);
+    if (actor)
+    {
+      require(actor->_claim == producer, ErrorCode::WrongOwner, "publication.producer",
+              "Publication actor does not match its captured producer claim");
+      runtime_check_task(access, actor);
+    }
     check_publication_id(context, producer, publication, true);
     const auto& loaded = require_registered_entity(context._topology._queues, queue,
         "publication.queue", "Queue identity must be nonzero", "Queue is not registered");
@@ -193,6 +196,13 @@ namespace angaria::detail
       }
       require_identical(access, *stored, queue, message);
       return stored_report(publication, stored->_metadata, outcomes);
+    }
+
+    // A recorded identical send is observational, just like status. Only new
+    // acceptance advances Task delivery work and must settle abandoned Sources.
+    if (actor)
+    {
+      runtime_reconcile_sources(access, actor);
     }
 
     const auto revision = loaded._definition._registration._revision;

@@ -1,6 +1,6 @@
 # Native two-plane transport contract
 
-**Step 4.6, framework version `0.4.8`, enables [direct Queue publication and outcome lookup](direct-publication.md)** and creates core delivery-enabled Sessions. It builds on [reserved progress and claim cleanup](native-progress.md), [committed payload mappings and complete append sizing](native-storage.md#committed-payload-storage-and-append-planning), the [local delivery codecs](mapped-format.md#local-delivery-codecs), and [core Session/history validation](native-validation.md). This document specifies the complete milestone-4 contract; public receive, acknowledgment, and explicit Source close follow in step 4.7, with allowed loss in step 4.8. The fourteen [primer lessons](primer.md) distinguish runnable features from those later steps.
+**Step 4.7, framework version `0.4.9`, enables [Source receive, acknowledgment/release, owning copies, and explicit close](native-receive.md)** after step 4.6's [direct Queue publication and outcome lookup](direct-publication.md). It builds on [reserved progress and claim cleanup](native-progress.md), [committed payload mappings and complete append sizing](native-storage.md#committed-payload-storage-and-append-planning), the [local delivery codecs](mapped-format.md#local-delivery-codecs), and [core Session/history validation](native-validation.md). This document specifies the complete milestone-4 contract; allowed loss follows in step 4.8. The fifteen [primer lessons](primer.md) distinguish runnable features from later steps.
 
 The [mapped format](mapped-format.md) defines stored representations, and the [concurrency contract](concurrency.md) defines journal commits and process recovery. This contract fills their native-delivery details without changing the agreed one-producer-per-Queue model or the blocking session mutation gate.
 
@@ -60,7 +60,7 @@ Sample initial publication UTC time once when preparing the accepted Publication
 
 UTC values can be zero or negative, and wall clocks can move backward. Presence flags establish whether a stored time exists; zero alone does not mean absent. Wait deadlines use the monotonic clock and have no relationship to these UTC fields.
 
-The approved `Message`/`MessageView`/`Delivery` model uses one logical `MessageHeader`, promoted to the implemented namespace in step 4.6. `_publishedAt` exposes initial Publication time; optional `_enqueuedAt` and `_dequeuedAt` expose this destination's enqueue and issuance times. Optional Queue/sequence/consumer fields carry the remaining destination context. Step 4.7 will populate these fields in received `Delivery` messages. Owning copies preserve the entire header. This process-local model does not change native layouts or portable encoding version 1; that older portable encoding rejects destination metadata it cannot represent.
+The approved `Message`/`MessageView`/`Delivery` model uses one logical `MessageHeader`, promoted to the implemented namespace in step 4.6. `_publishedAt` exposes initial Publication time; optional `_enqueuedAt` and `_dequeuedAt` expose this destination's enqueue and issuance times. Optional Queue/sequence/consumer fields carry the remaining destination context. Step 4.7 populates these fields in received `Delivery` messages. Owning copies preserve the entire header and exact decoding dependencies. This process-local model does not change native layouts or portable encoding version 1; that older portable encoding rejects destination metadata it cannot represent.
 
 ## Ring generations
 
@@ -111,7 +111,7 @@ Successful acknowledgment/release, valid Source close, replacement of a destinat
 
 ## Explicit close and deferred cleanup
 
-Step 4.7 plans `OperationResult SourceQueueSet::close()`. Current declarations are unchanged in step 4.1. This gives a caller an observable cleanup result while its Task remains alive.
+Step 4.7 implements `OperationResult SourceQueueSet::close()`, giving a caller an observable cleanup result while its Task remains alive.
 
 The local lifecycle is **Active → Closing → Closed**. Validate process/thread ownership before entering Closing. Starting a valid close ends that handle's views and prevents further receive/acknowledge/release through it. Only close retry remains available. Wrong-owner rejection before Closing changes nothing.
 

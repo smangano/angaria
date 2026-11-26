@@ -7,16 +7,39 @@ Milestone 4, step 4.6, framework **0.4.8**, implements `QueueWriter::send` and `
 Open the output once, prepare an exact schema's payload, and issue an ID before sending:
 
 ```cpp
-auto writer = value(feed.open_writer("FeedToStrategy"));
+auto writer_result = feed.open_writer("FeedToStrategy");
+if (const auto* error = std::get_if<Error>(&writer_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto writer = std::get<QueueWriter>(std::move(writer_result));
 MessageHeader header;
 header._schema = codec.schema();
 header._payloadBytes = bytes.size();
 MessageView message{header, bytes};
-auto id = value(feed.next_publication_id());
+auto id_result = feed.next_publication_id();
+if (const auto* error = std::get_if<Error>(&id_result))
+{
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+const auto id = std::get<PublicationId>(id_result);
 auto result = writer.send(id, message);
+if (const auto* error = std::get_if<Error>(&result))
+{
+  if (error->_code == ErrorCode::OutcomeUnknown)
+  {
+    // Preserve this ID for recovery lookup instead of issuing another one.
+    std::cerr << "OutcomeUnknown for sequence " << id._sequence << '\n';
+  }
+  std::cerr << error->_path << ": " << error->_message << '\n';
+  return 1;
+}
+auto outcome = std::get<PublicationOutcome>(std::move(result));
 ```
 
-Here `value` checks `Result<T>` as in the primer. `message` borrows `bytes` for the call; successful acceptance stores independent bytes. The header's schema, format, byte count, and flags describe the input. The explicit ID and runtime clock establish publication identity/time. Historical publication/destination fields in an input header never override the new request, and send leaves the caller's header unchanged.
+This main-body fragment checks each public Result before extracting its value, as in the [primer](primer.md). `message` borrows `bytes` for the call; successful acceptance stores independent bytes. The header's schema, format, byte count, and flags describe the input. The explicit ID and runtime clock establish publication identity/time. Historical publication/destination fields in an input header never override the new request, and send leaves the caller's header unchanged.
 
 The ordinary overload returns `Result<PublicationOutcome>`. The outcome owns its destination vector and has `AcceptanceStatus::Accepted`, `Partial`, or `Rejected`; direct Queue acceptance has one accepted destination. Operational failures use the outer `Error`, including `OutcomeUnknown`. No automatic second ID is issued after uncertainty.
 

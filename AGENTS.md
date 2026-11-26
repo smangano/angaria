@@ -27,6 +27,7 @@ Boost and Intel TBB are permitted dependencies when warranted by the implementat
 - Every feature/milestone PR must review the primer. Incorporate newly implemented public behavior and update affected commands, examples, expected results, ownership/lifetime explanations, and error handling in the same PR. An unrelated change need not manufacture a primer edit.
 - Treat the compiled example sources as canonical. Keep linked explanations and snippets consistent with them; add new example targets and extend `test/primer_examples.py` when the learning sequence grows.
 - Clearly separate implemented, runnable features from planned chapters and the legacy prototype. Do not demonstrate undeveloped API methods as working examples.
+- Primer programs use public Angaria headers and calls directly. Show configuration values or an explicit TOML load, and check each fallible result before extracting its value. Do not hide these steps in generic result/configuration wrappers, macros, or private implementation helpers. Application-specific functions may return `Result<T>` or `OperationResult` and explicitly propagate an `Error`.
 - Include a primer/example update in each milestone's completion review, preserving the beginner path as advanced features are added.
 
 ## Tests as usage documentation

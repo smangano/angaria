@@ -21,6 +21,8 @@ Use the related header below before introducing another local implementation. Th
 | [definition_metadata.h](../src/definition_metadata.h) | Shared Registry-definition registration checks, body bounds, and canonical name/doc slices. |
 | [registry_access.h](../src/registry_access.h) | Registry/Task access ordering, required registration actors, and typed entity lookup mechanics. Diagnostics remain selected by the operation. |
 | [message_retention.h](../src/message_retention.h) | Exact Session/schema decoding dependencies and private MessageView binding. Owns neither payload bytes nor delivery pins; current scalar/logical codecs are retained independently of runtime handles. |
+| [payload_runtime.h](../src/payload_runtime.h) | Resolve an exact registered Binary codec under an existing recovered gate, shared by publication admission and received-message binding. |
+| [source_runtime_state.h](../src/source_runtime_state.h) | Source lifecycle/reservations, native ownership prechecks, stable payload ownership, and deferred-cleanup coordination shared by endpoint setup and receive/progress. |
 | [delivery_words.h](../src/delivery_words.h), [delivery_access.h](../src/delivery_access.h) | Local atomic-word/receipt codec bridges and gate-bound atomic byte copies, shared by history validation, reserved progress, and claim cleanup. They do not replace the native atomic adapter with ordinary mapped-byte reads. |
 | [text_escaping.h](../include/angaria/detail/text_escaping.h) | Printable ASCII/hex escaping, quote policy, and bounded diagnostic streaming. |
 | [native_file_state.h](../src/native_file_state.h) | Native file state and conversion of `stat` device/inode identity. Descriptor ownership and coordination remain separate. |
@@ -38,9 +40,11 @@ Test support remains separate from production encoding so expected bytes cannot 
 | [journal_fixture.h](../test/journal_fixture.h) | Shared hand-authored journal drafts used by the parent qualification tests and their exec worker. These are deliberately incomplete domain fixtures, not Session initialization examples. |
 | [publication_storage_fixture.h](../test/publication_storage_fixture.h) | Shared private committed Publication setup for payload mapping and rollback qualification. It isolates storage geometry from complete schema/topology/receipt semantics; it is not application setup. |
 | [delivery_progress_fixture.h](../test/delivery_progress_fixture.h) | Full-domain private delivery setup, exact log exhaustion, and captured claim/replacement intents shared by progress, cleanup, and independent crash qualification. Public Registry bootstrap is followed by deliberately installed core records. |
+| [source_fixture.h](../test/source_fixture.h), [native_log_budget.h](../test/native_log_budget.h) | Public Source setup shared by delivery/lifecycle/deadline tests, plus a separately labeled private exact-log-budget fixture reused by public and private progress qualification. |
 | [native_fixture.h](../test/native_fixture.h) | Private native observation, snapshots, claim-name capture, and deliberate atomic corruption setup. |
 | [process_support.h](../test/process_support.h) | Test pipe reports, continuation, bounded reads/waits, SIGPIPE handling, and status/descriptor mechanics. Worker ownership stays in the fixture. |
-| [example_support.h](../examples/primer/example_support.h), [example_formatting.h](../examples/primer/example_formatting.h) | Primer failure/configuration conventions and related byte/Session-identity presentation. |
+
+The runnable primer intentionally spells out public configuration and result checks in each lesson. Its former generic result/configuration wrappers and shared presentation header have been removed. Application-specific functions may propagate an `Error` through `Result<T>` or `OperationResult`; output-only formatting uses the standard library locally. This keeps each teaching program self-contained without depending on Angaria's private helpers.
 
 ## Intentional local adapters
 
@@ -53,6 +57,6 @@ Some similarly named functions have different responsibilities. Their shared mec
 - Quoted inspection text escapes quotes; diagnostic text leaves printable quotes intact. Shared escaping retains that policy choice, each caller's byte budget, and its line boundaries.
 - Test process constructors and command lines describe different scenarios. Fixture methods remain thin adapters for their owned PID/descriptors and diagnostics. The controller's process-group/reaped state and the Session worker's per-poll timeout remain distinct from aggregate-deadline readers.
 - Raw wire fixtures, Task/schema/topology profiles, and expected values stay explicit in their suites. Coincidentally equal fixture capacities can evolve independently; they are not production capacity defaults.
-- Primer and declaration-example Result wrappers format errors differently. They keep their respective presentation policies rather than changing example output during cleanup.
+- Compile-only interface-review examples may use presentation shortcuts described in their own review contract. Runnable primer programs show public Result checks directly and do not share generic unwrappers with those proposals.
 
 The shared-helper tests cover unaligned and variable-width bytes, signed boundaries, empty/nonzero ranges, arithmetic overflow, move-only Results, wire-code/Field semantics, and escaping across streaming boundaries. Existing format, ownership, recovery, and primer tests remain the behavioral baseline. All shared headers are also compiled independently to check their includes.

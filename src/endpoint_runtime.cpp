@@ -1,12 +1,15 @@
 #include "topology_state.h"
 #include "registry_access.h"
 #include "publication_runtime.h"
+#include "source_runtime_state.h"
 
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <variant>
+
+#include <unistd.h>
 
 namespace angaria::detail
 {
@@ -22,27 +25,6 @@ namespace angaria::detail
   public:
     std::shared_ptr<TaskState> _task;
     PublishingQueueSetId _id{};
-  };
-
-  class SourceQueueSetState
-  {
-  public:
-    ~SourceQueueSetState()
-    {
-      // No delivery has been issued in this milestone. Closing releases only
-      // the claim-local exclusive opening; future receive adds pin cleanup.
-      // Inherited children must not acquire a process-local mutex after fork.
-      if (_registered && _task && _task->_session && _task->_session->_controller &&
-          !std::holds_alternative<Error>(_task->_session->_controller->check_owner()))
-      {
-        std::lock_guard lock(_task->_endpointMutex);
-        _task->_openSources.erase(_id);
-      }
-    }
-
-    std::shared_ptr<TaskState> _task;
-    SourceQueueSetId _id{};
-    bool _registered{};
   };
 
   namespace
@@ -140,7 +122,15 @@ namespace angaria
 
   SourceQueueSetId SourceQueueSet::id() const
   {
-    return detail::endpoint_id(_state);
+    try
+    {
+      detail::runtime_check_task(detail::runtime_source_task(_state));
+      return _state->_id;
+    }
+    catch (...)
+    {
+      throw std::logic_error(detail::runtime_caught_error()._message);
+    }
   }
 
   PublishingQueueSetId PublishingQueueSet::id() const
@@ -157,7 +147,7 @@ namespace angaria
       // it out after the journal succeeds requires no new destination storage.
       std::vector<DestinationOutcome> outcomes(1);
       const auto report = detail::runtime_send(access, _state->_task->_claim, _state->_id,
-                                                publication, message, outcomes);
+                                                publication, message, outcomes, _state->_task);
       return detail::own_publication_report(report, std::move(outcomes));
     }
     catch (...)
@@ -172,7 +162,8 @@ namespace angaria
     try
     {
       auto access = detail::task_access(_state ? _state->_task : nullptr);
-      return detail::runtime_send(access, _state->_task->_claim, _state->_id, publication, message, outcomes);
+      return detail::runtime_send(access, _state->_task->_claim, _state->_id, publication,
+                                    message, outcomes, _state->_task);
     }
     catch (...)
     {
@@ -278,15 +269,22 @@ namespace angaria
     try
     {
       auto access = detail::task_access(_state);
+      detail::runtime_reconcile_sources(access, _state);
       const auto topology = detail::runtime_topology(access);
       const auto& loaded = detail::find_endpoint(topology._sources, source);
       detail::check_endpoint(loaded, loaded._definition._descriptor._owner, _state);
       auto state = std::make_shared<detail::SourceQueueSetState>();
       state->_task = _state;
+      state->_ownerPid = static_cast<std::uint64_t>(::getpid());
+      state->_ownerThread = _state->_thread;
+      state->_threadAffine = _state->_kind == TaskKind::Thread;
       state->_id = source;
+      state->_reservation = std::make_shared<detail::SourceReservation>();
+      state->_reservation->_id = source;
+      state->_reservation->_claim = _state->_claim;
       {
         std::lock_guard lock(_state->_endpointMutex);
-        if (!_state->_openSources.insert(source).second)
+        if (!_state->_openSources.emplace(source, state->_reservation).second)
         {
           detail::runtime_fail(ErrorCode::OwnershipBusy, "endpoint.source", "Source already has an open handle for this Task claim");
         }

@@ -3,7 +3,7 @@
 
 # These are format-2 public API examples. They configure connections and open
 # endpoints. Lesson 14 adds direct Queue acceptance and retained outcome lookup;
-# receive and acknowledgment are introduced only after their implementation.
+# lesson 15 now receives, releases, copies, acknowledges, and closes Sources.
 import argparse
 import os
 from pathlib import Path
@@ -188,11 +188,31 @@ def direct_send_example(executable, workspace):
     check(log.read_bytes() == original, "Direct-send lesson changed an existing Session")
 
 
+def receive_example(executable, workspace):
+    session = workspace / "receive"
+    output = command(executable, session)
+    for marker in (
+        "Recovered oldest Queue sequence after ring wrap: 1",
+        "Release redelivered the same publication with a new token.",
+        "Closing an unacknowledged Source allows redelivery.",
+        "Final receive: timeout.",
+        "Saved copy after all handles close: PriceTicks=12345",
+        "Saved header kept every delivery field.",
+    ):
+        check(marker in output.splitlines(), f"Receive lesson omitted {marker!r}: {output!r}")
+    log = session / "session.ang"
+    original = log.read_bytes()
+    retry = command(executable, session, succeeds=False)
+    check("Conflict" in retry, f"Repeated receive creation did not report Conflict: {retry!r}")
+    check(log.read_bytes() == original, "Receive lesson changed an existing Session")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("examples", type=Path, nargs=7, help="primer executables in lesson order")
     parser.add_argument("configuration", type=Path, help="lesson 7 TOML fixture")
     parser.add_argument("direct_send", type=Path, help="lesson 14 direct-send executable")
+    parser.add_argument("receive", type=Path, help="lesson 15 receive executable")
     arguments = parser.parse_args()
     executables = [path.resolve() for path in arguments.examples]
     try:
@@ -202,10 +222,11 @@ def main():
             process_example(executables[5], workspace / "processes")
             configuration_example(executables[6], arguments.configuration.resolve(), workspace)
             direct_send_example(arguments.direct_send.resolve(), workspace)
+            receive_example(arguments.receive.resolve(), workspace)
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"primer_examples: {error}", file=sys.stderr)
         return 1
-    print("Primer examples passed: setup, ownership, TOML, direct acceptance, and retained publication lookup.")
+    print("Primer examples passed: setup, ownership, TOML, direct send, receive, copy, and Source close.")
     return 0
 
 

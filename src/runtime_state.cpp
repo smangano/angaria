@@ -118,8 +118,16 @@ namespace angaria::detail
   RuntimeAccess::RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady,
                                mapped::JournalFaultInjector* injector,
                                RuntimeAccessReadObserver* observer)
+      : RuntimeAccess(session, runtime_value(checked_session(session)->_controller->acquire_mutation()),
+                      requireReady, injector, observer)
+  {
+  }
+
+  RuntimeAccess::RuntimeAccess(std::shared_ptr<SessionState> session, mapped::MutationGuard guard,
+                               bool requireReady, mapped::JournalFaultInjector* injector,
+                               RuntimeAccessReadObserver* observer)
       : _session(checked_session(std::move(session))),
-        _guard(runtime_value(_session->_controller->acquire_mutation())),
+        _guard(std::move(guard)),
         _journal(runtime_value(mapped::MutationJournal::open(_session->_controller, _guard, injector))),
         _snapshot(runtime_value(_journal.snapshot(_guard))),
         _file(runtime_value(_session->_controller->file(_guard))),

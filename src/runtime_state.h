@@ -12,8 +12,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <map>
 #include <mutex>
-#include <set>
 #include <span>
 #include <string>
 #include <thread>
@@ -23,6 +23,7 @@
 
 namespace angaria::detail
 {
+  struct SourceReservation;
   struct RuntimeFailure
   {
     Error _error;
@@ -59,7 +60,7 @@ namespace angaria::detail
     std::thread::id _thread;
     std::atomic<bool> _attached{false};
     std::mutex _endpointMutex;
-    std::set<SourceQueueSetId> _openSources;
+    std::map<SourceQueueSetId, std::shared_ptr<SourceReservation>> _openSources;
   };
 
   inline constexpr std::uint64_t session_ready_flag = 1;
@@ -85,6 +86,11 @@ namespace angaria::detail
     explicit RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady = true,
                            mapped::JournalFaultInjector* injector = nullptr,
                            RuntimeAccessReadObserver* observer = nullptr);
+    // Adopt a guard obtained by a bounded try-acquire loop. Recovery and
+    // indexing still complete before callers inspect or mutate the Session.
+    RuntimeAccess(std::shared_ptr<SessionState> session, mapped::MutationGuard guard,
+                  bool requireReady = true, mapped::JournalFaultInjector* injector = nullptr,
+                  RuntimeAccessReadObserver* observer = nullptr);
     std::vector<std::uint64_t> read_words(std::uint64_t offset, std::size_t count) const;
     std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length) const;
     const mapped::RecordEnvelope& record_envelope(std::uint64_t reference, std::uint16_t kind) const;
