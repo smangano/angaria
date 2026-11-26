@@ -15,6 +15,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -23,6 +24,7 @@
 #include <latch>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -421,18 +423,55 @@ namespace
     require_value(source.acknowledge(available._token));
   }
 
-  TEST_F(SourceRuntimeTest, PositiveWaitReleasesTheGateSoAProducerCanPublish)
+  TEST_F(SourceRuntimeTest, ConcurrentPublicationRemainsDeliverableWhenAPositiveWaitTimesOut)
   {
+    // This private observer only confirms that public receive has begun reading
+    // the empty Session. It neither fabricates a delivery nor holds the gate to
+    // direct the producer's scheduling.
+    class ObserveFirstRead final : public runtime::RuntimeAccessReadObserver
+    {
+    public:
+      OperationResult before_read(std::uint64_t, std::uint64_t) override
+      {
+        {
+          std::lock_guard lock{_mutex};
+          _observed = true;
+        }
+        _condition.notify_one();
+        return std::monostate{};
+      }
+
+      bool wait_for_read()
+      {
+        std::unique_lock lock{_mutex};
+        return _condition.wait_for(lock, 2s, [&]
+        {
+          return _observed;
+        });
+      }
+
+    private:
+      std::mutex _mutex;
+      std::condition_variable _condition;
+      bool _observed{};
+    };
+
     auto scenario = support::create_source_scenario(_directory);
     auto writer = require_value(scenario._created._creator.open_writer(scenario._queue));
     auto consumer = require_value(scenario._created._session.attach_task(scenario._consumer));
+    // Prepare before the reader starts so only the actual public send contends
+    // with it, rather than ID issuance and schema/encoding setup as well.
+    const auto bytes = require_value(support::source_codec(scenario).encode({std::uint32_t{99}}));
+    const auto publication = require_value(scenario._created._creator.next_publication_id());
+    ObserveFirstRead observer;
+    runtime::SourceOperationHooks hooks;
+    hooks._reads = &observer;
     auto source = require_value(consumer.open_source_set(scenario._source));
-    std::latch started(1);
+    runtime::SourceAccess::set_hooks(source, &hooks);
     std::optional<ReceiveResult> received;
     std::exception_ptr reader_error;
     std::thread reader([&]
     {
-      started.count_down();
       try
       {
         received.emplace(source.receive(2s));
@@ -442,29 +481,52 @@ namespace
         reader_error = std::current_exception();
       }
     });
-    PublicationId publication;
+    bool observed{};
     try
     {
-      started.wait();
-      publication = support::send_source_value(scenario, writer, 99);
+      observed = observer.wait_for_read();
+      if (observed)
+      {
+        const auto outcome = require_value(writer.send(publication,
+            support::source_message(scenario._schema, bytes)));
+        if (outcome._status != AcceptanceStatus::Accepted)
+        {
+          throw std::runtime_error("Expected the concurrent publication to be accepted");
+        }
+      }
     }
     catch (...)
     {
       // The receiver has its own finite deadline, so even an unsuccessful
       // producer must join it before destroying the shared Source handle.
       reader.join();
+      runtime::SourceAccess::set_hooks(source, nullptr);
       throw;
     }
     reader.join();
+    runtime::SourceAccess::set_hooks(source, nullptr);
     if (reader_error)
     {
       std::rethrow_exception(reader_error);
     }
+    ASSERT_TRUE(observed) << "The receiver did not begin reading the empty Session";
     ASSERT_TRUE(received);
+    // The mutation gate is released between checks, but it promises no fair
+    // acquisition order. The producer may acquire it only after the finite
+    // receive deadline. A timeout must leave that accepted message available;
+    // it must not lose the publication or consume an issuance.
+    if (std::holds_alternative<ReceiveTimeout>(*received))
+    {
+      received.emplace(source.receive());
+    }
     ASSERT_TRUE(std::holds_alternative<Delivery>(*received));
     const auto delivery = std::get<Delivery>(*received);
     EXPECT_EQ(delivery._message._header._publication, publication);
+    EXPECT_EQ(delivery._message._header._queueSequence, 1u);
+    EXPECT_EQ(delivery._token._sequence, 1u);
+    EXPECT_EQ(delivery._token._issuance, 1u);
     require_value(source.acknowledge(delivery._token));
+    EXPECT_TRUE(std::holds_alternative<ReceiveTimeout>(source.receive()));
   }
 
   TEST_F(SourceRuntimeTest, ReservedReceiveReleaseAcknowledgeAndCloseStillWorkAtAnExactlyFullLog)

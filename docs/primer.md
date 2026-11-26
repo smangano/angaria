@@ -1021,6 +1021,8 @@ The benchmark separates ordinary public API calls from an instrumented private e
 
 Acknowledgment and other reserved progress operations do not append log bytes. They can still allocate ordinary process memory, map or read files, wait for the gate, or fail on I/O or exhausted counters. Neither these measurements nor a passing test promises a maximum latency or power-loss durability.
 
+A finite receive can time out while a producer is competing for that same gate. The timeout does not prove that no message will arrive later. Continue your application's receive loop as needed; a later poll can still receive the publication after the producer accepts it.
+
 ## How this guide will grow
 
 The learning sequence completes milestone 3 and introduces native sending and receiving in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.

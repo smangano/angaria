@@ -54,7 +54,7 @@ Reserved acknowledgment, release, loss, and claim cleanup require **no appended 
 
 Borrowed payload reads need no mutation gate after issuance establishes their pin. Their mapping/address remains stable across growth and later uncommitted rollback. Acknowledgment, release, close, or replacement ends the delivery borrow; applications must stop reading it, including after uncertain completion, and copy before finishing if independent lifetime is needed. A preallocated deferred-close marker records cleanup obligations without itself allocating; processing that obligation still enters the ordinary gated runtime.
 
-Zero-time receive and finite waits use nonblocking gate attempts and checked monotonic deadlines. They do not impose a hard bound on recovery or an already started operation. The [concurrency contract](../concurrency.md#supported-failure-and-progress-scope) and [receive guide](../native-receive.md) state the exact scope. There is no starvation-free, wait-free, hard-real-time, or power-loss durability guarantee.
+Zero-time receive and finite waits use nonblocking gate attempts and checked monotonic deadlines. They do not impose a hard bound on recovery or an already started operation, nor guarantee that a competing producer acquires the gate before a receive deadline. The concurrent-publication test accepts that legitimate timeout and verifies subsequent exact delivery instead of assuming fair scheduling within two seconds. The [concurrency contract](../concurrency.md#supported-failure-and-progress-scope) and [receive guide](../native-receive.md) state the exact scope. There is no starvation-free, wait-free, hard-real-time, or power-loss durability guarantee.
 
 ## Primer and documentation review
 
