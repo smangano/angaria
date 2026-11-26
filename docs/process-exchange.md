@@ -16,7 +16,7 @@ python3 test/process_exchange.py build/angaria_primer_13_process_exchange \
 ./build/angaria_inspect build/process-exchange/session build/process-exchange/new/capture.angcap
 ```
 
-The compiled program is available when `BUILD_TESTING=OFF`; the walkthrough needs Python 3.9 or later. The normal CTest entry is `process_exchange` and runs on all four native CI profiles.
+The compiled program is available when `BUILD_TESTING=OFF`; the walkthrough needs Python 3.9 or later. The normal CTest entry is `process_exchange` and runs on every automatic or requested native qualification job. Linux x86_64, Linux ARM64, and macOS ARM64 run automatically; [macOS x86_64 runs by request](native-storage.md#request-macos-x86_64-qualification).
 
 ## Application commands and artifacts
 
@@ -55,7 +55,7 @@ This step changes framework version only. Native mapped formats 2.0/2.1, require
 | Exact schema and independent Session context | `MessageInspection.ExactSchemaSelectionNeverFallsBackToNewestOrAnotherSession`; `MessageRecordTest.BinaryDecodingRequiresTheExactSchemaEvenWhenWidthsMatch` and `BinarySchemaContextIsAnIndependentSessionIdentity`; the new process walkthrough. |
 | Process lifetime and teaching examples | CTest `process_exchange`, existing `capture_example` and `registry_walkthrough`, and the thirteen always-built primer programs. The [primer](primer.md) reviews the complete milestone-3 learning path. |
 
-The [inspection tests](../test/test_inspection.cpp), [schema tests](../test/test_schema_registry.cpp), [recovery tests](../test/test_schema_recovery.cpp), [superblock tests](../test/test_mapped_superblock.cpp), [controller tests](../test/test_session_controller.cpp), [atomic tests](../test/test_native_atomic.cpp), and [record tests](../test/test_message_record.cpp) explain public scenarios separately from private compatibility/corruption fixtures. CI qualifies Linux and macOS on x86_64 and ARM64. These independent native runs do not establish cross-host live shared storage, foreign-profile native attachment, or migration support.
+The [inspection tests](../test/test_inspection.cpp), [schema tests](../test/test_schema_registry.cpp), [recovery tests](../test/test_schema_recovery.cpp), [superblock tests](../test/test_mapped_superblock.cpp), [controller tests](../test/test_session_controller.cpp), [atomic tests](../test/test_native_atomic.cpp), and [record tests](../test/test_message_record.cpp) explain public scenarios separately from private compatibility/corruption fixtures. CI provides qualification jobs for Linux and macOS on x86_64 and ARM64, with Intel Mac runs requested manually. These independent native runs do not establish cross-host live shared storage, foreign-profile native attachment, or migration support.
 
 ## Scope of the milestone
 

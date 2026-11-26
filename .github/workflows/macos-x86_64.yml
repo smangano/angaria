@@ -1,0 +1,28 @@
+name: macOS x86_64 qualification (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-profile:
+    name: macOS x86_64
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check native architecture
+        run: |
+          uname -sm
+          test "$(uname -m)" = "x86_64"
+      - name: Install dependencies
+        run: brew install boost googletest
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+      - name: Build
+        run: cmake --build build --parallel 3
+      - name: Run native tests and walkthroughs
+        run: ctest --test-dir build --output-on-failure
