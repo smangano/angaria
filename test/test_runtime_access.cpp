@@ -207,6 +207,41 @@ namespace
                   access.immutable_record(_references[0], 2), _references[0]))._id, TaskId{1});
   }
 
+  // A finite receive first obtains a nonblocking guard. Adopting it must not
+  // recursively acquire the same gate, and still provides recovered lookups.
+  TEST_F(RuntimeAccessTest, AdoptsATryAcquiredGuardWithoutReenteringTheGate)
+  {
+    auto guard = require_value(_state->_controller->try_acquire_mutation());
+    runtime::RuntimeAccess access(_state, std::move(guard));
+    EXPECT_EQ(runtime::runtime_task(access, TaskId{1})._reference, _references.front());
+    const auto busy = _state->_controller->try_acquire_mutation();
+    ASSERT_TRUE(std::holds_alternative<Error>(busy));
+    EXPECT_EQ(std::get<Error>(busy)._code, ErrorCode::OwnershipBusy);
+  }
+
+  TEST_F(RuntimeAccessTest, RejectsAGuardFromAnotherSessionBeforeReadingItsJournal)
+  {
+    SessionOptions options;
+    options._name = "Other Session";
+    options._directory = _root / "other";
+    options._maxLogBytes = 1048576;
+    options._limits = CapacityLimits::empty().tasks(1);
+    TaskDescriptor creator;
+    creator._name = "OtherCreator";
+    auto other = require_value(Session::create(options, creator));
+    auto controller = require_value(mapped::SessionController::open_existing(options._directory));
+    auto guard = require_value(controller->try_acquire_mutation());
+    try
+    {
+      runtime::RuntimeAccess access(_state, std::move(guard));
+      FAIL() << "A guard from another Session must not authorize access";
+    }
+    catch (const runtime::RuntimeFailure& failure)
+    {
+      EXPECT_EQ(failure._error._code, ErrorCode::WrongOwner);
+    }
+  }
+
   // Cache scope follows the recovered operation, not the process or controller.
   // After an Append completes and its gate owner closes, the next access must
   // index the new definition while preserving the older committed references.

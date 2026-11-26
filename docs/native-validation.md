@@ -2,7 +2,7 @@
 
 Milestone 4, step 4.3, framework version **0.4.3**, validates the core native delivery reader profile. A [Publication](native-transport.md#storage-and-acceptance) retains one message and its destination; its receipt records delivery progress. A Source pin identifies the one delivery currently issued through that Source.
 
-The public Session factories now create format **2.2/`0x7`** for [direct publication](direct-publication.md) in step 4.6. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); step 4.5 adds [reserved progress and claim cleanup](native-progress.md). Public native delivery views remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify malformed histories and reader boundaries independently of the public sender. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
+The public Session factories now create format **2.2/`0x7`** for [direct publication](direct-publication.md) in step 4.6. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); step 4.5 adds [reserved progress and claim cleanup](native-progress.md). Step 4.7 now exposes [public Source delivery](native-receive.md) with bound payload views and exact progress tokens. Private tests construct **2.2/`0x7`** records through the journal to qualify malformed histories and reader boundaries independently of the public sender. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
 
 ## Admission before recovery
 
@@ -26,7 +26,7 @@ Session attachment, topology reads, and current/historical Registry snapshots va
 
 Publication IDs may be accepted in a different order from their issuance: a producer can issue IDs 1 and 2, then send 2 before 1. Queue sequences describe acceptance order; publication sequences distinguish requests. Validation enforces uniqueness and issued bounds without confusing those two orders.
 
-The core profile supports direct acceptance only. A native Publishing acceptance or Retry requires later capability work, even though the private record codecs can represent broader snapshots. Multiple Active Queues in one Source remain valid Registry topology; the limit on fresh Source selection belongs to step 4.7.
+The core profile supports direct acceptance only. A native Publishing acceptance or Retry requires later capability work, even though the private record codecs can represent broader snapshots. Multiple Active Queues in one Source remain valid Registry topology; fresh Source selection currently supports at most one Active Queue in step 4.7; an existing pin remains usable during membership growth.
 
 ## Core progress words
 
@@ -45,4 +45,4 @@ An Issued receipt can remain valid after its process dies: recorded claim identi
 
 The [delivery validation tests](../test/test_delivery_validation.cpp) start with real Registry definitions, then install private journal records. They cover ring wrap, old incarnations, accepted-ID order, historical snapshots, pins, released-receipt ordering, acknowledgment clocks, and deliberately inconsistent references/roots. A private read observer rejects any metadata request overlapping a large payload before allocation/I/O, while separate corruption fixtures still check its alignment padding. The [capability tests](../test/test_delivery_compatibility.cpp) qualify rejection before recovery. The [test reading guide](../test/README.md) separates these fixtures from runnable public API examples.
 
-Step 4.4 implements private mapped payload storage and complete append planning. Step 4.5 extends progress replay and Task/Source cleanup. Public sending follows in step 4.6, receiving in step 4.7, and allowed loss in step 4.8. Application Binary payload admission belongs to the sending step; these history checks establish stored identity, reference, and progress relationships.
+Step 4.4 implements private mapped payload storage and complete append planning. Step 4.5 extends progress replay and Task/Source cleanup. Public direct sending and basic Source delivery are implemented in steps 4.6–4.7; allowed loss remains step 4.8. Application Binary payload admission belongs to the sending step; these history checks establish stored identity, reference, and progress relationships.

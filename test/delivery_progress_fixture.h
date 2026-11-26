@@ -4,6 +4,7 @@
 #include "angaria/runtime.h"
 #include "delivery_state.h"
 #include "native_fixture.h"
+#include "native_log_budget.h"
 #include "publication_metadata.h"
 #include "topology_state.h"
 #include "wire_fixture.h"
@@ -228,41 +229,7 @@ namespace angaria::test_support
 
     void fill_log()
     {
-      // A valid retained Queue revision consumes the exact remaining bytes.
-      // No byte limit or Session metadata is falsified to manufacture LogFull.
-      detail::RuntimeAccess access(_state);
-      const auto topology = detail::runtime_topology(access);
-      const auto& queue = topology._queues.front();
-      const auto remaining = _configuration._maxLogBytes - access._snapshot._tail;
-      constexpr std::uint64_t manifestBytes = 192; // fixed64 + ref8 + redo48 + envelope/padding.
-      constexpr std::uint64_t queueFixedBytes = 80;
-      const auto fixed = mapped::record_envelope_bytes + queueFixedBytes + queue._definition._descriptor._name.size();
-      if (remaining < manifestBytes + fixed)
-      {
-        throw std::runtime_error("Insufficient fixture headroom for exact-fill Queue revision");
-      }
-      auto definition = queue._definition;
-      definition._registration._revision = access._snapshot._revision + 1;
-      definition._descriptor._doc.assign(static_cast<std::size_t>(remaining - manifestBytes - fixed), 'x');
-      mapped::JournalRecord record;
-      record._kind = 3;
-      record._previous = queue._reference;
-      record._immutable = require_value(mapped::encode_queue_definition(definition, access._snapshot._tail));
-      mapped::TransactionPlan plan;
-      plan._base = access._snapshot;
-      plan._kind = mapped::JournalKind::Append;
-      plan._actor = _parent;
-      plan._actorIncarnation = 1;
-      plan._newRevision = definition._registration._revision;
-      plan._records.push_back(std::move(record));
-      const std::array<std::uint64_t, 4> row{static_cast<std::uint16_t>(_queue),
-          access._snapshot._tail, plan._newRevision, 2};
-      plan._commands.push_back(detail::runtime_write_words(queue._indexOffset, row));
-      const auto result = require_value(access._journal.execute(access._guard, plan));
-      if (result._tail != _configuration._maxLogBytes)
-      {
-        throw std::runtime_error("Queue revision did not exactly fill fixture log");
-      }
+      fill_log_with_queue_revision(_state, _queue, TaskClaim{_configuration._session, _parent, 1});
     }
 
     std::vector<std::byte> image() const

@@ -6,7 +6,7 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1, [2](docs/milestones/milestone-2.md), and [3](docs/milestones/milestone-3.md) are complete. Milestone 3 adds general message construction, capture, and inspection through exact Registry definitions. [Milestone 4](docs/milestones/milestone-4.md) now supports direct Queue publication and acceptance lookup; receive follows next.
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1, [2](docs/milestones/milestone-2.md), and [3](docs/milestones/milestone-3.md) are complete. Milestone 3 adds general message construction, capture, and inspection through exact Registry definitions. [Milestone 4](docs/milestones/milestone-4.md) now supports direct Queue publication, acceptance lookup, and receiving through a Source with one Active Queue.
 
 The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR and, from milestone 3, build numbering starting at `1` for each milestone. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
 
@@ -16,9 +16,9 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
-For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.8** implements its direct-send and owned-outcome path, named setup conveniences, and consistent message header; the review's status table identifies the remaining work.
+For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.9** adds the receive, acknowledgment/release, and explicit Source-close path to the implemented direct-send, named setup, and shared message-header model; the review's status table identifies the remaining work.
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). Its fourteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending directly into a Queue with retained acceptance lookup. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). Its fifteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -60,9 +60,9 @@ Relative Session directories resolve from the TOML file's parent directory. Crea
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines retained formats 2.0/2.1, the current core 2.2 creation/reader profile, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, publication identity issuance, direct send, and retained acceptance lookup are implemented. Public receive and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines retained formats 2.0/2.1, the current core 2.2 creation/reader profile, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, publication identity issuance, direct send/status, and basic Source receive/acknowledge/release/close are implemented. Multiple-Queue selection and Publishing follow their [roadmap milestones](ROADMAP.md).
 
-The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Direct publication is implemented; public receive and notification behavior follow their implementation milestones.
+The [concurrency and recovery contract](docs/concurrency.md) specifies the mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Native publication and basic Source delivery are implemented; eventfd notification remains milestone 7.
 
 Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. The [superblock](docs/mapped-format.md#superblock) is the fixed 4,096-byte session control area at the beginning of `session.ang`. Its codec encodes a provisional superblock prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Native resources, journal recovery, and Session integration are separate increments in the [milestone 2 steps](docs/milestones/milestone-2.md). Related terms are defined in the [glossary](docs/glossary.md).
 
@@ -123,7 +123,9 @@ Step **4.4**, framework **`0.4.5`**, adds [private committed payload mappings an
 
 Step **4.5**, framework **`0.4.6`**, adds [reserved delivery progress and publication-aware claim cleanup](docs/native-progress.md). Private issuance, acknowledgment, release, and Task/Source cleanup use existing storage and can finish at a full log. Claim replay preserves historical identities and releases old Thread pins when their parent Process is replaced.
 
-Step **4.6**, framework **`0.4.8`**, implements [direct Queue publication](docs/direct-publication.md). `QueueWriter::send` accepts an explicit issued ID and a `MessageView`; `Task::publication_status` resolves that ID, including retained earlier incarnations. Identical repeats preserve the original acceptance. New Sessions use core format 2.2/`0x7`; legacy Sessions remain attachable without native delivery. [Lesson 14](examples/primer/14_direct_send.cpp) demonstrates sending while a consumer is offline. Public receive and acknowledgment follow in step 4.7.
+Step **4.6**, framework **`0.4.8`**, implements [direct Queue publication](docs/direct-publication.md). `QueueWriter::send` accepts an explicit issued ID and a `MessageView`; `Task::publication_status` resolves that ID, including retained earlier incarnations. Identical repeats preserve the original acceptance. New Sessions use core format 2.2/`0x7`; legacy Sessions remain attachable without native delivery. [Lesson 14](examples/primer/14_direct_send.cpp) demonstrates sending while a consumer is offline.
+
+Step **4.7**, framework **`0.4.9`**, implements [basic Source delivery](docs/native-receive.md): stable borrowed `MessageView` payloads, complete headers, owning copies, exact acknowledgment/release tokens, finite spin waits, and explicit Source close with recoverable deferred cleanup. One Active Queue per Source is supported for fresh selection. Multiple-Queue selection, allowed loss, and Publishing remain their later steps.
 
 ## Run the restart walkthrough
 

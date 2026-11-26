@@ -1,10 +1,10 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The fourteen lessons here use implemented APIs, including direct Queue publication in framework **0.4.8**, milestone 4 step 4.6.
+The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The fifteen lessons here use implemented APIs, including native send and receive in framework **0.4.9**, milestone 4 step 4.7.
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Receiving and acknowledgment follow in step 4.7. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, and saves a message, then closes and reopens its Source. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. Some additional public methods remain declarations for future steps; the separate full-interface review is compile-only. A declaration alone does not make an operation runnable.
 
@@ -34,7 +34,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lesson 14 joins the milestone-4 staging branch at `0.4.8`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
+Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lessons 14 and 15 join the milestone-4 staging branch at `0.4.8` and `0.4.9`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -51,9 +51,9 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The fourteen targets are named `angaria_primer_01_session` through `angaria_primer_14_direct_send`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The fifteen targets are named `angaria_primer_01_session` through `angaria_primer_15_receive`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
 
-Examples 1–5, 9, and 11–14 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+Examples 1–5, 9, and 11–15 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
 ```sh
 primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
@@ -678,17 +678,65 @@ Earlier incarnation's acceptance remains queryable.
 Acceptance records Queue entry; consumer processing is a later step.
 ```
 
-The shared **MessageHeader** exposes publication identity/time, schema, format, flags, and payload size. It also has optional destination fields: Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. A **Message** owns its bytes and header; a **MessageView** borrows bytes with the same header; a **Delivery** combines a MessageView with the token needed to acknowledge or release it. These declarations are in place for receive in the next step.
+The shared **MessageHeader** exposes publication identity/time, schema, format, flags, and payload size. It also has optional destination fields: Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. A **Message** owns its bytes and header; a **MessageView** borrows bytes with the same header; a **Delivery** combines a MessageView with the token needed to acknowledge or release it. Lesson 15 uses these same types for receiving.
 
 A library-bound view can copy itself into a Message while preserving its entire header and exact decoding context. A raw header/span view like this example is outbound input without that context; its copy_message returns InvalidState. This avoids guessing which Session's same-numbered schema describes the bytes. The current portable 80-byte record stores publication fields only and rejects destination fields that it cannot represent; it does not silently drop them.
 
-## What native receive will add
+## 15. Receive, release, copy, and close
 
-The [transport contract](native-transport.md) and [milestone plan](milestones/milestone-4.md) describe the next steps. The **payload plane** retains message bytes and their delivery history. A bounded **ring** caches references to recent messages. Overwriting a ring entry does not acknowledge the message or remove its retained history. Sending to a full ring is supported; a slow consumer using the default recovery policy will follow retained links.
+Read [15_receive.cpp](../examples/primer/15_receive.cpp), then run:
 
-A **receipt** records one destination's delivery progress. A **pin** identifies the delivery currently borrowed by a consumer. Step 4.7 will expose receive, acknowledge, release, and explicit Source close. Acknowledging or releasing a delivery, closing its Source, or ending its claim will end that payload view's lifetime. Acknowledgment ends a delivery obligation; it does not reclaim physical log space. The existing private progress/recovery implementation reserves space so progress and owner replacement can finish even at a full log.
+```sh
+./build/angaria_primer_15_receive "$primer_workspace/15-receive"
+```
 
-New Sessions now use core format 2.2 with the native-delivery capability. Existing 2.0/2.1 Sessions remain readable for their supported operations and return UnsupportedPolicy for native send/status. They are not upgraded in place. Milestone 4 will receive from at most one Active Queue per Source; milestone 5 adds selection among several Queues. Optional allowed loss follows in step 4.8.
+This program sends three Quotes before Strategy attaches. The Queue's ring holds references to only two messages, but the first Quote remains in the retained log. Receiving starts at Queue sequence 1. A **Queue sequence** records acceptance order for that connection, while a PublicationId identifies a producer's request.
+
+Open the consumer's Source once, then inspect the receive result:
+
+```cpp
+auto consumer = primer::value(created._session.attach_task("Strategy"));
+auto inputs = primer::value(consumer.open_source_set("StrategyInputs"));
+auto event = inputs.receive();
+if (auto* delivery = std::get_if<Delivery>(&event))
+{
+  const auto header = delivery->_message._header;
+  auto saved = primer::value(delivery->_message.copy_message(64));
+  primer::value(inputs.acknowledge(delivery->_token));
+  // saved owns its bytes and preserves header after the borrow ends.
+}
+```
+
+The full program also checks Error and unexpected alternatives. Normal application code handles Delivery, ReceiveTimeout, and Error separately. DeliveryGap is reserved for configured allowed loss in the next step. A receive without a timeout makes one nonblocking availability attempt; it can time out if the gate is busy. A positive timeout repeatedly checks until its monotonic deadline. Negative or overflowing timeouts are errors.
+
+A Delivery exposes two different things: `_message` borrows bytes, and `_token` identifies the current acknowledgment obligation. Its MessageHeader includes the original publication identity/time and destination Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. The example verifies those fields instead of interpreting timestamps hidden inside the payload.
+
+A **pin** records which delivery the Source currently owns. Repeating receive before finishing that delivery returns the same token, time, and stable payload address. Application processing happens outside the mutation gate. Acknowledgment says processing completed; release says the message should be offered again. Release does not skip to the next message, and redelivery gets a new token. An old token cannot acknowledge a later issuance.
+
+The program first copies sequence 1 into an owning Message, releases its borrow, receives the same publication with a new token, and acknowledges that new token. The copy preserves the entire original header, including its earlier dequeue time. It keeps independent bytes and the exact schema context without keeping the delivery pin. Later, after every Session, Task, and endpoint handle has closed, the program still decodes PriceTicks=12345 from that copy.
+
+Next it receives sequence 2 and calls `inputs.close()` without acknowledging. Closing releases unfinished work to Pending. Reopening StrategyInputs offers sequence 2 again with a different token. The program acknowledges it, receives and acknowledges sequence 3, then gets a timeout because no messages remain pending.
+
+Expected output:
+
+```text
+Recovered oldest Queue sequence after ring wrap: 1
+Release redelivered the same publication with a new token.
+Closing an unacknowledged Source allows redelivery.
+Final receive: timeout.
+Saved copy after all handles close: PriceTicks=12345
+Saved header kept every delivery field.
+```
+
+Keep a borrowed payload alive only while its delivery remains in flight. Acknowledgment, release, valid Source close, or claim termination ends that view's lifetime. Move construction transfers the incoming ownership; move assignment ends the destination's old borrow. Finish application reads before those operations. A copied MessageView still borrows the same bytes; use copy_message while valid when you need independent storage.
+
+Explicit close lets you see cleanup errors. Once a valid close begins, that handle accepts only close retries. A failed close retains its reservation, preventing a second opening from bypassing unfinished cleanup. Destruction and move assignment attempt cleanup too; if it fails, the Task must settle a preallocated deferred marker before further delivery/progress. The [receive contract](native-receive.md) explains these recovery rules in detail.
+
+## What comes next
+
+Current core Sessions use format 2.2 with native-delivery support. Existing 2.0/2.1 Sessions retain their supported operations and reject native delivery; they are not upgraded in place. Milestone 4 currently selects from at most one Active Queue per Source. A Source with no Active Queue can time out; multiple Active inputs return UnsupportedPolicy for fresh selection. An already borrowed delivery can still be finished if topology grows. Milestone 5 adds selection among those inputs.
+
+Acknowledgment ends a delivery obligation; it does not reclaim physical append space. Reserved receipt progress, cleanup, and owner replacement can finish at a full log. Step 4.8 adds optional allowed loss for applications where stale pending messages have no value. Later milestones add fan-out/retry, eventfd waiting, storage reclamation, advanced Fields, and message replay.
 
 ## Understand bounds and ordinary failures
 
@@ -714,7 +762,7 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence completes milestone 3 and introduces direct sending in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence completes milestone 3 and introduces native sending and receiving in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
