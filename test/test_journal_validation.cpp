@@ -38,6 +38,24 @@ namespace
     angaria::test_support::put_integer(bytes, offset, value);
   }
 
+  TEST(JournalRecordLookup, ResolvesOnlyExactBoundariesAcrossTheOrderedRange)
+  {
+    // The compact replay reader must retain exact reference validation when
+    // using binary search: lower_bound alone could return the next record.
+    const std::array<mapped::JournalRecordRange, 3> records{{
+        {._offset = 4096}, {._offset = 4352}, {._offset = 4864},
+    }};
+    EXPECT_EQ(mapped::find_journal_record({}, 4096), nullptr);
+    for (const auto& record : records)
+    {
+      EXPECT_EQ(mapped::find_journal_record(records, record._offset), &record);
+    }
+    for (const auto reference : {0u, 4095u, 4097u, 4160u, 4353u, 4865u, 8192u})
+    {
+      EXPECT_EQ(mapped::find_journal_record(records, reference), nullptr);
+    }
+  }
+
   mapped::RedoCommand write_range(std::uint64_t target, std::size_t bytes = 8)
   {
     return mapped::RedoCommand{._target = target, ._payload = std::vector<std::byte>(bytes)};

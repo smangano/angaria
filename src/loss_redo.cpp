@@ -76,11 +76,8 @@ namespace angaria::detail::mapped
     const JournalRecordRange& record_at(std::span<const JournalRecordRange> records,
                                            std::uint64_t reference, std::uint16_t kind, ErrorCode code)
     {
-      const auto found = std::find_if(records.begin(), records.end(), [&](const auto& entry)
-      {
-        return entry._offset == reference;
-      });
-      require(found != records.end() && found->_envelope._kind == kind && found->_envelope._readiness == 2,
+      const auto* found = find_journal_record(records, reference);
+      require(found && found->_envelope._kind == kind && found->_envelope._readiness == 2,
               code, "Loss reference is not an exact committed record of the required kind");
       return *found;
     }

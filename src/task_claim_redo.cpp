@@ -239,11 +239,8 @@ namespace angaria::detail::mapped
         {
           fail(code, "Task index contains an invalid identity, duplicate, revision, or reserved word");
         }
-        const auto record = std::find_if(records.begin(), records.end(), [&](const auto& value)
-        {
-          return value._offset == entry[1];
-        });
-        if (record == records.end() || record->_envelope._kind != 2 ||
+        const auto* record = find_journal_record(records, entry[1]);
+        if (!record || record->_envelope._kind != 2 ||
             record->_envelope._readiness != 2 || record->_envelope._registryRevision != entry[2] ||
             !fits_size_t(record->_envelope._immutableBytes))
         {
@@ -341,13 +338,10 @@ namespace angaria::detail::mapped
           }
           continue;
         }
-        const auto record = std::find_if(records.begin(), records.end(), [&](const auto& candidate)
-        {
-          return candidate._offset == entry[1];
-        });
+        const auto* record = find_journal_record(records, entry[1]);
         if (entry[0] > max_entity_id || !ids.insert(entry[0]).second || entry[2] == 0 ||
             (entry[3] != 1 && entry[3] != 2) || !all_zero(std::span{entry}.subspan(4)) ||
-            record == records.end() || record->_envelope._kind != 4 || record->_envelope._readiness != 2 ||
+            !record || record->_envelope._kind != 4 || record->_envelope._readiness != 2 ||
             record->_envelope._registryRevision != entry[2] || !fits_host_size(record->_envelope._immutableBytes))
         {
           fail(code, "Source cleanup index does not name its committed definition");
@@ -410,11 +404,8 @@ namespace angaria::detail::mapped
           fail(code, "Lost cleanup Queue index is not a unique Active definition");
         }
         found = true;
-        const auto record = std::find_if(records.begin(), records.end(), [&](const auto& candidate)
-        {
-          return candidate._offset == entry[1];
-        });
-        if (record == records.end() || record->_envelope._kind != 3 || record->_envelope._readiness != 2 ||
+        const auto* record = find_journal_record(records, entry[1]);
+        if (!record || record->_envelope._kind != 3 || record->_envelope._readiness != 2 ||
             record->_envelope._registryRevision != entry[2] || !fits_host_size(record->_envelope._immutableBytes))
         {
           fail(code, "Lost cleanup Queue index does not name its exact committed definition");
@@ -439,12 +430,9 @@ namespace angaria::detail::mapped
           fail(code, "Lost cleanup receipt is outside its allowed-loss Queue's overwritten terminal prefix");
         }
         result = {words[8], words[0] - capacity + 1, queue._descriptor._sourceSet, queue._descriptor._producer};
-        const auto ring = std::find_if(records.begin(), records.end(), [&](const auto& candidate)
-        {
-          return candidate._offset == words[2];
-        });
+        const auto* ring = find_journal_record(records, words[2]);
         const auto ringBytes = ring_storage_bytes(capacity);
-        if (!ringBytes || ring == records.end() || ring->_envelope._kind != 8 ||
+        if (!ringBytes || !ring || ring->_envelope._kind != 8 ||
             ring->_envelope._readiness != 2 || ring->_envelope._immutableBytes != 0 ||
             ring->_envelope._totalBytes != *ringBytes)
         {
@@ -456,12 +444,9 @@ namespace angaria::detail::mapped
           const auto lastIndex = (words[0] - 1) % capacity;
           const auto distance = lastIndex >= index ? lastIndex - index : capacity - (index - lastIndex);
           const auto expected = words[0] - distance;
-          const auto publicationRecord = std::find_if(records.begin(), records.end(), [&](const auto& candidate)
-          {
-            return candidate._offset == slot[2];
-          });
+          const auto* publicationRecord = find_journal_record(records, slot[2]);
           if (slot[0] != expected || slot[3] != 1 + (expected - 1) / capacity ||
-              publicationRecord == records.end() || publicationRecord->_envelope._kind != 9)
+              !publicationRecord || publicationRecord->_envelope._kind != 9)
           {
             fail(code, "Lost cleanup Queue ring is outside its authoritative current window");
           }

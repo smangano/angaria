@@ -370,4 +370,54 @@ namespace
     }
     require_value(Session::attach(_directory));
   }
+
+  TEST_F(LossRedoTest, ClaimCleanupRequiresExactRetainedPublicationBoundariesBeforeAnyWrite)
+  {
+    create();
+    {
+      runtime::RuntimeAccess access(support::open_runtime_state(_directory));
+      const auto loss = plan(access);
+      const auto committed = require_value(access._journal.execute(access._guard, loss));
+      access._snapshot._generation = committed._generation;
+      const auto task = runtime::runtime_task(access, _claim._task);
+      auto cleanup = loss;
+      cleanup._base = access._snapshot;
+      cleanup._commands.clear();
+      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, task._stateOffset,
+                                 std::vector<std::byte>(16)};
+      runtime::write_unsigned_le(release._payload, 0, _claim._incarnation);
+      cleanup._commands.push_back(std::move(release));
+
+      // Loss enables the cleanup scan of the current ring. Its first slot is
+      // sequence five, which must name an exact retained Publication boundary.
+      // Nearby bytes and other record kinds must never be mistaken for it.
+      const auto ring = access.read_words(_queue + 16, 1).front();
+      const auto publicationWord = ring + mapped::record_envelope_bytes + 16;
+      const auto original = access.read_words(publicationWord, 1).front();
+      EXPECT_EQ(original, access.record_references(9).back());
+      const std::array invalid{
+          access.record_references(1).front() - mapped::record_envelope_bytes,
+          original + 8,
+          original + mapped::record_envelope_bytes,
+          access._snapshot._tail,
+          access.record_references(3).front()};
+      for (const auto reference : invalid)
+      {
+        SCOPED_TRACE(reference);
+        support::set_atomic_word(_directory, publicationWord, reference);
+        const auto before = raw_image();
+        expect_error(access._journal.execute(access._guard, cleanup), ErrorCode::InvalidArgument);
+        EXPECT_EQ(raw_image(), before);
+        support::set_atomic_word(_directory, publicationWord, original);
+      }
+
+      // Restoring the exact boundary permits the same captured cleanup. This
+      // also confirms failed validation did not prepare a competing operation.
+      require_value(access._journal.execute(access._guard, cleanup));
+      const auto flags = access.read_words(task._stateOffset + 48, 1).front();
+      EXPECT_EQ(flags & 1, 0u);
+      EXPECT_EQ(flags & 4, 4u);
+    }
+    require_value(Session::attach(_directory));
+  }
 }

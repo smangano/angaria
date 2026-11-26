@@ -124,13 +124,9 @@ namespace angaria::detail::mapped
       {
         return;
       }
-      const auto found = std::lower_bound(earlier.begin(), earlier.end(), previous,
-                                          [](const auto& candidate, std::uint64_t value)
-                                          {
-                                            return candidate._offset < value;
-                                          });
+      const auto* found = find_journal_record(earlier, previous);
       const auto kind = record._envelope._kind;
-      if (found == earlier.end() || found->_offset != previous ||
+      if (!found ||
           (found->_envelope._kind != kind && !(kind == 10 && found->_envelope._kind == 9)))
       {
         fail(code, "Record predecessor is not an earlier compatible record boundary");

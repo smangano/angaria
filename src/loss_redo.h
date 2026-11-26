@@ -12,6 +12,7 @@ namespace angaria::detail::mapped
 
   // Validate the complete two-command FixedState intent before any live write.
   // Replay admits only the interrupted old/new values of this exact operation.
+  // Record ranges are validated and ordered by allocation offset.
   OperationResult validate_loss_commands(NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records, std::span<const RedoCommand> commands,
       TaskId actor, std::uint64_t incarnation, bool allowLoss, bool replay,
