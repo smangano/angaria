@@ -75,6 +75,13 @@ target_include_directories(angaria SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include
 target_compile_features(angaria PUBLIC cxx_std_20)
 target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
 
+option(ANGARIA_BUILD_BENCHMARKS "Build native transport measurement tools" ON)
+if(ANGARIA_BUILD_BENCHMARKS)
+  add_executable(angaria_transport_benchmark benchmarks/native_transport.cpp)
+  target_include_directories(angaria_transport_benchmark PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_transport_benchmark PRIVATE angaria)
+endif()
+
 add_executable(angaria_queue_demo examples/queue_demo.cpp)
 target_link_libraries(angaria_queue_demo PRIVATE angaria)
 
@@ -105,6 +112,14 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+
+  # Validate the measurement tool's results, never a machine's speed.
+  if(ANGARIA_BUILD_BENCHMARKS)
+    add_test(NAME native_benchmark_smoke
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/run_native.py"
+              "$<TARGET_FILE:angaria_transport_benchmark>" --smoke)
+    set_tests_properties(native_benchmark_smoke PROPERTIES TIMEOUT 60)
+  endif()
 
   add_executable(angaria_native_atomic_worker test/native_atomic_worker.cpp)
   target_include_directories(angaria_native_atomic_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")

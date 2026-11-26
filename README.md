@@ -12,11 +12,11 @@ The framework version is recorded in [VERSION](VERSION), which CMake reads and c
 
 The milestone-6 demo target is a [five-process trading simulation](ROADMAP.md#demonstration-application): market-data feed, strategy, risk gateway, exchange simulator, and audit consumer. Planning starts during milestones 2–3, with runnable portions introduced as mapped storage and Queue Sets become available.
 
-The current v0 prototype exchanges an integer message through a bounded filesystem queue, supports independent endpoint restart and explicit acknowledgment, and records messages in an inspectable session file. The commands below run that prototype.
+The earlier v0 prototype remains available in the explicitly labeled legacy sections below. Use the primer for the current Registry and native Queue API.
 
 ## Build and test
 
-For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.9** adds the receive, acknowledgment/release, and explicit Source-close path to the implemented direct-send, named setup, and shared message-header model; the review's status table identifies the remaining work.
+For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.13** completes milestone 4's [measurements](docs/native-performance.md) and [completion audit](docs/milestones/milestone-4-completion.md) for review before integration. Implemented native delivery supports direct sends, one Active Queue per Source, acknowledgment/release, configured allowed loss, and explicit Source close. The review's status table identifies the remaining work.
 
 New to Angaria? Start with the [programmer primer](docs/primer.md). Its seventeen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. The latest lesson runs a [three-process market monitor](docs/native-pipeline.md) through native Queues, including backlog, schema versions, and replacement. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
 
@@ -131,9 +131,11 @@ Step **4.8**, framework **`0.4.10`**, enables configured `AllowLoss` delivery in
 
 Step **4.9**, framework **`0.4.11`**, adds [combined failure and exhaustion qualification](docs/native-qualification.md): independent producer/consumer death, repeated recovery, wrapped rings, full logs, final counter values, and actual OS refusal to grow the file. The primer explains [interrupted operations and safe recovery](docs/primer.md#when-an-operation-is-interrupted).
 
-Step **4.10**, framework **`0.4.12`**, adds the [native multi-process primer application](docs/native-pipeline.md). Feed, Strategy, and Audit use the public API and explicit TOML to exchange exact-version Quotes and derived PriceAlerts, recover backlog after ring wrap, release/redeliver, acknowledge, and replace terminated owners. The walkthrough retains the Session and role transcripts for inspection. Measurements and the completion audit remain step 4.11.
+Step **4.10**, framework **`0.4.12`**, adds the [native multi-process primer application](docs/native-pipeline.md). Feed, Strategy, and Audit use the public API and explicit TOML to exchange exact-version Quotes and derived PriceAlerts, recover backlog after ring wrap, release/redeliver, acknowledge, and replace terminated owners. The walkthrough retains the Session and role transcripts for inspection. Step **4.11**, framework **0.4.13**, adds reproducible [transport measurements](docs/native-performance.md) and the [milestone completion audit](docs/milestones/milestone-4-completion.md).
 
 ## Run the restart walkthrough
+
+This section runs the legacy v0 prototype, with its separate API and file format.
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.
 
@@ -147,6 +149,8 @@ Use a new session directory each time. Omitting `--session` runs the same scenar
 The demo uses one producer, one consumer, one integer message schema, and one delivery in flight. The log provides recovery from process termination on a running system. Power-loss durability requires a separate contract.
 
 ## Run the queue demo
+
+This section runs the legacy v0 prototype. For native mapped Queues, start with [primer lesson 14](docs/primer.md#14-send-directly-and-look-up-acceptance).
 
 Create a session and send a `Reading` with a signed 32-bit value from the producer terminal.
 
@@ -190,6 +194,8 @@ Remove the live queue when you are done. This preserves the log for inspection o
 The FIFO holds two messages. The session log defaults to 1 MiB. Pass a byte count after `create demo` to set a different cap. A send exits with status 3 if the queue is full or status 4 if the log is full. Acknowledgment frees a queue slot. Each role has one owner, and a competing attachment exits with status 5. Each successful attachment advances that role's incarnation number. See the [session format](docs/session-format.md) for the file layout and process-crash behavior.
 
 ## C++ endpoints
+
+This is the legacy v0 `angaria/session.h` API. Current applications use [the public runtime API](docs/primer.md).
 
 Keep a `Producer` and `Consumer` object alive for as long as each role is attached. Each object belongs to the process that created it and is used by one thread. Only one delivery can be in flight.
 

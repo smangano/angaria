@@ -57,4 +57,4 @@ Build and run all tests using the [README instructions](../README.md#build-and-t
 ctest --test-dir build -R 'Transport|PinnedProducerCrashTest' --output-on-failure
 ```
 
-The full suite remains required because these compositions reuse the same loaders, journal, claims, mappings, and receipt validation as ordinary Registry and primer operations. Automatic CI builds and tests Linux x86_64, Linux ARM64, and macOS ARM64. Intel Mac qualification remains [request-only](native-storage.md#request-macos-x86_64-qualification). Each PR records results for its exact commit; step 4.11 adds performance measurements and the final milestone audit.
+The full suite remains required because these compositions reuse the same loaders, journal, claims, mappings, and receipt validation as ordinary Registry and primer operations. Automatic CI builds and tests Linux x86_64, Linux ARM64, and macOS ARM64. Intel Mac qualification remains [request-only](native-storage.md#request-macos-x86_64-qualification). Each PR records results for its exact commit. Step 4.11 supplies [performance measurements](native-performance.md) and the [final milestone audit](milestones/milestone-4-completion.md).

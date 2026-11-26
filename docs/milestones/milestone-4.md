@@ -98,6 +98,12 @@ The coordinator starts with backlog beyond the two-entry ring, terminates Feed a
 
 The application compiles with tests disabled. Its CTest walkthrough invokes the same public commands and retains role transcripts when a caller requests a fresh workspace. The primer and detailed guide explain the commands, schema/identity output, lifetime rules, and the separate send/acknowledgment commits. Each Source still has one Active Queue; selection, Publishing, and the five-process trading simulation retain their later scope. Measurements and the final audit remain step 4.11.
 
+## Step 4.11 Measurements and completion audit
+
+Framework **0.4.13** adds the [measurement guide and baseline](../native-performance.md) and [completion audit](milestone-4-completion.md). A bounded C++ tool measures ordinary public buffered send/receive cycles and phased backlog, with constant four-channel geometry and total retained history across producer counts. A separate instrumented private profile observes gate acquisition, preparation, file growth, materialization, and apply boundaries. It reports physical append growth rather than claiming zero heap allocation or pure lock cost. Python retains raw reports, aggregate summaries, and TOML experiment metadata; CI checks correctness without speed thresholds.
+
+The completion review covers all eleven steps, retained native profiles and capability-before-recovery rejection, current/future API boundaries, blocking progress guarantees, full-log reserved work, and all seventeen primer lessons. It corrects stale future-tense descriptions and identifies v0 examples as legacy. This step targets staging; the milestone integration into `main` is a separate PR after this review is merged.
+
 ## Qualification and completion
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.

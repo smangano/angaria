@@ -227,7 +227,9 @@ The [mixed-process suite](../test/test_registry_qualification.cpp) and [worker](
 
 Step 3.6's [message exchange walkthrough](process-exchange.md) extends public qualification to completed canonical captures, retained schema catalogs, and producer replacement. Its compatibility matrix includes native 2.0 scalar inspection alongside the existing 2.1 logical-definition and unsupported-profile checks. The walkthrough uses ordinary files for record exchange; it does not add native Queue payload operations or change the qualified ABI profiles.
 
-The native adapter recognizes these little-endian 64-bit profiles, each requiring an always-lock-free eight-byte atomic implementation:
+Step 4.9's [combined qualification](native-qualification.md) adds independent producer/consumer replacement, repeated recovery, ring wrap, full-log progress, and real operating-system growth refusal. Step 4.10's [native pipeline](native-pipeline.md) carries application messages through native Queues using the public API. The [performance measurements](native-performance.md) report costs for specified workloads; they do not enlarge the supported policy or recovery boundary. The [milestone completion audit](milestones/milestone-4-completion.md) distinguishes these guarantees from later roadmap work.
+
+The native adapter recognizes these little-endian 64-bit profiles, each requiring an always-lock-free eight-byte atomic implementation. Queue operations still use the shared mutation gate and journal; this atomic-word requirement is not a lock-free or wait-free guarantee for an application operation.
 
 | OS and CPU | ABI profile | Hosted qualification job |
 | --- | --- | --- |

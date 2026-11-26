@@ -10,6 +10,8 @@ Readers retain the 2.0 journal, 2.1 basic-Field, and core 2.2/`0x7` profiles, an
 
 An existing 2.2/`0x7` Session remains usable for recover-from-log delivery. It cannot register an allowed-loss Queue, request allowed-loss defaults, or interpret a stored Lost receipt. Programmatic and TOML registration apply the same capability check before registration writes. Stored allowed-loss defaults or receipts without the required capability are invalid.
 
+Retained 2.0/`0x1` and 2.1/`0x3` Sessions preserve their earlier Registry, Task-claim, and scalar/logical codec behavior. Native send, publication lookup, receive, acknowledgment, and release return `UnsupportedPolicy` before new delivery writes. Closing an idle legacy Source remains valid cleanup. Attachment never upgrades these profiles to 2.2.
+
 The admission tests leave real Prepared and Committed journal operations pending, then try incompatible headers. Rejection preserves the Session and coordination files byte for byte. A supported-profile control proves that recovery would otherwise modify those fixtures. This tests process-recovery ordering, not power-loss durability.
 
 ## History and current state
@@ -28,7 +30,7 @@ Session attachment, topology reads, and current/historical Registry snapshots va
 
 Publication IDs may be accepted in a different order from their issuance: a producer can issue IDs 1 and 2, then send 2 before 1. Queue sequences describe acceptance order; publication sequences distinguish requests. Validation enforces uniqueness and issued bounds without confusing those two orders.
 
-The core profile supports direct acceptance only. A native Publishing acceptance or Retry requires later capability work, even though the private record codecs can represent broader snapshots. Multiple Active Queues in one Source remain valid Registry topology; fresh Source selection currently supports at most one Active Queue in step 4.7; an existing pin remains usable during membership growth.
+The implemented native profiles support direct acceptance only. A native Publishing acceptance or Retry requires later capability work, even though the private record codecs can represent broader snapshots. Multiple Active Queues in one Source remain valid Registry topology; fresh Source selection currently supports at most one Active Queue. An existing pin remains usable during membership growth. Multiple-Queue selection follows milestone 5.
 
 ## Core progress words
 
@@ -43,8 +45,10 @@ Strict/Spin scheduling, notification fields, and remaining reserved words stay z
 
 An Issued receipt can remain valid after its process dies: recorded claim identity and a persisted pin do not prove a live OS owner. An Issued Thread Task must also match its recorded parent Process incarnation, attachment flag, and PID; historical released, acknowledged, or lost receipts can outlive that parent claim. Replacement cleanup releases the exact old issuance before later receives apply the Queue's current loss policy. It does not acknowledge or lose the pinned delivery. The reader itself still performs no progress mutation.
 
-## Tests and next steps
+## Qualification evidence
 
 The [delivery validation tests](../test/test_delivery_validation.cpp) start with real Registry definitions, then install private journal records. They cover ring wrap, old incarnations, accepted-ID order, historical snapshots, pins, released-receipt ordering, acknowledgment clocks, and deliberately inconsistent references/roots. A private read observer rejects any metadata request overlapping a large payload before allocation/I/O, while separate corruption fixtures still check its alignment padding. The [capability tests](../test/test_delivery_compatibility.cpp) qualify rejection before recovery. The [test reading guide](../test/README.md) separates these fixtures from runnable public API examples.
 
 The [allowed-loss validation tests](../test/test_loss_validation.cpp) cover mixed acknowledged/lost prefixes, historical released consumer tags, current-window and policy violations, pending holes, retained pins, and missing capabilities. The [configuration tests](../test/test_loss_configuration.cpp) check both configuration paths and retained core Sessions. Loss uses reserved progress state without appending records, advancing retained-history floors, or reclaiming payloads. Application Binary payload admission belongs to sending; these history checks establish stored identity, reference, and progress relationships.
+
+Step 4.9's [combined qualification](native-qualification.md) exercises these invariants across producer and consumer replacement, repeated interrupted recovery, ring wrap, full logs, and operating-system refusal to grow the file. Step 4.10's [native pipeline application](native-pipeline.md) demonstrates the public API with independent Feed, Strategy, and Audit processes. The [performance measurements](native-performance.md) describe measured costs separately from correctness guarantees; the [milestone completion audit](milestones/milestone-4-completion.md) records the final scope and deferred features.
