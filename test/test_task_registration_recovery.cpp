@@ -3,6 +3,9 @@
 // through a live Task Registry; raw snapshots and fault callbacks below are test
 // infrastructure. SIGKILL covers a running local host, not power-loss durability.
 
+#include "native_fixture.h"
+#include "result_helpers.h"
+#include "process_support.h"
 #include "angaria/runtime.h"
 #include "runtime_state.h"
 
@@ -45,22 +48,9 @@ namespace
   namespace fs = std::filesystem;
   using namespace std::chrono_literals;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  bool has_error(const Result<T>& result, ErrorCode code)
-  {
-    const auto* error = std::get_if<Error>(&result);
-    return error && error->_code == code;
-  }
+  using angaria::test_support::has_error;
 
   struct Outcome
   {
@@ -83,7 +73,7 @@ namespace
       std::array<int, 2> input{-1, -1};
       if (::pipe(output.data()) == -1 || ::pipe(input.data()) == -1)
       {
-        close_fds(output, input);
+        angaria::test_support::close_pipe_fds(output, input);
         throw std::runtime_error("registration worker pipe failed");
       }
       int error{};
@@ -142,7 +132,7 @@ namespace
       }
       if (error != 0)
       {
-        close_fds(output, input);
+        angaria::test_support::close_pipe_fds(output, input);
         throw std::system_error(error, std::generic_category(), "spawn registration worker");
       }
       ::close(output[1]);
@@ -192,16 +182,7 @@ namespace
 
     void proceed()
     {
-      const char continuation = 'C';
-      ssize_t count;
-      do
-      {
-        count = ::write(_input, &continuation, 1);
-      } while (count == -1 && errno == EINTR);
-      if (count != 1)
-      {
-        throw std::runtime_error("registration worker continuation failed");
-      }
+      angaria::test_support::proceed(_input, "registration worker continuation failed");
     }
 
     void terminate_at_checkpoint()
@@ -215,101 +196,36 @@ namespace
 
     void terminate()
     {
-      if (::kill(_pid, SIGKILL) == -1)
-      {
-        throw std::runtime_error("registration worker termination failed");
-      }
-      const auto status = wait_for_exit();
-      if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL)
-      {
-        throw std::runtime_error("registration worker did not stop at SIGKILL");
-      }
+      angaria::test_support::terminate(_pid,
+          {"registration worker termination failed", "registration worker wait failed",
+           "registration worker exit deadline expired", "registration worker did not stop at SIGKILL"});
     }
 
     int finish()
     {
       release();
-      const auto status = wait_for_exit();
-      return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+      return angaria::test_support::exit_code(wait_for_exit());
     }
 
   private:
-    static void close_fds(const std::array<int, 2>& output, const std::array<int, 2>& input)
-    {
-      for (const auto fd : {output[0], output[1], input[0], input[1]})
-      {
-        if (fd != -1)
-        {
-          ::close(fd);
-        }
-      }
-    }
-
     void release()
     {
-      if (_input != -1)
-      {
-        ::close(std::exchange(_input, -1));
-      }
+      angaria::test_support::close_descriptor(_input);
     }
 
     void receive_exact(void* data, std::size_t length)
     {
-      auto* bytes = static_cast<char*>(data);
-      const auto deadline = std::chrono::steady_clock::now() + 3s;
-      while (length != 0)
-      {
-        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-            deadline - std::chrono::steady_clock::now()).count();
-        if (remaining <= 0)
-        {
-          throw std::runtime_error("registration worker report deadline expired");
-        }
-        pollfd event{_output, POLLIN, 0};
-        const auto ready = ::poll(&event, 1, static_cast<int>(remaining));
-        if (ready == -1 && errno == EINTR)
-        {
-          continue;
-        }
-        if (ready <= 0)
-        {
-          throw std::runtime_error("registration worker did not report");
-        }
-        const auto count = ::read(_output, bytes, length);
-        if (count > 0)
-        {
-          bytes += count;
-          length -= static_cast<std::size_t>(count);
-        }
-        else if (count != -1 || errno != EINTR)
-        {
-          throw std::runtime_error("registration worker exited without its report");
-        }
-      }
+      angaria::test_support::receive_exact(_output, data, length,
+          {"registration worker report deadline expired", "registration worker did not report",
+           "registration worker exited without its report"});
     }
 
     int wait_for_exit()
     {
-      const auto deadline = std::chrono::steady_clock::now() + 3s;
-      for (;;)
-      {
-        int status{};
-        const auto result = ::waitpid(_pid, &status, WNOHANG);
-        if (result == _pid)
-        {
-          _pid = -1;
-          return status;
-        }
-        if (result == -1 && errno != EINTR)
-        {
-          throw std::runtime_error("registration worker wait failed");
-        }
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
-          throw std::runtime_error("registration worker exit deadline expired");
-        }
-        ::poll(nullptr, 0, 1);
-      }
+      const auto status = angaria::test_support::wait_for_exit(_pid,
+          "registration worker wait failed", "registration worker exit deadline expired");
+      _pid = -1;
+      return status;
     }
 
     pid_t _pid{-1};
@@ -374,14 +290,12 @@ namespace
 
     static mapped::JournalSnapshot snapshot(const fs::path& directory)
     {
-      runtime::RuntimeAccess access(state(directory));
-      return access._snapshot;
+      return angaria::test_support::journal_snapshot(directory);
     }
 
     static std::vector<std::uint64_t> image(const fs::path& directory)
     {
-      runtime::RuntimeAccess access(state(directory));
-      return access.read_words(0, static_cast<std::size_t>(access._snapshot._fileBytes / 8));
+      return angaria::test_support::recovered_image(directory);
     }
 
     static mapped::FileIdentity claim_identity(const fs::path& directory, TaskId task)

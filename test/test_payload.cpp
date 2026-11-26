@@ -1,6 +1,8 @@
 // Binary payloads use the exact registered schema and explicit byte widths.
 // The metadata-only fixtures below are owning public Snapshot values, not raw
 // native-session edits. Golden bytes are written independently of the codec.
+#include "wire_fixture.h"
+#include "result_helpers.h"
 #include "angaria/payload.h"
 #include "angaria/runtime.h"
 
@@ -30,15 +32,7 @@ namespace
 
   const SchemaId sample_schema{static_cast<MessageType>(42), 1};
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   template <typename T>
   void expect_error(const Result<T>& result, ErrorCode code, std::string_view path = {})
@@ -54,19 +48,7 @@ namespace
     }
   }
 
-  std::vector<std::byte> octets(std::initializer_list<unsigned> values)
-  {
-    std::vector<std::byte> result;
-    for (const auto value : values)
-    {
-      if (value > 255)
-      {
-        throw std::runtime_error("Invalid hand-authored golden byte");
-      }
-      result.push_back(static_cast<std::byte>(value));
-    }
-    return result;
-  }
+  using angaria::test_support::octets;
 
   FieldDescriptor field(EFieldBase base = EFieldBase::BASE_INT64, std::uint32_t size = 8,
                           std::uint32_t id = 0xee000001, std::string name = "PriceTicks")

@@ -1,5 +1,6 @@
 // Public Registry snapshots are owning, consistent catalogs. A Registry
 // revision describes definitions/topology, not historical native Task claims.
+#include "result_helpers.h"
 #include "angaria/runtime.h"
 #include "runtime_state.h"
 
@@ -30,15 +31,7 @@ namespace
   using namespace angaria;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   template <typename T>
   void expect_error(const Result<T>& result, ErrorCode code)

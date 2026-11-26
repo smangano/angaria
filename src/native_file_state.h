@@ -11,8 +11,18 @@
 #include <string>
 #include <string_view>
 
+#include <sys/stat.h>
+
 namespace angaria::detail::mapped
 {
+  inline FileIdentity stat_identity(const struct stat& info)
+  {
+    static_assert(sizeof(info.st_dev) <= sizeof(std::uint64_t));
+    static_assert(sizeof(info.st_ino) <= sizeof(std::uint64_t));
+    return FileIdentity{static_cast<std::uint64_t>(info.st_dev),
+                        static_cast<std::uint64_t>(info.st_ino)};
+  }
+
   // Shared by all open handles to the same device/inode in this process.
   struct InodeState
   {

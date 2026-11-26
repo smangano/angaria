@@ -4,6 +4,8 @@
 // of the production encoders. Reference existence and Queue ownership follow in
 // the Session/history validation step.
 
+#include "wire_fixture.h"
+#include "result_assertions.h"
 #include "delivery_state.h"
 
 #include <gtest/gtest.h>
@@ -26,34 +28,11 @@ namespace
   using namespace angaria;
   namespace mapped = angaria::detail::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
-  void put_integer(std::span<std::byte> bytes, std::size_t offset,
-                   std::uint64_t value, std::size_t width = 8)
-  {
-    for (std::size_t byte = 0; byte < width; ++byte)
-    {
-      bytes[offset + byte] = static_cast<std::byte>((value >> (8 * byte)) & 0xff);
-    }
-  }
+  using angaria::test_support::put_integer;
 
   mapped::Receipt acknowledged_receipt()
   {

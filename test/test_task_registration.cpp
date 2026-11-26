@@ -3,6 +3,7 @@
 // Private gate-bound observations below verify history and no-write guarantees;
 // direct counter/slot edits are deliberately labeled fault fixtures.
 
+#include "result_assertions.h"
 #include "angaria/runtime.h"
 #include "native_atomic.h"
 #include "runtime_state.h"
@@ -34,25 +35,9 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   TaskDescriptor process_descriptor(std::string name, std::string doc = {})
   {

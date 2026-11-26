@@ -1,7 +1,9 @@
 // Independent processes exchange completed capture files while the Registry
 // retains exact schema versions. This example does not call Queue delivery APIs.
 #include "example_support.h"
+#include "example_formatting.h"
 #include "angaria/capture.h"
+#include "angaria/detail/text_escaping.h"
 #include "angaria/inspection.h"
 
 #include <array>
@@ -49,15 +51,6 @@ namespace
     return workspace / phase / "capture.angcap";
   }
 
-  std::string session_text(SessionId session)
-  {
-    std::ostringstream output;
-    output.imbue(std::locale::classic());
-    output << std::hex << std::setfill('0') << std::setw(16) << session._high
-           << std::setw(16) << session._low;
-    return output.str();
-  }
-
   SchemaId register_quote(Registry& registry, std::uint32_t version)
   {
     MessageDescriptor descriptor;
@@ -98,7 +91,7 @@ namespace
     heartbeat._schema = {static_cast<MessageType>(2), 1};
     heartbeat._name = "Heartbeat";
     primer::value(registry.register_message(heartbeat));
-    std::cout << "SESSION " << session_text(created._session.identity()) << '\n'
+    std::cout << "SESSION " << primer::session_text(created._session.identity()) << '\n'
               << "INITIALIZED revision=" << primer::value(registry.snapshot())._revision
               << " feed=" << static_cast<unsigned>(producer) << '\n';
   }
@@ -257,37 +250,8 @@ namespace
 
   void report_failure(std::string_view text)
   {
-    // Filesystem failures can contain caller pathnames. Keep diagnostics on
-    // one ASCII line, just as the generic inspection tool does.
-    constexpr std::string_view digits{"0123456789abcdef"};
-    std::array<char, 1024> buffer{};
-    std::size_t used{};
-    for (const auto character : text)
-    {
-      if (buffer.size() - used < 4)
-      {
-        std::cerr.write(buffer.data(), static_cast<std::streamsize>(used));
-        used = 0;
-      }
-      const auto byte = static_cast<unsigned char>(character);
-      if (byte == '\\')
-      {
-        buffer[used++] = '\\';
-        buffer[used++] = '\\';
-      }
-      else if (byte >= 0x20 && byte <= 0x7e)
-      {
-        buffer[used++] = character;
-      }
-      else
-      {
-        buffer[used++] = '\\';
-        buffer[used++] = 'x';
-        buffer[used++] = digits[byte >> 4];
-        buffer[used++] = digits[byte & 0x0f];
-      }
-    }
-    std::cerr.write(buffer.data(), static_cast<std::streamsize>(used));
+    // Use the same bounded, printable diagnostic encoding as the inspection CLI.
+    angaria::detail::write_diagnostic_text(std::cerr, text);
     std::cerr << '\n';
   }
 

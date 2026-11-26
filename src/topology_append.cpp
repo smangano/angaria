@@ -1,5 +1,7 @@
 #include "topology_append.h"
 
+#include "angaria/detail/record_layout.h"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -11,21 +13,6 @@
 
 namespace angaria::detail
 {
-  void check_actor(const std::shared_ptr<SessionState>& session,
-                     const std::shared_ptr<TaskState>& actor)
-  {
-    if (!session || !session->_controller)
-    {
-      runtime_fail(ErrorCode::InvalidState, "session", "Registry has no live Session state");
-    }
-    runtime_value(session->_controller->check_owner());
-    if (!actor)
-    {
-      runtime_fail(ErrorCode::ReadOnlyRegistry, "registry", "Registration requires an actor-bound Registry");
-    }
-    runtime_check_task_owner(actor);
-  }
-
   void check_task(TaskId id, const TopologySnapshot& topology, const char* path)
   {
     if (id != TaskId::Invalid &&
@@ -60,10 +47,8 @@ namespace angaria::detail
 
   std::uint64_t record_bytes(std::uint64_t bodyBytes)
   {
-    const auto body = mapped::checked_align(bodyBytes, mapped::record_alignment);
-    const auto required = body ? mapped::checked_add(mapped::record_envelope_bytes, *body) : std::nullopt;
-    const auto total = required ? mapped::checked_align(*required, mapped::section_alignment) : std::nullopt;
-    if (!total || *total > mapped::max_log_bytes)
+    const auto total = mapped::record_storage_bytes(bodyBytes);
+    if (!total)
     {
       runtime_fail(ErrorCode::LogFull, "topology.definition", "Topology record allocation exceeds format byte bounds");
     }

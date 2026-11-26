@@ -1,6 +1,7 @@
 // Test-only fixture producer. Public Session/Registry APIs register valid names
 // containing controls and UTF-8. Capture framing accepts deliberately invalid
 // logical payload bytes so the CLI's error-output boundary can be qualified.
+#include "result_helpers.h"
 #include "angaria/capture.h"
 #include "angaria/runtime.h"
 
@@ -20,15 +21,6 @@ namespace
 {
   using namespace angaria;
 
-  template <typename T>
-  T value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
 
   SchemaId register_message(Registry& registry, unsigned type, const char* name, FieldId field = {})
   {
@@ -39,7 +31,7 @@ namespace
     {
       descriptor._fields.push_back(field);
     }
-    return value(registry.register_message(descriptor));
+    return angaria::test_support::require_value(registry.register_message(descriptor));
   }
 
   void create_fixture(const std::filesystem::path& directory)
@@ -55,22 +47,22 @@ namespace
     options._limits = CapacityLimits::empty().tasks(1).fields(3).message_schemas(4);
     TaskDescriptor creator;
     creator._name = "Setup";
-    auto created = value(Session::create(options, creator));
+    auto created = angaria::test_support::require_value(Session::create(options, creator));
     auto registry = created._creator.registry();
     const auto control = register_message(registry, 1, "Control");
 
     const auto write = [&](const char* file, SchemaId schema, std::byte invalid)
     {
       std::ofstream output(directory / file, std::ios::binary);
-      auto writer = value(MessageCaptureWriter::create(output, 81, 161));
+      auto writer = angaria::test_support::require_value(MessageCaptureWriter::create(output, 81, 161));
       MessageHeader header;
       header._schema = control;
-      header._publication = value(created._creator.next_publication_id());
-      value(writer.append(header, {}));
+      header._publication = angaria::test_support::require_value(created._creator.next_publication_id());
+      angaria::test_support::require_value(writer.append(header, {}));
       header._schema = schema;
-      header._publication = value(created._creator.next_publication_id());
+      header._publication = angaria::test_support::require_value(created._creator.next_publication_id());
       header._payloadBytes = 1;
-      value(writer.append(header, std::array{invalid}));
+      angaria::test_support::require_value(writer.append(header, std::array{invalid}));
       output.close();
       if (!output)
       {
@@ -94,7 +86,7 @@ namespace
       {
         descriptor._logical._enumerators = {{"Only", std::uint64_t{1}}};
       }
-      const auto field = value(registry.register_field(descriptor));
+      const auto field = angaria::test_support::require_value(registry.register_field(descriptor));
       const auto schema = register_message(registry, index + 2, names[index], field);
       write(files[index], schema, index == 2 ? std::byte{0x80} : std::byte{2});
     }

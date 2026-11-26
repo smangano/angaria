@@ -2,6 +2,7 @@
 // journal framing. They do not append records, establish acceptance, resolve
 // Registry/history references, or demonstrate working public Queue delivery.
 
+#include "result_helpers.h"
 #include "delivery_state.h"
 #include "journal_validation.h"
 #include "publication_metadata.h"
@@ -23,15 +24,7 @@ namespace
   using namespace angaria;
   namespace mapped = angaria::detail::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   mapped::RedoCommand write_word(std::uint64_t target)
   {

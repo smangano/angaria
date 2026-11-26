@@ -3,6 +3,9 @@
 // helpers only prepare boundary/failure fixtures; normal applications use the
 // public API in angaria/runtime.h. See docs/api.md and docs/native-storage.md.
 
+#include "wire_fixture.h"
+#include "result_assertions.h"
+#include "process_support.h"
 #include "angaria/runtime.h"
 #include "mutation_journal.h"
 #include "native_atomic.h"
@@ -56,34 +59,13 @@ namespace
   namespace fs = std::filesystem;
   using namespace std::chrono_literals;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    // Test shorthand for a successful Result. Application code should inspect
-    // the Error alternative and choose its retry/reporting policy explicitly.
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   void put_word(std::span<std::byte> bytes, std::size_t offset, std::uint64_t value)
   {
-    for (std::size_t index = 0; index != 8; ++index)
-    {
-      bytes[offset + index] = static_cast<std::byte>((value >> (8 * index)) & 0xff);
-    }
+    angaria::test_support::put_integer(bytes, offset, value);
   }
 
   class CurrentDirectory
@@ -205,23 +187,13 @@ namespace
 
     void proceed()
     {
-      const char signal = 'C';
-      ssize_t count;
-      do
-      {
-        count = ::write(_input, &signal, 1);
-      } while (count == -1 && errno == EINTR);
-      if (count != 1)
-      {
-        throw std::runtime_error("Session worker continuation failed");
-      }
+      angaria::test_support::proceed(_input, "Session worker continuation failed");
     }
 
     int finish()
     {
       release();
-      const auto status = wait_for_exit();
-      return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+      return angaria::test_support::exit_code(wait_for_exit());
     }
 
     void terminate()
@@ -240,10 +212,7 @@ namespace
   private:
     void release()
     {
-      if (_input != -1)
-      {
-        ::close(std::exchange(_input, -1));
-      }
+      angaria::test_support::close_descriptor(_input);
     }
 
     void receive_exact(void* data, std::size_t length)
@@ -281,26 +250,11 @@ namespace
 
     int wait_for_exit()
     {
-      const auto deadline = std::chrono::steady_clock::now() + 3s;
-      for (;;)
-      {
-        int status{};
-        const auto result = ::waitpid(_pid, &status, WNOHANG);
-        if (result == _pid)
-        {
-          _pid = -1;
-          return status;
-        }
-        if (result == -1 && errno != EINTR)
-        {
-          throw std::runtime_error("Session worker wait failed");
-        }
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
-          throw std::runtime_error("Session worker exit deadline expired");
-        }
-        std::this_thread::sleep_for(1ms);
-      }
+      const auto status = angaria::test_support::wait_for_exit(_pid,
+          "Session worker wait failed", "Session worker exit deadline expired",
+          angaria::test_support::WaitDelay::Sleep);
+      _pid = -1;
+      return status;
     }
 
     pid_t _pid{-1};

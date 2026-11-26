@@ -1,5 +1,8 @@
 #include "angaria/payload.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
+
 #include "angaria/registry.h"
 #include "runtime_state.h"
 #include "schema_metadata.h"
@@ -21,6 +24,10 @@ namespace angaria
 {
   namespace
   {
+    using angaria::detail::read_unsigned_le;
+    using angaria::detail::signed_from_bits;
+    using angaria::detail::write_unsigned_le;
+
     Error payload_error()
     {
       try
@@ -52,59 +59,44 @@ namespace angaria
       }
     }
 
+    template <typename Value>
+    bool integer_matches(EFieldBase base, const Value& value)
+    {
+      switch (base)
+      {
+      case EFieldBase::BASE_INT8:
+        return std::holds_alternative<std::int8_t>(value);
+      case EFieldBase::BASE_BYTE:
+        return std::holds_alternative<std::uint8_t>(value);
+      case EFieldBase::BASE_INT16:
+        return std::holds_alternative<std::int16_t>(value);
+      case EFieldBase::BASE_UINT16:
+        return std::holds_alternative<std::uint16_t>(value);
+      case EFieldBase::BASE_INT32:
+        return std::holds_alternative<std::int32_t>(value);
+      case EFieldBase::BASE_UINT32:
+        return std::holds_alternative<std::uint32_t>(value);
+      case EFieldBase::BASE_INT64:
+        return std::holds_alternative<std::int64_t>(value);
+      case EFieldBase::BASE_UINT64:
+        return std::holds_alternative<std::uint64_t>(value);
+      default:
+        return false;
+      }
+    }
+
     bool scalar_matches(EFieldBase base, const PayloadValue& value)
     {
       switch (base)
       {
       case EFieldBase::BASE_CHAR:
         return std::holds_alternative<char>(value);
-      case EFieldBase::BASE_BYTE:
-        return std::holds_alternative<std::uint8_t>(value);
-      case EFieldBase::BASE_INT8:
-        return std::holds_alternative<std::int8_t>(value);
-      case EFieldBase::BASE_INT16:
-        return std::holds_alternative<std::int16_t>(value);
-      case EFieldBase::BASE_UINT16:
-        return std::holds_alternative<std::uint16_t>(value);
-      case EFieldBase::BASE_INT32:
-        return std::holds_alternative<std::int32_t>(value);
-      case EFieldBase::BASE_UINT32:
-        return std::holds_alternative<std::uint32_t>(value);
-      case EFieldBase::BASE_INT64:
-        return std::holds_alternative<std::int64_t>(value);
-      case EFieldBase::BASE_UINT64:
-        return std::holds_alternative<std::uint64_t>(value);
       case EFieldBase::BASE_FLOAT32:
         return std::holds_alternative<float>(value);
       case EFieldBase::BASE_FLOAT64:
         return std::holds_alternative<double>(value);
       default:
-        return false;
-      }
-    }
-
-    bool integer_matches(EFieldBase base, const IntegerValue& value)
-    {
-      switch (base)
-      {
-      case EFieldBase::BASE_INT8:
-        return std::holds_alternative<std::int8_t>(value);
-      case EFieldBase::BASE_BYTE:
-        return std::holds_alternative<std::uint8_t>(value);
-      case EFieldBase::BASE_INT16:
-        return std::holds_alternative<std::int16_t>(value);
-      case EFieldBase::BASE_UINT16:
-        return std::holds_alternative<std::uint16_t>(value);
-      case EFieldBase::BASE_INT32:
-        return std::holds_alternative<std::int32_t>(value);
-      case EFieldBase::BASE_UINT32:
-        return std::holds_alternative<std::uint32_t>(value);
-      case EFieldBase::BASE_INT64:
-        return std::holds_alternative<std::int64_t>(value);
-      case EFieldBase::BASE_UINT64:
-        return std::holds_alternative<std::uint64_t>(value);
-      default:
-        return false;
+        return integer_matches(base, value);
       }
     }
 
@@ -203,45 +195,12 @@ namespace angaria
       detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unknown logical Field kind");
     }
 
-    template <typename Unsigned>
-    void write_integer(std::span<std::byte> output, std::size_t offset, Unsigned value)
-    {
-      static_assert(std::is_unsigned_v<Unsigned>);
-      for (std::size_t byte = 0; byte < sizeof(Unsigned); ++byte)
-      {
-        output[offset + byte] = static_cast<std::byte>(value & 0xffu);
-        if (byte + 1 != sizeof(Unsigned))
-        {
-          value = static_cast<Unsigned>(value >> 8);
-        }
-      }
-    }
-
-    template <typename Unsigned>
-    Unsigned read_integer(std::span<const std::byte> input, std::size_t offset)
-    {
-      static_assert(std::is_unsigned_v<Unsigned>);
-      std::uint64_t result{};
-      for (std::size_t byte = 0; byte < sizeof(Unsigned); ++byte)
-      {
-        result |= std::uint64_t{std::to_integer<std::uint8_t>(input[offset + byte])} << (byte * 8);
-      }
-      return static_cast<Unsigned>(result);
-    }
-
     template <typename Signed>
     Signed read_signed(std::span<const std::byte> input, std::size_t offset)
     {
       using Unsigned = std::make_unsigned_t<Signed>;
-      const auto bits = read_integer<Unsigned>(input, offset);
-      if (bits <= static_cast<Unsigned>(std::numeric_limits<Signed>::max()))
-      {
-        return static_cast<Signed>(bits);
-      }
-      // The wire representation is two's complement. This arithmetic avoids
-      // converting an out-of-range unsigned integer to a signed native value.
-      const auto complement = static_cast<Unsigned>(~bits);
-      return static_cast<Signed>(-static_cast<Signed>(complement) - 1);
+      const auto bits = read_unsigned_le<Unsigned>(input, offset);
+      return signed_from_bits<Signed>(bits);
     }
 
     template <typename Float>
@@ -250,7 +209,7 @@ namespace angaria
       using Bits = std::conditional_t<std::is_same_v<Float, float>, std::uint32_t, std::uint64_t>;
       if constexpr (sizeof(Float) == sizeof(Bits) && std::numeric_limits<Float>::is_iec559)
       {
-        write_integer(output, offset, std::bit_cast<Bits>(value));
+        write_unsigned_le(output, offset, std::bit_cast<Bits>(value));
       }
       else
       {
@@ -264,7 +223,7 @@ namespace angaria
       using Bits = std::conditional_t<std::is_same_v<Float, float>, std::uint32_t, std::uint64_t>;
       if constexpr (sizeof(Float) == sizeof(Bits) && std::numeric_limits<Float>::is_iec559)
       {
-        return std::bit_cast<Float>(read_integer<Bits>(input, offset));
+        return std::bit_cast<Float>(read_unsigned_le<Bits>(input, offset));
       }
       else
       {
@@ -280,11 +239,11 @@ namespace angaria
         using Type = std::remove_cvref_t<decltype(scalar)>;
         if constexpr (std::is_same_v<Type, char>)
         {
-          write_integer(output, offset, std::bit_cast<std::uint8_t>(scalar));
+          write_unsigned_le(output, offset, std::bit_cast<std::uint8_t>(scalar));
         }
         else if constexpr (std::is_integral_v<Type> && !std::is_same_v<Type, bool>)
         {
-          write_integer(output, offset, static_cast<std::make_unsigned_t<Type>>(scalar));
+          write_unsigned_le(output, offset, static_cast<std::make_unsigned_t<Type>>(scalar));
         }
         else if constexpr (std::is_floating_point_v<Type>)
         {
@@ -302,23 +261,23 @@ namespace angaria
       switch (base)
       {
       case EFieldBase::BASE_CHAR:
-        return ScalarValue{std::in_place_type<char>, std::bit_cast<char>(read_integer<std::uint8_t>(input, offset))};
+        return ScalarValue{std::in_place_type<char>, std::bit_cast<char>(read_unsigned_le<std::uint8_t>(input, offset))};
       case EFieldBase::BASE_BYTE:
-        return ScalarValue{std::in_place_type<std::uint8_t>, read_integer<std::uint8_t>(input, offset)};
+        return ScalarValue{std::in_place_type<std::uint8_t>, read_unsigned_le<std::uint8_t>(input, offset)};
       case EFieldBase::BASE_INT8:
         return ScalarValue{std::in_place_type<std::int8_t>, read_signed<std::int8_t>(input, offset)};
       case EFieldBase::BASE_INT16:
         return ScalarValue{std::in_place_type<std::int16_t>, read_signed<std::int16_t>(input, offset)};
       case EFieldBase::BASE_UINT16:
-        return ScalarValue{std::in_place_type<std::uint16_t>, read_integer<std::uint16_t>(input, offset)};
+        return ScalarValue{std::in_place_type<std::uint16_t>, read_unsigned_le<std::uint16_t>(input, offset)};
       case EFieldBase::BASE_INT32:
         return ScalarValue{std::in_place_type<std::int32_t>, read_signed<std::int32_t>(input, offset)};
       case EFieldBase::BASE_UINT32:
-        return ScalarValue{std::in_place_type<std::uint32_t>, read_integer<std::uint32_t>(input, offset)};
+        return ScalarValue{std::in_place_type<std::uint32_t>, read_unsigned_le<std::uint32_t>(input, offset)};
       case EFieldBase::BASE_INT64:
         return ScalarValue{std::in_place_type<std::int64_t>, read_signed<std::int64_t>(input, offset)};
       case EFieldBase::BASE_UINT64:
-        return ScalarValue{std::in_place_type<std::uint64_t>, read_integer<std::uint64_t>(input, offset)};
+        return ScalarValue{std::in_place_type<std::uint64_t>, read_unsigned_le<std::uint64_t>(input, offset)};
       case EFieldBase::BASE_FLOAT32:
         return ScalarValue{std::in_place_type<float>, read_float<float>(input, offset)};
       case EFieldBase::BASE_FLOAT64:
@@ -342,17 +301,14 @@ namespace angaria
       case FieldLogicalKind::Bits:
       {
         const auto bits = std::get<BitFieldValue>(value)._value;
-        for (std::size_t byte = 0; byte < field._size; ++byte)
-        {
-          output[offset + byte] = static_cast<std::byte>((bits >> (byte * 8)) & 0xffu);
-        }
+        write_unsigned_le(output, offset, bits, field._size);
         return;
       }
       case FieldLogicalKind::Enumeration:
         std::visit([&](auto integer)
         {
           using Unsigned = std::make_unsigned_t<decltype(integer)>;
-          write_integer(output, offset, static_cast<Unsigned>(integer));
+          write_unsigned_le(output, offset, static_cast<Unsigned>(integer));
         }, std::get<EnumValue>(value)._value);
         return;
       case FieldLogicalKind::FixedAscii:
@@ -375,19 +331,19 @@ namespace angaria
       case EFieldBase::BASE_INT8:
         return read_signed<std::int8_t>(input, offset);
       case EFieldBase::BASE_BYTE:
-        return read_integer<std::uint8_t>(input, offset);
+        return read_unsigned_le<std::uint8_t>(input, offset);
       case EFieldBase::BASE_INT16:
         return read_signed<std::int16_t>(input, offset);
       case EFieldBase::BASE_UINT16:
-        return read_integer<std::uint16_t>(input, offset);
+        return read_unsigned_le<std::uint16_t>(input, offset);
       case EFieldBase::BASE_INT32:
         return read_signed<std::int32_t>(input, offset);
       case EFieldBase::BASE_UINT32:
-        return read_integer<std::uint32_t>(input, offset);
+        return read_unsigned_le<std::uint32_t>(input, offset);
       case EFieldBase::BASE_INT64:
         return read_signed<std::int64_t>(input, offset);
       case EFieldBase::BASE_UINT64:
-        return read_integer<std::uint64_t>(input, offset);
+        return read_unsigned_le<std::uint64_t>(input, offset);
       default:
         detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains invalid enum storage");
       }
@@ -411,12 +367,7 @@ namespace angaria
       }
       case FieldLogicalKind::Bits:
       {
-        std::uint64_t bits{};
-        for (std::size_t byte = 0; byte < field._size; ++byte)
-        {
-          bits |= std::uint64_t{std::to_integer<std::uint8_t>(input[offset + byte])} << (byte * 8);
-        }
-        return BitFieldValue{bits};
+        return BitFieldValue{read_unsigned_le(input, offset, field._size)};
       }
       case FieldLogicalKind::Enumeration:
       {
@@ -572,14 +523,14 @@ namespace angaria
         {
           detail::runtime_fail(ErrorCode::NotFound, "message.fields", "A referenced Field is absent from the snapshot");
         }
-        if (field->_size > maxPayloadBytes - size ||
-            field->_size > std::numeric_limits<std::uint64_t>::max() - size)
+        const auto next = detail::checked_add(size, field->_size);
+        if (!next || *next > maxPayloadBytes)
         {
           detail::runtime_fail(ErrorCode::CapacityExceeded, "payload.capacity", "Schema payload exceeds its configured byte limit");
         }
-        size += field->_size;
+        size = *next;
       }
-      if (size > std::numeric_limits<std::size_t>::max() || size > std::vector<std::byte>{}.max_size() ||
+      if (!detail::fits_size_t(size) || size > std::vector<std::byte>{}.max_size() ||
           selected->_fields.size() > std::vector<FieldDescriptor>{}.max_size())
       {
         detail::runtime_fail(ErrorCode::CapacityExceeded, "payload.capacity", "Schema payload or layout exceeds host container capacity");

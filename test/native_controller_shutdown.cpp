@@ -3,6 +3,7 @@
 // descriptors and safely run registered fork callbacks after ordinary local
 // static destruction would have begun.
 
+#include "result_helpers.h"
 #include "native_atomic.h"
 #include "native_file.h"
 #include "session_controller.h"
@@ -30,15 +31,7 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   int descriptor_for(const fs::path& path)
   {

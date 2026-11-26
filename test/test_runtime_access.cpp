@@ -3,6 +3,7 @@
 // record lookup independently of public registration; usage examples live in
 // test_task_registration.cpp.
 
+#include "result_helpers.h"
 #include "runtime_state.h"
 
 #include <gtest/gtest.h>
@@ -29,15 +30,7 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   template <typename Operation>
   void expect_io_error(Operation operation)

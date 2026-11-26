@@ -1,5 +1,7 @@
 #include "topology_mutations.h"
 
+#include "angaria/detail/checked_arithmetic.h"
+#include "registry_access.h"
 #include "topology_append.h"
 
 #include <algorithm>
@@ -22,19 +24,8 @@ namespace angaria::detail
     template <typename Id, typename Loaded>
     const Loaded& require_entity(const std::vector<Loaded>& entries, Id id, const char* path)
     {
-      if (id == Id::Invalid)
-      {
-        runtime_fail(ErrorCode::InvalidArgument, path, "Entity identity must be nonzero");
-      }
-      const auto found = std::find_if(entries.begin(), entries.end(), [id](const auto& entry)
-      {
-        return entry._definition._id == id;
-      });
-      if (found == entries.end())
-      {
-        runtime_fail(ErrorCode::NotFound, path, "Entity of the requested kind is not registered");
-      }
-      return *found;
+      return require_registered_entity(entries, id, path, "Entity identity must be nonzero",
+                                         "Entity of the requested kind is not registered");
     }
 
     void require_owner(TaskId owner, const TopologySnapshot& topology, const char* path)
@@ -148,7 +139,7 @@ namespace angaria::detail
       if (ringCapacity)
       {
         ringBytes = multiply_bytes(*ringCapacity, mapped::ring_slot_bytes);
-        if (ringBytes > std::numeric_limits<std::size_t>::max())
+        if (!fits_size_t(ringBytes))
         {
           runtime_fail(ErrorCode::LogFull, "queue.ring_capacity", "Ring slots exceed the host's addressable allocation");
         }
@@ -533,7 +524,7 @@ namespace angaria::detail
   {
     try
     {
-      check_actor(session, actor);
+      check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       const auto topology = runtime_topology(access);

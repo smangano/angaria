@@ -1,4 +1,5 @@
 #include "runtime_state.h"
+#include "registry_access.h"
 #include "topology_state.h"
 #include "configuration_runtime.h"
 
@@ -472,11 +473,7 @@ namespace angaria
   {
     try
     {
-      if (_actor)
-      {
-        runtime_check_task(_actor);
-      }
-      RuntimeAccess access(_state);
+      auto access = registry_access(_state, _actor);
       for (const auto& task : runtime_tasks(access))
       {
         if (task._definition._descriptor._name == name)
@@ -496,11 +493,7 @@ namespace angaria
   {
     try
     {
-      if (_actor)
-      {
-        runtime_check_task(_actor);
-      }
-      RuntimeAccess access(_state);
+      auto access = registry_access(_state, _actor);
       return runtime_task(access, id)._definition._descriptor;
     }
     catch (...)
@@ -513,11 +506,7 @@ namespace angaria
   {
     try
     {
-      if (_actor)
-      {
-        runtime_check_task(_actor);
-      }
-      RuntimeAccess access(_state);
+      auto access = registry_access(_state, _actor);
       return runtime_task(access, id)._definition._registration;
     }
     catch (...)
@@ -530,11 +519,7 @@ namespace angaria
   {
     try
     {
-      if (_actor)
-      {
-        runtime_check_task(_actor);
-      }
-      RuntimeAccess access(_state);
+      auto access = registry_access(_state, _actor);
       return runtime_task_status(access, id);
     }
     catch (...)

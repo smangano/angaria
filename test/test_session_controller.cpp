@@ -3,6 +3,8 @@
 // build provisional storage directly to isolate ownership from journal bootstrap;
 // application creation/attachment examples live in test_runtime_session.cpp.
 
+#include "result_assertions.h"
+#include "process_support.h"
 #include "mapped_superblock.h"
 #include "native_atomic.h"
 #include "native_file.h"
@@ -51,25 +53,9 @@ namespace
   static_assert(std::is_nothrow_move_constructible_v<mapped::MutationGuard>);
   static_assert(std::is_nothrow_move_assignable_v<mapped::MutationGuard>);
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   struct Pipe
   {
@@ -233,17 +219,13 @@ namespace
 
     void release()
     {
-      if (_input != -1)
-      {
-        ::close(std::exchange(_input, -1));
-      }
+      angaria::test_support::close_descriptor(_input);
     }
 
     int finish()
     {
       release();
-      const auto status = wait_for_exit();
-      return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+      return angaria::test_support::exit_code(wait_for_exit());
     }
 
     void kill_owner()
@@ -262,26 +244,11 @@ namespace
   private:
     int wait_for_exit()
     {
-      const auto deadline = std::chrono::steady_clock::now() + 3s;
-      for (;;)
-      {
-        int status{};
-        const auto result = ::waitpid(_pid, &status, WNOHANG);
-        if (result == _pid)
-        {
-          _reaped = true;
-          return status;
-        }
-        if (result == -1 && errno != EINTR)
-        {
-          throw std::runtime_error("worker wait failed");
-        }
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
-          throw std::runtime_error("worker exit deadline expired");
-        }
-        std::this_thread::sleep_for(1ms);
-      }
+      const auto status = angaria::test_support::wait_for_exit(_pid,
+          "worker wait failed", "worker exit deadline expired",
+          angaria::test_support::WaitDelay::Sleep);
+      _reaped = true;
+      return status;
     }
 
     pid_t _pid{-1};

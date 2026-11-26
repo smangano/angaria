@@ -2,6 +2,8 @@
 // provides legal mutable storage without requiring Queue publication APIs; this is
 // transaction-layer setup, not an example of sending an application message.
 
+#include "wire_fixture.h"
+#include "result_helpers.h"
 #include "mutation_journal.h"
 #include "native_atomic.h"
 
@@ -24,22 +26,11 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   void put_word(std::span<std::byte> bytes, std::size_t offset, std::uint64_t value)
   {
-    for (std::size_t index = 0; index != 8; ++index)
-    {
-      bytes[offset + index] = static_cast<std::byte>((value >> (8 * index)) & 0xff);
-    }
+    angaria::test_support::put_integer(bytes, offset, value);
   }
 
   // Fail once after an actual word store, then observe execute's repair pass.

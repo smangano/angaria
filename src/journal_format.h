@@ -15,7 +15,6 @@ namespace angaria::detail::mapped
   inline constexpr std::size_t journal_bytes = 2048;
   inline constexpr std::size_t journal_header_bytes = 256;
   inline constexpr std::size_t inline_command_bytes = 1792;
-  inline constexpr std::size_t record_envelope_bytes = 64;
 
   enum class JournalControl : std::uint64_t
   {

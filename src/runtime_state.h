@@ -1,6 +1,8 @@
 #pragma once
 
 #include "angaria/runtime.h"
+
+#include "angaria/detail/error_support.h"
 #include "mutation_journal.h"
 #include "session_metadata.h"
 #include "schema_metadata.h"
@@ -29,11 +31,7 @@ namespace angaria::detail
   template <typename T>
   T runtime_value(Result<T> result)
   {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw RuntimeFailure{*error};
-    }
-    return std::get<T>(std::move(result));
+    return value_or_throw<RuntimeFailure>(std::move(result));
   }
 
   [[noreturn]] void runtime_fail(ErrorCode code, std::string path, std::string message);

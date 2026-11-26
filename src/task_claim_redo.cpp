@@ -1,5 +1,8 @@
 #include "task_claim_redo.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/error_support.h"
 #include "native_atomic.h"
 #include "session_metadata.h"
 #include "topology_metadata.h"
@@ -31,33 +34,10 @@ namespace angaria::detail::mapped
       throw Failure{Error{code, std::move(message), "journal.claims"}};
     }
 
-    template <typename T>
-    T take(Result<T> result)
-    {
-      if (auto* error = std::get_if<Error>(&result))
-      {
-        throw Failure{std::move(*error)};
-      }
-      return std::get<T>(std::move(result));
-    }
-
-    std::uint64_t read_word(std::span<const std::byte> bytes, std::size_t offset)
-    {
-      std::uint64_t value{};
-      for (std::size_t index = 0; index != 8; ++index)
-      {
-        value |= std::uint64_t{std::to_integer<unsigned char>(bytes[offset + index])} << (8 * index);
-      }
-      return value;
-    }
-
     RedoCommand write_word(std::uint64_t offset, std::uint64_t value)
     {
       RedoCommand result{RedoOpcode::WriteRange, offset, std::vector<std::byte>(8)};
-      for (std::size_t index = 0; index != 8; ++index)
-      {
-        result._payload[index] = static_cast<std::byte>((value >> (8 * index)) & 0xff);
-      }
+      write_unsigned_le(result._payload, 0, value);
       return result;
     }
 
@@ -67,13 +47,13 @@ namespace angaria::detail::mapped
       {
         return {};
       }
-      auto mapping = take(file.map_read_write(offset, count * 8));
-      auto bytes = take(mapping.writable_bytes());
+      auto mapping = value_or_throw<Failure>(file.map_read_write(offset, count * 8));
+      auto bytes = value_or_throw<Failure>(mapping.writable_bytes());
       std::vector<std::uint64_t> result;
       result.reserve(count);
       for (std::size_t index = 0; index != count; ++index)
       {
-        result.push_back(take(AtomicWord::bind(bytes, index * 8)).load_acquire());
+        result.push_back(value_or_throw<Failure>(AtomicWord::bind(bytes, index * 8)).load_acquire());
       }
       return result;
     }
@@ -89,14 +69,6 @@ namespace angaria::detail::mapped
         fail(code, "Required Task cleanup section is absent");
       }
       return *found;
-    }
-
-    bool any_words(std::span<const std::uint64_t> words)
-    {
-      return std::any_of(words.begin(), words.end(), [](auto word)
-      {
-        return word != 0;
-      });
     }
 
     void check_idle_topology(NativeFile& file, const FixedLayout& layout,
@@ -137,7 +109,7 @@ namespace angaria::detail::mapped
           const auto words = std::span{states}.subspan(slot * state._stride / 8, state._stride / 8);
           if (entry[0] == 0)
           {
-            if (any_words(entry) || any_words(words))
+            if (!all_zero(entry) || !all_zero(words))
             {
               fail(code, "Empty topology slot contains index or runtime state");
             }
@@ -149,7 +121,7 @@ namespace angaria::detail::mapped
               fail(unsupported, "Task-only cleanup requires known topology state");
             }
             if (entry[0] > 65535 || entry[1] == 0 || entry[2] == 0 ||
-                any_words(std::span{entry}.subspan(4)))
+                !all_zero(std::span{entry}.subspan(4)))
             {
               fail(code, "Topology index is malformed");
             }
@@ -162,8 +134,8 @@ namespace angaria::detail::mapped
                 fail(code, "Queue index does not reference its committed definition");
               }
               std::vector<std::byte> body(static_cast<std::size_t>(record->second->_envelope._immutableBytes));
-              take(file.read_exact(entry[1] + record_envelope_bytes, body));
-              const auto definition = take(decode_queue_definition(body, entry[1]));
+              value_or_throw<Failure>(file.read_exact(entry[1] + record_envelope_bytes, body));
+              const auto definition = value_or_throw<Failure>(decode_queue_definition(body, entry[1]));
               if (static_cast<std::uint16_t>(definition._id) != entry[0] ||
                   definition._registration._revision != entry[2] ||
                   (definition._state == EntityState::Draft ? 1u : 2u) != entry[3])
@@ -176,7 +148,7 @@ namespace angaria::detail::mapped
             {
               const auto ring = rings.find(words[2]);
               const auto required = ring_storage_bytes(words[3]);
-              if (any_words(words.first(2)) || any_words(words.subspan(4)) ||
+              if (!all_zero(words.first(2)) || !all_zero(words.subspan(4)) ||
                   ring == rings.end() || !required || queueCapacity != words[3] || !ownedRings.insert(words[2]).second ||
                   ring->second->_envelope._immutableBytes != 0 ||
                   ring->second->_envelope._encoding != 1 || ring->second->_envelope._previous != 0 ||
@@ -189,7 +161,7 @@ namespace angaria::detail::mapped
               for (auto offset = words[2] + record_envelope_bytes; offset < words[2] + *required;)
               {
                 const auto count = std::min<std::uint64_t>(512, (words[2] + *required - offset) / 8);
-                if (any_words(read_words(file, offset, count)))
+                if (!all_zero(read_words(file, offset, count)))
                 {
                   fail(unsupported, "Active Queue ring contains delivery state");
                 }
@@ -199,12 +171,12 @@ namespace angaria::detail::mapped
             else if (kind == SectionKind::PublishingIndex)
             {
               if (words[0] == 0 || words[0] > entry[2] || words[1] != entry[1] ||
-                  any_words(std::span{words}.subspan(2)))
+                  !all_zero(std::span{words}.subspan(2)))
               {
                 fail(unsupported, "Publishing state requires delivery cleanup");
               }
             }
-            else if (any_words(words))
+            else if (!all_zero(words))
             {
               fail(unsupported, "Queue or Source state requires delivery cleanup");
             }
@@ -216,7 +188,7 @@ namespace angaria::detail::mapped
               const auto row = std::span{membershipWords}.subspan((group * perSet + member) * 4, 4);
               if (row[0] == 0)
               {
-                if (any_words(row))
+                if (!all_zero(row))
                 {
                   fail(code, "Empty membership contains state");
                 }
@@ -263,24 +235,15 @@ namespace angaria::detail::mapped
         auto words = read_words(file, state._offset + slot * state._stride, 32);
         if (entry[0] == 0)
         {
-          if (std::any_of(entry.begin(), entry.end(), [](auto word)
-              {
-                return word != 0;
-              }) ||
-              std::any_of(words.begin(), words.end(), [](auto word)
-              {
-                return word != 0;
-              }))
+          if (!all_zero(entry) ||
+              !all_zero(words))
           {
             fail(code, "Empty Task slot contains state or index metadata");
           }
           continue;
         }
         if (entry[0] > max_entity_id || !ids.insert(entry[0]).second || entry[1] == 0 ||
-            entry[2] == 0 || std::any_of(entry.begin() + 3, entry.end(), [](auto word)
-            {
-              return word != 0;
-            }))
+            entry[2] == 0 || !all_zero(std::span{entry}.subspan(3)))
         {
           fail(code, "Task index contains an invalid identity, duplicate, revision, or reserved word");
         }
@@ -290,12 +253,12 @@ namespace angaria::detail::mapped
         });
         if (record == records.end() || record->_envelope._kind != 2 ||
             record->_envelope._readiness != 2 || record->_envelope._registryRevision != entry[2] ||
-            record->_envelope._immutableBytes > std::numeric_limits<std::size_t>::max())
+            !fits_size_t(record->_envelope._immutableBytes))
         {
           fail(code, "Task index does not reference its committed definition boundary");
         }
         std::vector<std::byte> body(static_cast<std::size_t>(record->_envelope._immutableBytes));
-        take(file.read_exact(record->_offset + record_envelope_bytes, body));
+        value_or_throw<Failure>(file.read_exact(record->_offset + record_envelope_bytes, body));
         auto decoded = decode_task_definition(body, record->_offset);
         if (std::holds_alternative<Error>(decoded))
         {
@@ -311,26 +274,20 @@ namespace angaria::detail::mapped
         const bool replacing = std::any_of(commands.begin(), commands.end(), [&](const auto& command)
         {
           return command._opcode == RedoOpcode::ReleaseClaim && command._target == rowOffset &&
-                 read_word(command._payload, 0) != std::numeric_limits<std::uint64_t>::max() &&
-                 words[0] == read_word(command._payload, 0) + 1;
+                 read_unsigned_le<std::uint64_t>(command._payload, 0) != std::numeric_limits<std::uint64_t>::max() &&
+                 words[0] == read_unsigned_le<std::uint64_t>(command._payload, 0) + 1;
         });
         // A successor attachment writes incarnation before resetting issuance
         // and the retirement floor. Recovery must finish that absolute write
         // even if it stopped between the latter two words.
         if ((words[6] & ~std::uint64_t{7}) != 0 || (words[8] > words[1] && !replacing) ||
-            std::any_of(words.begin() + 10, words.end(), [](auto word)
-            {
-              return word != 0;
-            }))
+            !all_zero(std::span{words}.subspan(10)))
         {
           fail(code, "Task state has unknown flags, an invalid retirement floor, or reserved data");
         }
         if (words[0] == 0)
         {
-          if (std::any_of(words.begin(), words.end(), [](auto word)
-              {
-                return word != 0;
-              }))
+          if (!all_zero(words))
           {
             fail(code, "Never-attached Task contains claim state");
           }
@@ -395,14 +352,14 @@ namespace angaria::detail::mapped
         if (command._opcode == RedoOpcode::ReleaseClaim)
         {
           hasRelease = true;
-          if (command._payload.size() != 16 || read_word(command._payload, 0) == 0)
+          if (command._payload.size() != 16 || read_unsigned_le<std::uint64_t>(command._payload, 0) == 0)
           {
             fail(errorCode, "ReleaseClaim requires a nonzero ending incarnation and release timestamp");
           }
           // Replay recognizes only the ending incarnation or its immediate
           // successor. Chaining another replacement of the same row could leave
           // that first intent two incarnations behind after a partial apply.
-          if (!releaseTargets.emplace(command._target, read_word(command._payload, 0)).second)
+          if (!releaseTargets.emplace(command._target, read_unsigned_le<std::uint64_t>(command._payload, 0)).second)
           {
             fail(errorCode, "ReleaseClaim may target each Task only once per transaction");
           }
@@ -413,7 +370,7 @@ namespace angaria::detail::mapped
         }
         else
         {
-          take(validate_redo_targets(std::span{&command, 1}, layout, records, errorCode));
+          value_or_throw<Failure>(validate_redo_targets(std::span{&command, 1}, layout, records, errorCode));
         }
       }
       if (!hasRelease)
@@ -440,7 +397,7 @@ namespace angaria::detail::mapped
           {
             if (target >= command._target && target - command._target < command._payload.size())
             {
-              const auto incarnation = read_word(command._payload,
+              const auto incarnation = read_unsigned_le<std::uint64_t>(command._payload,
                                                    static_cast<std::size_t>(target - command._target));
               // Every possible interrupted prefix must remain inside the same
               // replay window, not just the stream's final simulated state.
@@ -496,14 +453,14 @@ namespace angaria::detail::mapped
               const auto offset = task._offset + word * 8;
               if (offset >= command._target && offset - command._target < command._payload.size())
               {
-                task._words[word] = read_word(command._payload, static_cast<std::size_t>(offset - command._target));
+                task._words[word] = read_unsigned_le<std::uint64_t>(command._payload, static_cast<std::size_t>(offset - command._target));
               }
             }
           }
           continue;
         }
-        const auto ending = read_word(command._payload, 0);
-        const auto timestamp = read_word(command._payload, 8);
+        const auto ending = read_unsigned_le<std::uint64_t>(command._payload, 0);
+        const auto timestamp = read_unsigned_le<std::uint64_t>(command._payload, 8);
         const auto target = std::find_if(tasks.begin(), tasks.end(), [&](const auto& task)
         {
           return task._offset == command._target;

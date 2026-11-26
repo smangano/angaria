@@ -1,5 +1,8 @@
 #include "journal_format.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
+
 #include <algorithm>
 #include <limits>
 #include <optional>
@@ -12,40 +15,13 @@ namespace angaria::detail::mapped
 {
   namespace
   {
-    template <typename T>
-    T read_integer(std::span<const std::byte> bytes, std::size_t offset)
-    {
-      static_assert(std::is_unsigned_v<T>);
-      std::uint64_t value{};
-      for (std::size_t index = 0; index < sizeof(T); ++index)
-      {
-        value |= std::uint64_t{std::to_integer<std::uint8_t>(bytes[offset + index])} << (8 * index);
-      }
-      return static_cast<T>(value);
-    }
-
-    template <typename T>
-    void write_integer(std::span<std::byte> bytes, std::size_t offset, T value)
-    {
-      static_assert(std::is_unsigned_v<T>);
-      for (std::size_t index = 0; index < sizeof(T); ++index)
-      {
-        bytes[offset + index] = static_cast<std::byte>((std::uint64_t{value} >> (8 * index)) & 0xff);
-      }
-    }
+    using angaria::detail::all_zero;
+    using angaria::detail::read_unsigned_le;
+    using angaria::detail::write_unsigned_le;
 
     Error failure(ErrorCode code, const char* path, std::string message)
     {
       return Error{code, std::move(message), path};
-    }
-
-    bool zero(std::span<const std::byte> bytes)
-    {
-      return std::all_of(bytes.begin(), bytes.end(),
-                         [](std::byte value)
-                         {
-                           return value == std::byte{};
-                         });
     }
 
     bool actor_valid(TaskId actor, std::uint64_t incarnation)
@@ -141,23 +117,23 @@ namespace angaria::detail::mapped
         }
         break;
       case RedoOpcode::ResetBudgets:
-        if (payload.size() != 24 || read_integer<std::uint16_t>(payload, 0) == 0 ||
-            !zero(payload.subspan(2, 6)) || !reference_valid(read_integer<std::uint64_t>(payload, 8)) ||
-            read_integer<std::uint64_t>(payload, 16) == 0)
+        if (payload.size() != 24 || read_unsigned_le<std::uint16_t>(payload, 0) == 0 ||
+            !all_zero(payload.subspan(2, 6)) || !reference_valid(read_unsigned_le<std::uint64_t>(payload, 8)) ||
+            read_unsigned_le<std::uint64_t>(payload, 16) == 0)
         {
           return invalid("Invalid ResetBudgets payload");
         }
         break;
       case RedoOpcode::LoseRange:
-        if (payload.size() != 32 || read_integer<std::uint64_t>(payload, 0) == 0 ||
-            read_integer<std::uint64_t>(payload, 8) < read_integer<std::uint64_t>(payload, 0) ||
-            read_integer<std::uint16_t>(payload, 24) == 0 || !zero(payload.subspan(26, 6)))
+        if (payload.size() != 32 || read_unsigned_le<std::uint64_t>(payload, 0) == 0 ||
+            read_unsigned_le<std::uint64_t>(payload, 8) < read_unsigned_le<std::uint64_t>(payload, 0) ||
+            read_unsigned_le<std::uint16_t>(payload, 24) == 0 || !all_zero(payload.subspan(26, 6)))
         {
           return invalid("Invalid LoseRange payload");
         }
         break;
       case RedoOpcode::ReleaseClaim:
-        if (payload.size() != 16 || read_integer<std::uint64_t>(payload, 0) == 0)
+        if (payload.size() != 16 || read_unsigned_le<std::uint64_t>(payload, 0) == 0)
         {
           return invalid("Invalid ReleaseClaim payload");
         }
@@ -230,26 +206,26 @@ namespace angaria::detail::mapped
       return *error;
     }
     JournalHeaderBytes bytes{};
-    write_integer<std::uint64_t>(bytes, 0, static_cast<std::uint64_t>(header._control));
-    write_integer<std::uint64_t>(bytes, 8, header._generation);
-    write_integer<std::uint16_t>(bytes, 16, static_cast<std::uint16_t>(header._kind));
-    write_integer<std::uint16_t>(bytes, 18, 1);
-    write_integer<std::uint64_t>(bytes, 24, header._baseTail);
-    write_integer<std::uint64_t>(bytes, 32, header._newTail);
-    write_integer<std::uint64_t>(bytes, 40, header._baseAccounted);
-    write_integer<std::uint64_t>(bytes, 48, header._newAccounted);
-    write_integer<std::uint64_t>(bytes, 56, header._manifest);
-    write_integer<std::uint32_t>(bytes, 64, header._inlineBytes);
-    write_integer<std::uint16_t>(bytes, 72, static_cast<std::uint16_t>(header._actor));
-    write_integer<std::uint64_t>(bytes, 80, header._actorIncarnation);
-    write_integer<std::uint64_t>(bytes, 96, header._fileLogicalStart);
-    write_integer<std::uint64_t>(bytes, 104, header._originalFileBytes);
-    write_integer<std::uint64_t>(bytes, 112, header._newFileBytes);
-    write_integer<std::uint64_t>(bytes, 120, header._newExtentBytes);
-    write_integer<std::uint32_t>(bytes, 128, header._recordCount);
-    write_integer<std::uint64_t>(bytes, 136, header._baseRevision);
-    write_integer<std::uint64_t>(bytes, 144, header._newRevision);
-    write_integer<std::uint64_t>(bytes, 152, header._firstRecord);
+    write_unsigned_le<std::uint64_t>(bytes, 0, static_cast<std::uint64_t>(header._control));
+    write_unsigned_le<std::uint64_t>(bytes, 8, header._generation);
+    write_unsigned_le<std::uint16_t>(bytes, 16, static_cast<std::uint16_t>(header._kind));
+    write_unsigned_le<std::uint16_t>(bytes, 18, 1);
+    write_unsigned_le<std::uint64_t>(bytes, 24, header._baseTail);
+    write_unsigned_le<std::uint64_t>(bytes, 32, header._newTail);
+    write_unsigned_le<std::uint64_t>(bytes, 40, header._baseAccounted);
+    write_unsigned_le<std::uint64_t>(bytes, 48, header._newAccounted);
+    write_unsigned_le<std::uint64_t>(bytes, 56, header._manifest);
+    write_unsigned_le<std::uint32_t>(bytes, 64, header._inlineBytes);
+    write_unsigned_le<std::uint16_t>(bytes, 72, static_cast<std::uint16_t>(header._actor));
+    write_unsigned_le<std::uint64_t>(bytes, 80, header._actorIncarnation);
+    write_unsigned_le<std::uint64_t>(bytes, 96, header._fileLogicalStart);
+    write_unsigned_le<std::uint64_t>(bytes, 104, header._originalFileBytes);
+    write_unsigned_le<std::uint64_t>(bytes, 112, header._newFileBytes);
+    write_unsigned_le<std::uint64_t>(bytes, 120, header._newExtentBytes);
+    write_unsigned_le<std::uint32_t>(bytes, 128, header._recordCount);
+    write_unsigned_le<std::uint64_t>(bytes, 136, header._baseRevision);
+    write_unsigned_le<std::uint64_t>(bytes, 144, header._newRevision);
+    write_unsigned_le<std::uint64_t>(bytes, 152, header._firstRecord);
     return bytes;
   }
 
@@ -259,32 +235,32 @@ namespace angaria::detail::mapped
     {
       return failure(ErrorCode::IoError, "journal.header", "Journal header must contain exactly 256 bytes");
     }
-    if (read_integer<std::uint16_t>(bytes, 18) != 1 || !zero(bytes.subspan(20, 4)) ||
-        !zero(bytes.subspan(68, 4)) || !zero(bytes.subspan(74, 6)) || !zero(bytes.subspan(88, 8)) ||
-        !zero(bytes.subspan(132, 4)) || !zero(bytes.subspan(160, 96)))
+    if (read_unsigned_le<std::uint16_t>(bytes, 18) != 1 || !all_zero(bytes.subspan(20, 4)) ||
+        !all_zero(bytes.subspan(68, 4)) || !all_zero(bytes.subspan(74, 6)) || !all_zero(bytes.subspan(88, 8)) ||
+        !all_zero(bytes.subspan(132, 4)) || !all_zero(bytes.subspan(160, 96)))
     {
       return failure(ErrorCode::IoError, "journal.header", "Unsupported command encoding or nonzero reserved header bytes");
     }
     JournalHeader header;
-    header._control = static_cast<JournalControl>(read_integer<std::uint64_t>(bytes, 0));
-    header._generation = read_integer<std::uint64_t>(bytes, 8);
-    header._kind = static_cast<JournalKind>(read_integer<std::uint16_t>(bytes, 16));
-    header._baseTail = read_integer<std::uint64_t>(bytes, 24);
-    header._newTail = read_integer<std::uint64_t>(bytes, 32);
-    header._baseAccounted = read_integer<std::uint64_t>(bytes, 40);
-    header._newAccounted = read_integer<std::uint64_t>(bytes, 48);
-    header._manifest = read_integer<std::uint64_t>(bytes, 56);
-    header._inlineBytes = read_integer<std::uint32_t>(bytes, 64);
-    header._actor = static_cast<TaskId>(read_integer<std::uint16_t>(bytes, 72));
-    header._actorIncarnation = read_integer<std::uint64_t>(bytes, 80);
-    header._fileLogicalStart = read_integer<std::uint64_t>(bytes, 96);
-    header._originalFileBytes = read_integer<std::uint64_t>(bytes, 104);
-    header._newFileBytes = read_integer<std::uint64_t>(bytes, 112);
-    header._newExtentBytes = read_integer<std::uint64_t>(bytes, 120);
-    header._recordCount = read_integer<std::uint32_t>(bytes, 128);
-    header._baseRevision = read_integer<std::uint64_t>(bytes, 136);
-    header._newRevision = read_integer<std::uint64_t>(bytes, 144);
-    header._firstRecord = read_integer<std::uint64_t>(bytes, 152);
+    header._control = static_cast<JournalControl>(read_unsigned_le<std::uint64_t>(bytes, 0));
+    header._generation = read_unsigned_le<std::uint64_t>(bytes, 8);
+    header._kind = static_cast<JournalKind>(read_unsigned_le<std::uint16_t>(bytes, 16));
+    header._baseTail = read_unsigned_le<std::uint64_t>(bytes, 24);
+    header._newTail = read_unsigned_le<std::uint64_t>(bytes, 32);
+    header._baseAccounted = read_unsigned_le<std::uint64_t>(bytes, 40);
+    header._newAccounted = read_unsigned_le<std::uint64_t>(bytes, 48);
+    header._manifest = read_unsigned_le<std::uint64_t>(bytes, 56);
+    header._inlineBytes = read_unsigned_le<std::uint32_t>(bytes, 64);
+    header._actor = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(bytes, 72));
+    header._actorIncarnation = read_unsigned_le<std::uint64_t>(bytes, 80);
+    header._fileLogicalStart = read_unsigned_le<std::uint64_t>(bytes, 96);
+    header._originalFileBytes = read_unsigned_le<std::uint64_t>(bytes, 104);
+    header._newFileBytes = read_unsigned_le<std::uint64_t>(bytes, 112);
+    header._newExtentBytes = read_unsigned_le<std::uint64_t>(bytes, 120);
+    header._recordCount = read_unsigned_le<std::uint32_t>(bytes, 128);
+    header._baseRevision = read_unsigned_le<std::uint64_t>(bytes, 136);
+    header._newRevision = read_unsigned_le<std::uint64_t>(bytes, 144);
+    header._firstRecord = read_unsigned_le<std::uint64_t>(bytes, 152);
     if (const auto error = validate_header(header, ErrorCode::IoError))
     {
       return *error;
@@ -303,7 +279,7 @@ namespace angaria::detail::mapped
         return *error;
       }
       const auto next = checked_add(total, std::uint64_t{16} + command._payload.size());
-      if (!next || *next > max_log_bytes || *next > std::numeric_limits<std::size_t>::max())
+      if (!next || *next > max_log_bytes || !fits_size_t(*next))
       {
         return failure(ErrorCode::InvalidArgument, "journal.commands", "Command stream exceeds addressable bounds");
       }
@@ -313,9 +289,9 @@ namespace angaria::detail::mapped
     std::size_t offset{};
     for (const auto& command : commands)
     {
-      write_integer<std::uint16_t>(bytes, offset, static_cast<std::uint16_t>(command._opcode));
-      write_integer<std::uint32_t>(bytes, offset + 4, static_cast<std::uint32_t>(command._payload.size()));
-      write_integer<std::uint64_t>(bytes, offset + 8, command._target);
+      write_unsigned_le<std::uint16_t>(bytes, offset, static_cast<std::uint16_t>(command._opcode));
+      write_unsigned_le<std::uint32_t>(bytes, offset + 4, static_cast<std::uint32_t>(command._payload.size()));
+      write_unsigned_le<std::uint64_t>(bytes, offset + 8, command._target);
       std::copy(command._payload.begin(), command._payload.end(), bytes.begin() + offset + 16);
       offset += 16 + command._payload.size();
     }
@@ -332,10 +308,10 @@ namespace angaria::detail::mapped
       {
         return failure(ErrorCode::IoError, "journal.commands", "Truncated redo command header");
       }
-      const auto opcode = static_cast<RedoOpcode>(read_integer<std::uint16_t>(bytes, offset));
-      const auto length = read_integer<std::uint32_t>(bytes, offset + 4);
-      const auto target = read_integer<std::uint64_t>(bytes, offset + 8);
-      if (read_integer<std::uint16_t>(bytes, offset + 2) != 0 || length > bytes.size() - offset - 16)
+      const auto opcode = static_cast<RedoOpcode>(read_unsigned_le<std::uint16_t>(bytes, offset));
+      const auto length = read_unsigned_le<std::uint32_t>(bytes, offset + 4);
+      const auto target = read_unsigned_le<std::uint64_t>(bytes, offset + 8);
+      if (read_unsigned_le<std::uint16_t>(bytes, offset + 2) != 0 || length > bytes.size() - offset - 16)
       {
         return failure(ErrorCode::IoError, "journal.commands", "Invalid command flags or truncated payload");
       }
@@ -357,15 +333,15 @@ namespace angaria::detail::mapped
       return *error;
     }
     RecordEnvelopeBytes bytes{};
-    write_integer<std::uint16_t>(bytes, 0, envelope._kind);
-    write_integer<std::uint16_t>(bytes, 2, envelope._encoding);
-    write_integer<std::uint32_t>(bytes, 4, record_envelope_bytes);
-    write_integer<std::uint64_t>(bytes, 8, envelope._totalBytes);
-    write_integer<std::uint64_t>(bytes, 16, envelope._immutableBytes);
-    write_integer<std::uint64_t>(bytes, 24, envelope._generation);
-    write_integer<std::uint64_t>(bytes, 32, envelope._previous);
-    write_integer<std::uint64_t>(bytes, 40, envelope._registryRevision);
-    write_integer<std::uint64_t>(bytes, 48, envelope._readiness);
+    write_unsigned_le<std::uint16_t>(bytes, 0, envelope._kind);
+    write_unsigned_le<std::uint16_t>(bytes, 2, envelope._encoding);
+    write_unsigned_le<std::uint32_t>(bytes, 4, record_envelope_bytes);
+    write_unsigned_le<std::uint64_t>(bytes, 8, envelope._totalBytes);
+    write_unsigned_le<std::uint64_t>(bytes, 16, envelope._immutableBytes);
+    write_unsigned_le<std::uint64_t>(bytes, 24, envelope._generation);
+    write_unsigned_le<std::uint64_t>(bytes, 32, envelope._previous);
+    write_unsigned_le<std::uint64_t>(bytes, 40, envelope._registryRevision);
+    write_unsigned_le<std::uint64_t>(bytes, 48, envelope._readiness);
     return bytes;
   }
 
@@ -375,19 +351,19 @@ namespace angaria::detail::mapped
     {
       return failure(ErrorCode::IoError, "journal.record", "Record envelope must contain exactly 64 bytes");
     }
-    if (read_integer<std::uint32_t>(bytes, 4) != record_envelope_bytes || !zero(bytes.subspan(56, 8)))
+    if (read_unsigned_le<std::uint32_t>(bytes, 4) != record_envelope_bytes || !all_zero(bytes.subspan(56, 8)))
     {
       return failure(ErrorCode::IoError, "journal.record", "Invalid envelope size or reserved recovery word");
     }
     RecordEnvelope envelope;
-    envelope._kind = read_integer<std::uint16_t>(bytes, 0);
-    envelope._encoding = read_integer<std::uint16_t>(bytes, 2);
-    envelope._totalBytes = read_integer<std::uint64_t>(bytes, 8);
-    envelope._immutableBytes = read_integer<std::uint64_t>(bytes, 16);
-    envelope._generation = read_integer<std::uint64_t>(bytes, 24);
-    envelope._previous = read_integer<std::uint64_t>(bytes, 32);
-    envelope._registryRevision = read_integer<std::uint64_t>(bytes, 40);
-    envelope._readiness = read_integer<std::uint64_t>(bytes, 48);
+    envelope._kind = read_unsigned_le<std::uint16_t>(bytes, 0);
+    envelope._encoding = read_unsigned_le<std::uint16_t>(bytes, 2);
+    envelope._totalBytes = read_unsigned_le<std::uint64_t>(bytes, 8);
+    envelope._immutableBytes = read_unsigned_le<std::uint64_t>(bytes, 16);
+    envelope._generation = read_unsigned_le<std::uint64_t>(bytes, 24);
+    envelope._previous = read_unsigned_le<std::uint64_t>(bytes, 32);
+    envelope._registryRevision = read_unsigned_le<std::uint64_t>(bytes, 40);
+    envelope._readiness = read_unsigned_le<std::uint64_t>(bytes, 48);
     if (const auto error = validate_envelope(envelope, ErrorCode::IoError))
     {
       return *error;
@@ -409,31 +385,31 @@ namespace angaria::detail::mapped
     auto commands = std::move(std::get<std::vector<std::byte>>(encoded));
     const auto referenceBytes = checked_multiply(manifest._records.size(), sizeof(std::uint64_t));
     const auto bodyBytes = referenceBytes ? checked_add(std::uint64_t{64} + commands.size(), *referenceBytes) : std::nullopt;
-    if (!bodyBytes || *bodyBytes > std::numeric_limits<std::size_t>::max() ||
+    if (!bodyBytes || !fits_size_t(*bodyBytes) ||
         !contains_range(max_log_bytes, recordOffset + record_envelope_bytes, *bodyBytes))
     {
       return failure(ErrorCode::InvalidArgument, "journal.manifest", "Manifest body exceeds addressable bounds");
     }
     std::vector<std::byte> bytes(static_cast<std::size_t>(*bodyBytes));
-    write_integer<std::uint16_t>(bytes, 0, static_cast<std::uint16_t>(manifest._subtype));
-    write_integer<std::uint16_t>(bytes, 2, static_cast<std::uint16_t>(manifest._actor));
-    write_integer<std::uint64_t>(bytes, 8, manifest._actorIncarnation);
-    write_integer<std::uint64_t>(bytes, 16, manifest._baseRevision);
-    write_integer<std::uint64_t>(bytes, 24, manifest._newRevision);
+    write_unsigned_le<std::uint16_t>(bytes, 0, static_cast<std::uint16_t>(manifest._subtype));
+    write_unsigned_le<std::uint16_t>(bytes, 2, static_cast<std::uint16_t>(manifest._actor));
+    write_unsigned_le<std::uint64_t>(bytes, 8, manifest._actorIncarnation);
+    write_unsigned_le<std::uint64_t>(bytes, 16, manifest._baseRevision);
+    write_unsigned_le<std::uint64_t>(bytes, 24, manifest._newRevision);
     const auto referencesOffset = recordOffset + record_envelope_bytes + 64;
     if (!manifest._records.empty())
     {
-      write_integer<std::uint64_t>(bytes, 32, referencesOffset);
-      write_integer<std::uint64_t>(bytes, 40, manifest._records.size());
+      write_unsigned_le<std::uint64_t>(bytes, 32, referencesOffset);
+      write_unsigned_le<std::uint64_t>(bytes, 40, manifest._records.size());
     }
     for (std::size_t index = 0; index < manifest._records.size(); ++index)
     {
-      write_integer<std::uint64_t>(bytes, 64 + index * 8, manifest._records[index]);
+      write_unsigned_le<std::uint64_t>(bytes, 64 + index * 8, manifest._records[index]);
     }
     if (!commands.empty())
     {
-      write_integer<std::uint64_t>(bytes, 48, referencesOffset + *referenceBytes);
-      write_integer<std::uint64_t>(bytes, 56, commands.size());
+      write_unsigned_le<std::uint64_t>(bytes, 48, referencesOffset + *referenceBytes);
+      write_unsigned_le<std::uint64_t>(bytes, 56, commands.size());
       std::copy(commands.begin(), commands.end(), bytes.begin() + 64 + *referenceBytes);
     }
     return bytes;
@@ -447,14 +423,14 @@ namespace angaria::detail::mapped
     {
       return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest body range");
     }
-    if (!zero(bytes.subspan(4, 4)))
+    if (!all_zero(bytes.subspan(4, 4)))
     {
       return failure(ErrorCode::IoError, "journal.manifest", "Manifest flags are reserved");
     }
-    const auto referencesOffset = read_integer<std::uint64_t>(bytes, 32);
-    const auto count = read_integer<std::uint64_t>(bytes, 40);
-    const auto commandsOffset = read_integer<std::uint64_t>(bytes, 48);
-    const auto commandBytes = read_integer<std::uint64_t>(bytes, 56);
+    const auto referencesOffset = read_unsigned_le<std::uint64_t>(bytes, 32);
+    const auto count = read_unsigned_le<std::uint64_t>(bytes, 40);
+    const auto commandsOffset = read_unsigned_le<std::uint64_t>(bytes, 48);
+    const auto commandBytes = read_unsigned_le<std::uint64_t>(bytes, 56);
     const auto referenceBytes = checked_multiply(count, 8);
     const auto bodyStart = recordOffset + record_envelope_bytes;
     if (!referenceBytes || *referenceBytes > bytes.size() - 64 ||
@@ -469,21 +445,21 @@ namespace angaria::detail::mapped
       return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest command slice");
     }
     const auto used = commandBegin + static_cast<std::size_t>(commandBytes);
-    if (bytes.size() - used >= section_alignment || !zero(bytes.subspan(used)))
+    if (bytes.size() - used >= section_alignment || !all_zero(bytes.subspan(used)))
     {
       return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest allocation padding");
     }
     Manifest manifest;
-    manifest._subtype = static_cast<TransactionSubtype>(read_integer<std::uint16_t>(bytes, 0));
-    manifest._actor = static_cast<TaskId>(read_integer<std::uint16_t>(bytes, 2));
-    manifest._actorIncarnation = read_integer<std::uint64_t>(bytes, 8);
-    manifest._baseRevision = read_integer<std::uint64_t>(bytes, 16);
-    manifest._newRevision = read_integer<std::uint64_t>(bytes, 24);
+    manifest._subtype = static_cast<TransactionSubtype>(read_unsigned_le<std::uint16_t>(bytes, 0));
+    manifest._actor = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(bytes, 2));
+    manifest._actorIncarnation = read_unsigned_le<std::uint64_t>(bytes, 8);
+    manifest._baseRevision = read_unsigned_le<std::uint64_t>(bytes, 16);
+    manifest._newRevision = read_unsigned_le<std::uint64_t>(bytes, 24);
     // Every count is bounded by its owning immutable span before allocation.
     manifest._records.reserve(static_cast<std::size_t>(count));
     for (std::size_t index = 0; index < count; ++index)
     {
-      manifest._records.push_back(read_integer<std::uint64_t>(bytes, 64 + index * 8));
+      manifest._records.push_back(read_unsigned_le<std::uint64_t>(bytes, 64 + index * 8));
     }
     if (const auto error = validate_manifest(manifest, recordOffset, ErrorCode::IoError))
     {

@@ -4,6 +4,8 @@
 // message publication or delivery. Private byte edits and journal batches below
 // are corruption/exhaustion fixtures, never application initialization APIs.
 
+#include "native_fixture.h"
+#include "result_assertions.h"
 #include "angaria/runtime.h"
 #include "native_atomic.h"
 #include "topology_state.h"
@@ -34,25 +36,9 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._path << ": " << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   SourceQueueSetDescriptor source(std::string name = "Inputs", TaskId owner = TaskId{1})
   {
@@ -326,9 +312,7 @@ namespace
 
     void set_word(std::uint64_t offset, std::uint64_t value) const
     {
-      auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang", mapped::FileAccess::ReadWrite));
-      auto region = require_value(file.map_read_write(offset, 8));
-      require_value(mapped::AtomicWord::bind(require_value(region.writable_bytes()), 0)).store_release(value);
+      angaria::test_support::set_atomic_word(_directory, offset, value);
     }
 
     runtime::LoadedQueue loaded_queue(QueueId id) const

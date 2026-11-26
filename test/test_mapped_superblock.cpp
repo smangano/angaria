@@ -1,3 +1,4 @@
+#include "result_assertions.h"
 #include "mapped_superblock.h"
 
 #include <gtest/gtest.h>
@@ -123,15 +124,7 @@ namespace
     return bytes;
   }
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code);
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   mapped::LiveCompatibility fixture_support()
   {

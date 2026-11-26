@@ -1,5 +1,7 @@
 // Independent exec client for the complete Registry qualification. Ordinary
 // modes use public APIs; crash/recover modes alone install private checkpoints.
+#include "process_support.h"
+#include "result_helpers.h"
 #include "angaria/runtime.h"
 #include "runtime_state.h"
 #include "topology_state.h"
@@ -26,15 +28,7 @@ namespace
   namespace runtime = angaria::detail;
   namespace mapped = runtime::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   void check(bool condition)
   {
@@ -46,20 +40,7 @@ namespace
 
   void report(const void* data, std::size_t length)
   {
-    const auto* bytes = static_cast<const char*>(data);
-    while (length != 0)
-    {
-      const auto count = ::write(STDOUT_FILENO, bytes, length);
-      if (count > 0)
-      {
-        bytes += count;
-        length -= static_cast<std::size_t>(count);
-      }
-      else if (count != -1 || errno != EINTR)
-      {
-        throw std::runtime_error("Registry worker report failed");
-      }
-    }
+    angaria::test_support::write_all(STDOUT_FILENO, data, length, "Registry worker report failed");
   }
 
   void report(char value)

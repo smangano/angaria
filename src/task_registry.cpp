@@ -1,5 +1,8 @@
 #include "runtime_state.h"
 
+#include "angaria/detail/record_layout.h"
+#include "registry_access.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -33,11 +36,8 @@ namespace angaria::detail
 
     std::uint64_t record_bytes(std::uint64_t bodyBytes)
     {
-      const auto alignedBody = mapped::checked_align(bodyBytes, mapped::record_alignment);
-      const auto required = alignedBody ? mapped::checked_add(mapped::record_envelope_bytes, *alignedBody) :
-                                         std::nullopt;
-      const auto total = required ? mapped::checked_align(*required, mapped::section_alignment) : std::nullopt;
-      if (!total || *total > mapped::max_log_bytes)
+      const auto total = mapped::record_storage_bytes(bodyBytes);
+      if (!total)
       {
         runtime_fail(ErrorCode::LogFull, "task.definition", "Task registration allocation exceeds format byte bounds");
       }
@@ -114,18 +114,7 @@ namespace angaria::detail
   {
     try
     {
-      if (!session || !session->_controller)
-      {
-        runtime_fail(ErrorCode::InvalidState, "session", "Registry has no live Session state");
-      }
-      // Reject inherited ownership before touching any process-local mutex,
-      // including a Session-bound Registry that has no acting Task.
-      runtime_value(session->_controller->check_owner());
-      if (!actor)
-      {
-        runtime_fail(ErrorCode::ReadOnlyRegistry, "registry", "Task registration requires an actor-bound Registry");
-      }
-      runtime_check_task_owner(actor);
+      check_registry_actor(session, actor, "Task registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_task_descriptor(descriptor));

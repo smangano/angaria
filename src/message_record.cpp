@@ -1,5 +1,10 @@
 #include "angaria/message_record.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/error_support.h"
+#include "angaria/detail/wire_codes.h"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -19,19 +24,19 @@ namespace angaria
 {
   namespace
   {
+    namespace wire = angaria::detail::wire;
+
+    using angaria::detail::CodecFailure;
+    using angaria::detail::codec_fail;
+    using angaria::detail::codec_require;
+    using angaria::detail::value_or_throw;
+    using angaria::detail::read_unsigned_le;
+    using angaria::detail::signed_from_bits;
+    using angaria::detail::write_unsigned_le;
+
     constexpr std::array<std::byte, 8> record_magic{
         std::byte{0x41}, std::byte{0x4e}, std::byte{0x47}, std::byte{0x41},
         std::byte{0x4d}, std::byte{0x53}, std::byte{0x47}, std::byte{0}};
-
-    struct RecordFailure
-    {
-      Error _error;
-    };
-
-    [[noreturn]] void fail(ErrorCode code, const char* path, const char* message)
-    {
-      throw RecordFailure{Error{code, message, path}};
-    }
 
     Error record_error()
     {
@@ -39,7 +44,7 @@ namespace angaria
       {
         throw;
       }
-      catch (const RecordFailure& failure)
+      catch (const CodecFailure& failure)
       {
         return failure._error;
       }
@@ -57,92 +62,37 @@ namespace angaria
       }
     }
 
-    template <typename T>
-    T take(Result<T> result)
-    {
-      if (auto* error = std::get_if<Error>(&result))
-      {
-        throw RecordFailure{std::move(*error)};
-      }
-      return std::get<T>(std::move(result));
-    }
-
-    // Each caller establishes the fixed header's bounds first. Byte operations
-    // avoid native alignment, object padding, and host byte-order assumptions.
-    template <typename T>
-    T read_integer(std::span<const std::byte> bytes, std::size_t offset)
-    {
-      static_assert(std::is_unsigned_v<T> && sizeof(T) <= sizeof(std::uint64_t));
-      std::uint64_t value{};
-      for (std::size_t index = 0; index < sizeof(T); ++index)
-      {
-        value |= std::uint64_t{std::to_integer<std::uint8_t>(bytes[offset + index])} << (8 * index);
-      }
-      return static_cast<T>(value);
-    }
-
-    template <typename T>
-    void write_integer(std::span<std::byte> bytes, std::size_t offset, T value)
-    {
-      static_assert(std::is_unsigned_v<T> && sizeof(T) <= sizeof(std::uint64_t));
-      for (std::size_t index = 0; index < sizeof(T); ++index)
-      {
-        bytes[offset + index] = static_cast<std::byte>((std::uint64_t{value} >> (8 * index)) & 0xff);
-      }
-    }
-
-    std::int64_t signed_integer(std::uint64_t bits)
-    {
-      if (bits <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
-      {
-        return static_cast<std::int64_t>(bits);
-      }
-      return -1 - static_cast<std::int64_t>(~bits);
-    }
-
     std::uint16_t format_code(PayloadFormat format)
     {
-      switch (format)
-      {
-      case PayloadFormat::Binary: return 1;
-      case PayloadFormat::Json: return 2;
-      case PayloadFormat::Xml: return 3;
-      case PayloadFormat::Csv: return 4;
-      case PayloadFormat::Text: return 5;
-      }
-      fail(ErrorCode::InvalidArgument, "message_record.format", "Unknown payload format");
+      const auto encoded = wire::encode(format, wire::payload_formats);
+      codec_require(encoded.has_value(), ErrorCode::InvalidArgument, "message_record.format", "Unknown payload format");
+      return *encoded;
     }
 
     PayloadFormat decode_format(std::uint16_t code)
     {
-      switch (code)
-      {
-      case 1: return PayloadFormat::Binary;
-      case 2: return PayloadFormat::Json;
-      case 3: return PayloadFormat::Xml;
-      case 4: return PayloadFormat::Csv;
-      case 5: return PayloadFormat::Text;
-      }
-      fail(ErrorCode::InvalidArgument, "message_record.format", "Unknown encoded payload format");
+      const auto decoded = wire::decode(code, wire::payload_formats);
+      codec_require(decoded.has_value(), ErrorCode::InvalidArgument, "message_record.format", "Unknown encoded payload format");
+      return *decoded;
     }
 
     std::size_t record_size(std::uint64_t payloadBytes, std::uint64_t maxRecordBytes)
     {
       constexpr auto prefix = std::uint64_t{MessageRecordCodec::header_bytes};
-      if (payloadBytes > std::numeric_limits<std::uint64_t>::max() - prefix)
+      const auto bytes = detail::checked_add(prefix, payloadBytes);
+      if (!bytes)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.size", "Header and payload length overflow the record size");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.size", "Header and payload length overflow the record size");
       }
-      const auto total = prefix + payloadBytes;
+      const auto total = *bytes;
       if (total > maxRecordBytes)
       {
-        fail(ErrorCode::CapacityExceeded, "message_record.capacity", "Message record exceeds its configured byte limit");
+        codec_fail(ErrorCode::CapacityExceeded, "message_record.capacity", "Message record exceeds its configured byte limit");
       }
-      if (total > std::numeric_limits<std::size_t>::max() ||
-          total > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()) ||
+      if (!detail::fits_host_size(total) ||
           total > std::vector<std::byte>{}.max_size())
       {
-        fail(ErrorCode::CapacityExceeded, "message_record.capacity", "Message record exceeds the native allocation range");
+        codec_fail(ErrorCode::CapacityExceeded, "message_record.capacity", "Message record exceeds the native allocation range");
       }
       return static_cast<std::size_t>(total);
     }
@@ -151,28 +101,28 @@ namespace angaria
     {
       if (header._schema._type == MessageType::Invalid)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.schema.type", "Message type must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.schema.type", "Message type must be nonzero");
       }
       if (header._schema._version == 0)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.schema.version", "Schema version must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.schema.version", "Schema version must be nonzero");
       }
       const auto& producer = header._publication._producer;
       if (producer._session == SessionId{})
       {
-        fail(ErrorCode::InvalidArgument, "message_record.publication.session", "Publication Session identity must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.publication.session", "Publication Session identity must be nonzero");
       }
       if (producer._task == TaskId::Invalid)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.publication.task", "Producer Task must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.publication.task", "Producer Task must be nonzero");
       }
       if (producer._incarnation == 0)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.publication.incarnation", "Producer incarnation must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.publication.incarnation", "Producer incarnation must be nonzero");
       }
       if (header._publication._sequence == 0)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.publication.sequence", "Publication sequence must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.publication.sequence", "Publication sequence must be nonzero");
       }
       static_cast<void>(format_code(header._format));
       return record_size(header._payloadBytes, maxRecordBytes);
@@ -182,7 +132,7 @@ namespace angaria
     {
       if (header._payloadBytes != payload.size())
       {
-        fail(ErrorCode::InvalidArgument, "message_record.payload_size", "Declared payload length must equal the supplied byte count");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.payload_size", "Declared payload length must equal the supplied byte count");
       }
     }
 
@@ -190,20 +140,20 @@ namespace angaria
     {
       MessageRecordCodec::HeaderBytes bytes{};
       std::copy(record_magic.begin(), record_magic.end(), bytes.begin());
-      write_integer<std::uint16_t>(bytes, 8, MessageRecordCodec::encoding_version);
-      write_integer<std::uint16_t>(bytes, 10, static_cast<std::uint16_t>(MessageRecordCodec::header_bytes));
-      write_integer<std::uint16_t>(bytes, 12, format_code(header._format));
-      write_integer<std::uint16_t>(bytes, 14, static_cast<std::uint16_t>(header._publication._producer._task));
-      write_integer<std::uint16_t>(bytes, 16, static_cast<std::uint16_t>(header._schema._type));
-      write_integer<std::uint32_t>(bytes, 20, header._schema._version);
-      write_integer<std::uint32_t>(bytes, 24, header._flags);
-      write_integer<std::uint64_t>(bytes, 32, header._publication._producer._session._high);
-      write_integer<std::uint64_t>(bytes, 40, header._publication._producer._session._low);
-      write_integer<std::uint64_t>(bytes, 48, header._publication._producer._incarnation);
-      write_integer<std::uint64_t>(bytes, 56, header._publication._sequence);
-      write_integer<std::uint64_t>(bytes, 64,
+      write_unsigned_le<std::uint16_t>(bytes, 8, MessageRecordCodec::encoding_version);
+      write_unsigned_le<std::uint16_t>(bytes, 10, static_cast<std::uint16_t>(MessageRecordCodec::header_bytes));
+      write_unsigned_le<std::uint16_t>(bytes, 12, format_code(header._format));
+      write_unsigned_le<std::uint16_t>(bytes, 14, static_cast<std::uint16_t>(header._publication._producer._task));
+      write_unsigned_le<std::uint16_t>(bytes, 16, static_cast<std::uint16_t>(header._schema._type));
+      write_unsigned_le<std::uint32_t>(bytes, 20, header._schema._version);
+      write_unsigned_le<std::uint32_t>(bytes, 24, header._flags);
+      write_unsigned_le<std::uint64_t>(bytes, 32, header._publication._producer._session._high);
+      write_unsigned_le<std::uint64_t>(bytes, 40, header._publication._producer._session._low);
+      write_unsigned_le<std::uint64_t>(bytes, 48, header._publication._producer._incarnation);
+      write_unsigned_le<std::uint64_t>(bytes, 56, header._publication._sequence);
+      write_unsigned_le<std::uint64_t>(bytes, 64,
           static_cast<std::uint64_t>(header._publicationTime.time_since_epoch().count()));
-      write_integer<std::uint64_t>(bytes, 72, header._payloadBytes);
+      write_unsigned_le<std::uint64_t>(bytes, 72, header._payloadBytes);
       return bytes;
     }
 
@@ -211,37 +161,37 @@ namespace angaria
     {
       if (bytes.size() != MessageRecordCodec::header_bytes)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.header_size", "A message header must contain exactly 80 bytes");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.header_size", "A message header must contain exactly 80 bytes");
       }
       if (!std::equal(record_magic.begin(), record_magic.end(), bytes.begin()))
       {
-        fail(ErrorCode::InvalidArgument, "message_record.magic", "Invalid ANGAMSG record magic");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.magic", "Invalid ANGAMSG record magic");
       }
-      if (read_integer<std::uint16_t>(bytes, 8) != MessageRecordCodec::encoding_version)
+      if (read_unsigned_le<std::uint16_t>(bytes, 8) != MessageRecordCodec::encoding_version)
       {
-        fail(ErrorCode::UnsupportedPolicy, "message_record.version", "Unsupported message record encoding version");
+        codec_fail(ErrorCode::UnsupportedPolicy, "message_record.version", "Unsupported message record encoding version");
       }
-      if (read_integer<std::uint16_t>(bytes, 10) != MessageRecordCodec::header_bytes)
+      if (read_unsigned_le<std::uint16_t>(bytes, 10) != MessageRecordCodec::header_bytes)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.header_size", "Encoded message header length must be 80 bytes");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.header_size", "Encoded message header length must be 80 bytes");
       }
-      if (read_integer<std::uint16_t>(bytes, 18) != 0 || read_integer<std::uint32_t>(bytes, 28) != 0)
+      if (read_unsigned_le<std::uint16_t>(bytes, 18) != 0 || read_unsigned_le<std::uint32_t>(bytes, 28) != 0)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.reserved", "Reserved header bytes must be zero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.reserved", "Reserved header bytes must be zero");
       }
       MessageHeader header;
-      header._format = decode_format(read_integer<std::uint16_t>(bytes, 12));
-      header._publication._producer._task = static_cast<TaskId>(read_integer<std::uint16_t>(bytes, 14));
-      header._schema._type = static_cast<MessageType>(read_integer<std::uint16_t>(bytes, 16));
-      header._schema._version = read_integer<std::uint32_t>(bytes, 20);
-      header._flags = read_integer<std::uint32_t>(bytes, 24);
-      header._publication._producer._session._high = read_integer<std::uint64_t>(bytes, 32);
-      header._publication._producer._session._low = read_integer<std::uint64_t>(bytes, 40);
-      header._publication._producer._incarnation = read_integer<std::uint64_t>(bytes, 48);
-      header._publication._sequence = read_integer<std::uint64_t>(bytes, 56);
+      header._format = decode_format(read_unsigned_le<std::uint16_t>(bytes, 12));
+      header._publication._producer._task = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(bytes, 14));
+      header._schema._type = static_cast<MessageType>(read_unsigned_le<std::uint16_t>(bytes, 16));
+      header._schema._version = read_unsigned_le<std::uint32_t>(bytes, 20);
+      header._flags = read_unsigned_le<std::uint32_t>(bytes, 24);
+      header._publication._producer._session._high = read_unsigned_le<std::uint64_t>(bytes, 32);
+      header._publication._producer._session._low = read_unsigned_le<std::uint64_t>(bytes, 40);
+      header._publication._producer._incarnation = read_unsigned_le<std::uint64_t>(bytes, 48);
+      header._publication._sequence = read_unsigned_le<std::uint64_t>(bytes, 56);
       header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{
-          signed_integer(read_integer<std::uint64_t>(bytes, 64))}};
-      header._payloadBytes = read_integer<std::uint64_t>(bytes, 72);
+          signed_from_bits<std::int64_t>(read_unsigned_le<std::uint64_t>(bytes, 64))}};
+      header._payloadBytes = read_unsigned_le<std::uint64_t>(bytes, 72);
       static_cast<void>(validate_header(header, maxRecordBytes));
       return header;
     }
@@ -250,7 +200,7 @@ namespace angaria
     {
       if (bytes.size() < MessageRecordCodec::header_bytes)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.header_size", "Truncated message record header");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.header_size", "Truncated message record header");
       }
       const auto header = read_header(bytes.first(MessageRecordCodec::header_bytes), maxRecordBytes);
       const auto payload = bytes.subspan(MessageRecordCodec::header_bytes);
@@ -330,11 +280,11 @@ namespace angaria
       validate_payload_length(header, payload);
       if (output.size() != size)
       {
-        fail(ErrorCode::InvalidArgument, "message_record.output_size", "Output must have exactly the complete record size");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.output_size", "Output must have exactly the complete record size");
       }
       // A temporary also makes overlapping input/output well-defined: no
       // caller byte changes until every header and payload byte is complete.
-      const auto bytes = take(encode(header, payload, maxRecordBytes));
+      const auto bytes = value_or_throw<CodecFailure>(encode(header, payload, maxRecordBytes));
       std::copy(bytes.begin(), bytes.end(), output.begin());
       return std::monostate{};
     }
@@ -386,24 +336,24 @@ namespace angaria
       validate_payload_length(record._header, record._payload);
       if (schemaSession == SessionId{})
       {
-        fail(ErrorCode::InvalidArgument, "message_record.schema_session", "Schema Session context must be nonzero");
+        codec_fail(ErrorCode::InvalidArgument, "message_record.schema_session", "Schema Session context must be nonzero");
       }
       if (schemaSession != record._header._publication._producer._session)
       {
-        fail(ErrorCode::SchemaConflict, "message_record.schema_session", "Record Session does not match the supplied schema Session context");
+        codec_fail(ErrorCode::SchemaConflict, "message_record.schema_session", "Record Session does not match the supplied schema Session context");
       }
       if (record._header._format != PayloadFormat::Binary)
       {
-        fail(ErrorCode::UnsupportedPolicy, "message_record.format", "Binary payload decoding requires the Binary format");
+        codec_fail(ErrorCode::UnsupportedPolicy, "message_record.format", "Binary payload decoding requires the Binary format");
       }
       const auto expected = codec.schema();
       if (expected._type == MessageType::Invalid || expected._version == 0)
       {
-        fail(ErrorCode::InvalidState, "message_record.codec", "Binary payload codec has been moved from");
+        codec_fail(ErrorCode::InvalidState, "message_record.codec", "Binary payload codec has been moved from");
       }
       if (record._header._schema != expected)
       {
-        fail(ErrorCode::SchemaConflict, "message_record.schema", "Record schema does not match the exact payload codec schema");
+        codec_fail(ErrorCode::SchemaConflict, "message_record.schema", "Record schema does not match the exact payload codec schema");
       }
       return codec.decode(record._payload);
     }

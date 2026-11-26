@@ -1,5 +1,7 @@
 #include "native_file_state.h"
 
+#include "angaria/detail/checked_arithmetic.h"
+
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -118,8 +120,7 @@ namespace angaria::detail::mapped
     const auto pageBytes = static_cast<std::uint64_t>(page);
     const auto delta = offset % pageBytes;
     const auto mappedLength = checked_add(delta, length);
-    if (!mappedLength || *mappedLength > std::numeric_limits<std::size_t>::max() ||
-        *mappedLength > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+    if (!mappedLength || !fits_host_size(*mappedLength))
     {
       return storage_error(ErrorCode::InvalidArgument, _state->_path, "Mapping exceeds host addressable range");
     }

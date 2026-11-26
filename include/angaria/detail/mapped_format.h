@@ -1,6 +1,7 @@
 #pragma once
 
 #include "angaria/descriptors.h"
+#include "angaria/detail/checked_arithmetic.h"
 
 #include <array>
 #include <climits>
@@ -23,6 +24,7 @@ namespace angaria::detail::mapped
   inline constexpr std::uint64_t extent_header_bytes = 4096;
   inline constexpr std::uint64_t section_alignment = 64;
   inline constexpr std::uint64_t record_alignment = 8;
+  inline constexpr std::size_t record_envelope_bytes = 64;
   inline constexpr std::uint64_t index_entry_bytes = 64;
   inline constexpr std::uint64_t task_state_bytes = 256;
   inline constexpr std::uint64_t queue_state_bytes = 256;
@@ -71,39 +73,12 @@ namespace angaria::detail::mapped
     std::uint64_t _arenaBegin{};
   };
 
-  constexpr std::optional<std::uint64_t> checked_add(std::uint64_t left, std::uint64_t right)
-  {
-    if (right > std::numeric_limits<std::uint64_t>::max() - left)
-    {
-      return std::nullopt;
-    }
-    return left + right;
-  }
-
-  constexpr std::optional<std::uint64_t> checked_multiply(std::uint64_t left, std::uint64_t right)
-  {
-    if (left != 0 && right > std::numeric_limits<std::uint64_t>::max() / left)
-    {
-      return std::nullopt;
-    }
-    return left * right;
-  }
-
-  constexpr std::optional<std::uint64_t> checked_align(std::uint64_t value, std::uint64_t alignment)
-  {
-    if (alignment == 0)
-    {
-      return std::nullopt;
-    }
-    const auto remainder = value % alignment;
-    return checked_add(value, remainder == 0 ? 0 : alignment - remainder);
-  }
-
-  // Empty ranges may end at the extent boundary; required references reject emptiness separately.
-  constexpr bool contains_range(std::uint64_t extent_bytes, std::uint64_t offset, std::uint64_t length)
-  {
-    return offset <= extent_bytes && length <= extent_bytes - offset;
-  }
+  // Preserve existing qualified detail::mapped names while keeping the pure
+  // arithmetic implementation independent of native-format policy.
+  using detail::checked_add;
+  using detail::checked_multiply;
+  using detail::checked_align;
+  using detail::contains_range;
 
   constexpr bool valid_log_limit(std::uint64_t bytes)
   {

@@ -2,6 +2,7 @@
 // mapping ownership, and alias-aware lifetime protection. Application-facing
 // creation/attachment examples start in test_runtime_session.cpp.
 
+#include "result_assertions.h"
 #include "mapped_superblock.h"
 #include "native_file.h"
 
@@ -50,25 +51,9 @@ namespace
   static_assert(std::is_nothrow_move_constructible_v<mapped::MappedRegion>);
   static_assert(std::is_nothrow_move_assignable_v<mapped::MappedRegion>);
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code);
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   class NativeFileTest : public testing::Test
   {

@@ -39,14 +39,6 @@ namespace angaria::detail::mapped
       return registry;
     }
 
-    FileIdentity file_identity(const struct stat& info)
-    {
-      static_assert(sizeof(info.st_dev) <= sizeof(std::uint64_t));
-      static_assert(sizeof(info.st_ino) <= sizeof(std::uint64_t));
-      return FileIdentity{static_cast<std::uint64_t>(info.st_dev),
-                          static_cast<std::uint64_t>(info.st_ino)};
-    }
-
     std::shared_ptr<InodeState> inode_state(InodeRegistry& registry, FileIdentity identity)
     {
       std::lock_guard guard(registry._mutex);
@@ -132,7 +124,7 @@ namespace angaria::detail::mapped
       {
         return storage_error(ErrorCode::IoError, path, "Native storage requires a regular file");
       }
-      state->_identity = file_identity(info);
+      state->_identity = stat_identity(info);
       state->_inode = inode_state(registry, state->_identity);
       {
         std::lock_guard guard(state->_inode->_mutex);
@@ -209,7 +201,7 @@ namespace angaria::detail::mapped
     {
       return native_io_error(state._path, "stat native file", errno);
     }
-    if (!S_ISREG(info.st_mode) || info.st_size < 0 || file_identity(info) != state._identity)
+    if (!S_ISREG(info.st_mode) || info.st_size < 0 || stat_identity(info) != state._identity)
     {
       return storage_error(ErrorCode::IoError, state._path, "Native file type, identity, or size changed unexpectedly");
     }

@@ -3,6 +3,8 @@
 // the codecs under test. Native Field support and reference existence are runtime
 // checks; recognizing wire metadata does not implement its payload encoding.
 
+#include "wire_fixture.h"
+#include "result_assertions.h"
 #include "schema_metadata.h"
 
 #include <gtest/gtest.h>
@@ -26,53 +28,15 @@ namespace
   namespace mapped = angaria::detail::mapped;
   constexpr std::uint64_t record_offset = 8192;
 
-  void put_integer(std::vector<std::byte>& bytes, std::size_t offset,
-                   std::uint64_t value, std::size_t width)
-  {
-    for (std::size_t byte = 0; byte < width; ++byte)
-    {
-      bytes[offset + byte] = static_cast<std::byte>((value >> (8 * byte)) & 0xff);
-    }
-  }
+  using angaria::test_support::put_integer;
 
-  std::uint64_t get_integer(const std::vector<std::byte>& bytes, std::size_t offset,
-                            std::size_t width)
-  {
-    std::uint64_t value{};
-    for (std::size_t byte = 0; byte < width; ++byte)
-    {
-      value |= std::uint64_t{std::to_integer<unsigned char>(bytes[offset + byte])} << (8 * byte);
-    }
-    return value;
-  }
+  using angaria::test_support::get_integer;
 
-  void append_text(std::vector<std::byte>& bytes, const std::string& text)
-  {
-    for (const auto character : text)
-    {
-      bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(character)));
-    }
-  }
+  using angaria::test_support::append_text;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   mapped::FieldDefinition field_definition()
   {

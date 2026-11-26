@@ -1,6 +1,7 @@
 #pragma once
 
 #include "angaria/runtime.h"
+#include "angaria/detail/error_support.h"
 
 #include <filesystem>
 #include <stdexcept>
@@ -10,55 +11,8 @@
 
 namespace primer
 {
-  // These names make failures readable at the terminal. The Error also gives
-  // the setting or resource path and a more detailed explanation.
-  inline const char* error_name(angaria::ErrorCode code)
-  {
-    switch (code)
-    {
-    case angaria::ErrorCode::None:
-      return "None";
-    case angaria::ErrorCode::InvalidArgument:
-      return "InvalidArgument";
-    case angaria::ErrorCode::InvalidState:
-      return "InvalidState";
-    case angaria::ErrorCode::InvalidConfiguration:
-      return "InvalidConfiguration";
-    case angaria::ErrorCode::ConfigurationMismatch:
-      return "ConfigurationMismatch";
-    case angaria::ErrorCode::NotFound:
-      return "NotFound";
-    case angaria::ErrorCode::Conflict:
-      return "Conflict";
-    case angaria::ErrorCode::CapacityExceeded:
-      return "CapacityExceeded";
-    case angaria::ErrorCode::OwnershipBusy:
-      return "OwnershipBusy";
-    case angaria::ErrorCode::WrongOwner:
-      return "WrongOwner";
-    case angaria::ErrorCode::ReadOnlyRegistry:
-      return "ReadOnlyRegistry";
-    case angaria::ErrorCode::NotActive:
-      return "NotActive";
-    case angaria::ErrorCode::UnsupportedPolicy:
-      return "UnsupportedPolicy";
-    case angaria::ErrorCode::SchemaConflict:
-      return "SchemaConflict";
-    case angaria::ErrorCode::LogFull:
-      return "LogFull";
-    case angaria::ErrorCode::StaleDelivery:
-      return "StaleDelivery";
-    case angaria::ErrorCode::OutputBufferTooSmall:
-      return "OutputBufferTooSmall";
-    case angaria::ErrorCode::HistoryUnavailable:
-      return "HistoryUnavailable";
-    case angaria::ErrorCode::IoError:
-      return "IoError";
-    case angaria::ErrorCode::OutcomeUnknown:
-      return "OutcomeUnknown";
-    }
-    return "UnknownError";
-  }
+  // Shared diagnostic names keep example and inspection-tool errors consistent.
+  using angaria::detail::error_name;
 
   // Result<T> contains either T or Error. Keep that choice visible here, then
   // let each small program's catch block print unexpected failures and exit.
