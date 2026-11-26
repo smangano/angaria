@@ -8,6 +8,7 @@
 #include "mutation_journal.h"
 #include "native_atomic.h"
 #include "session_metadata.h"
+#include "angaria/detail/append_layout.h"
 
 #include <gtest/gtest.h>
 
@@ -335,6 +336,18 @@ namespace
     std::uint64_t _index{};
   };
 
+  class CountingInjector : public mapped::JournalFaultInjector
+  {
+  public:
+    OperationResult checkpoint(mapped::JournalCheckpoint, std::uint64_t) override
+    {
+      ++_calls;
+      return std::monostate{};
+    }
+
+    std::uint64_t _calls{};
+  };
+
   class MutationJournalTest : public testing::Test
   {
   protected:
@@ -502,6 +515,60 @@ namespace
     expect_error(access._journal.execute(access._guard,
         make_plan(current, access._controller->configuration(), true)), ErrorCode::LogFull);
     EXPECT_EQ(access.image(), before);
+  }
+
+  TEST_F(MutationJournalTest, CompleteAppendPlanAndExecutionAgreeAtTheExactByteCeiling)
+  {
+    // This independent fixture costs record192 + manifest256. The latter owns
+    // fixed64, one reference8, and redo96, in addition to its envelope/padding.
+    const auto arena = mapped::make_fixed_layout(_configuration._limits)->_arenaBegin;
+    _configuration._maxLogBytes = arena + 448;
+    Access access(make_session());
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    auto plan = make_plan(base, _configuration, true);
+    mapped::AppendLayoutPlanner planner(base._tail);
+    ASSERT_TRUE(planner.add_record(plan._records[0]._immutable.size()));
+    const auto layout = planner.finish(96, _configuration._maxLogBytes);
+    ASSERT_TRUE(layout);
+    EXPECT_EQ(layout->_manifestOffset, arena + 192);
+    EXPECT_EQ(layout->_manifestBytes, 256u);
+    EXPECT_EQ(layout->_tail, _configuration._maxLogBytes);
+    const auto result = require_value(access._journal.execute(access._guard, plan));
+    EXPECT_EQ(result._manifest, layout->_manifestOffset);
+    EXPECT_EQ(result._tail, layout->_tail);
+    EXPECT_EQ(require_value(access.file().size()), _configuration._maxLogBytes);
+  }
+
+  TEST_F(MutationJournalTest, FittingRecordWithoutManifestHeadroomRejectsBeforeJournalPreparation)
+  {
+    const auto arena = mapped::make_fixed_layout(_configuration._limits)->_arenaBegin;
+    _configuration._maxLogBytes = arena + 192;
+    CountingInjector injector;
+    Access access(make_session(), &injector);
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    const auto before = access.image();
+    expect_error(access._journal.execute(access._guard, make_plan(base, _configuration, true)), ErrorCode::LogFull);
+    EXPECT_EQ(injector._calls, 0u);
+    EXPECT_EQ(access.image(), before);
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+  }
+
+  TEST_F(MutationJournalTest, LateOversizedRecordRejectsTheWholeBatchWithoutStorageEffects)
+  {
+    CountingInjector injector;
+    Access access(make_session(), &injector);
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    auto plan = make_plan(base, _configuration, true);
+    // A fitting first definition cannot be prepared independently. The final
+    // draft makes the complete request exceed the ceiling, so neither is stored.
+    auto later = plan._records.front();
+    later._immutable.resize(_configuration._maxLogBytes);
+    plan._records.push_back(std::move(later));
+    const auto before = access.image();
+    expect_error(access._journal.execute(access._guard, plan), ErrorCode::LogFull);
+    EXPECT_EQ(injector._calls, 0u);
+    EXPECT_EQ(access.image(), before);
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
   }
 
   // A definition and its index update belong to one Append, whose final manifest records the entire batch.

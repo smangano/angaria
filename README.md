@@ -117,6 +117,8 @@ Milestone 4, step 4.3, framework version **`0.4.3`**, adds [Session and delivery
 
 Framework **`0.4.4`** consolidates repeated helpers after step 4.3. The [helper audit and header map](docs/helper-audit.md) records what is shared and why some operation-specific adapters remain. This cleanup adds no public delivery behavior or format changes.
 
+Step **4.4**, framework **`0.4.5`**, adds [private committed payload mappings and complete append planning](docs/native-storage.md#committed-payload-storage-and-append-planning). Payload addresses remain stable across append growth and rollback of later uncommitted work. Full batch sizing includes receipts, the manifest, redo, and alignment before journal image construction. Public delivery and delivery-enabled Session creation remain with later steps.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

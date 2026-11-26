@@ -27,6 +27,7 @@ add_library(angaria STATIC
   src/inspection.cpp
   src/message_record.cpp
   src/publication_metadata.cpp
+  src/mapped_payload.cpp
   src/delivery_state.cpp
   src/delivery_runtime.cpp
   src/payload.cpp
@@ -130,10 +131,13 @@ if(BUILD_TESTING)
   add_executable(angaria_tests
     test/test.cpp
     test/test_shared_helpers.cpp
+    test/test_append_layout.cpp
     test/test_field.cpp
     test/test_payload.cpp
     test/test_message_record.cpp
     test/test_publication_metadata.cpp
+    test/test_mapped_payload.cpp
+    test/test_payload_rollback.cpp
     test/test_delivery_state.cpp
     test/test_delivery_framing.cpp
     test/test_delivery_compatibility.cpp
