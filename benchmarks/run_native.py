@@ -166,7 +166,8 @@ def write_artifacts(directory, reports, manifest, sources, settings):
             if section:
                 output.write(f"\n[{section}]\n")
             for key, value in values.items():
-                output.write(f"{json.dumps(key)} = {json.dumps(value)}\n")
+                # TOML accepts Unicode scalars, not JSON's surrogate-pair escapes.
+                output.write(f"{json.dumps(key, ensure_ascii=False)} = {json.dumps(value, ensure_ascii=False)}\n")
 
 
 def smoke_rejections(executable, temporary, timeout, existing):
