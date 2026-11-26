@@ -18,7 +18,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.9** adds the receive, acknowledgment/release, and explicit Source-close path to the implemented direct-send, named setup, and shared message-header model; the review's status table identifies the remaining work.
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). Its sixteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. The latest lesson configures stale-message loss and handles delivery gaps. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). Its seventeen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. The latest lesson runs a [three-process market monitor](docs/native-pipeline.md) through native Queues, including backlog, schema versions, and replacement. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -129,7 +129,9 @@ Step **4.7**, framework **`0.4.9`**, implements [basic Source delivery](docs/nat
 
 Step **4.8**, framework **`0.4.10`**, enables configured `AllowLoss` delivery in both public descriptors and TOML. An idle consumer can skip stale pending messages outside the ring window and receive a `DeliveryGap`; an in-flight message stays protected. Recovery from the log remains the default. New Sessions select format **2.2/`0xf`**, while existing core Sessions remain usable without an in-place upgrade. [Lesson 16](examples/primer/16_allowed_loss.cpp) demonstrates the policy, gaps, and protected borrowing. Loss changes delivery obligations; it does not free physical log space.
 
-Step **4.9**, framework **`0.4.11`**, adds [combined failure and exhaustion qualification](docs/native-qualification.md): independent producer/consumer death, repeated recovery, wrapped rings, full logs, final counter values, and actual OS refusal to grow the file. The primer explains [interrupted operations and safe recovery](docs/primer.md#when-an-operation-is-interrupted). The native multi-process primer application follows in step 4.10.
+Step **4.9**, framework **`0.4.11`**, adds [combined failure and exhaustion qualification](docs/native-qualification.md): independent producer/consumer death, repeated recovery, wrapped rings, full logs, final counter values, and actual OS refusal to grow the file. The primer explains [interrupted operations and safe recovery](docs/primer.md#when-an-operation-is-interrupted).
+
+Step **4.10**, framework **`0.4.12`**, adds the [native multi-process primer application](docs/native-pipeline.md). Feed, Strategy, and Audit use the public API and explicit TOML to exchange exact-version Quotes and derived PriceAlerts, recover backlog after ring wrap, release/redeliver, acknowledge, and replace terminated owners. The walkthrough retains the Session and role transcripts for inspection. Measurements and the completion audit remain step 4.11.
 
 ## Run the restart walkthrough
 

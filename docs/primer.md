@@ -1,10 +1,10 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The sixteen lessons here use implemented APIs, including configured allowed loss from step 4.8. Framework **0.4.11**, step 4.9, adds [combined failure and exhaustion qualification](native-qualification.md) and the failure-handling guidance below.
+The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The seventeen lessons here use implemented APIs. Framework **0.4.12**, milestone 4 step 4.10, adds a [native multi-process market monitor](native-pipeline.md) after the earlier send, receive, allowed-loss, and [failure qualification](native-qualification.md) steps.
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, and saves a message, then closes and reopens its Source. Lesson 16 configures stale-message loss, handles gaps, and protects a message already being processed. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, and saves a message, then closes and reopens its Source. Lesson 16 configures stale-message loss, handles gaps, and protects a message already being processed. Lesson 17 connects Feed, Strategy, and Audit as independent processes, including backlog and replacement. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. Some additional public methods remain declarations for future steps; the separate full-interface review is compile-only. A declaration alone does not make an operation runnable.
 
@@ -34,7 +34,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lessons 14–16 join the milestone-4 staging branch at `0.4.8`–`0.4.10`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
+Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lessons 14–17 join the milestone-4 staging branch at `0.4.8`–`0.4.12`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -51,7 +51,7 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The sixteen targets are named `angaria_primer_01_session` through `angaria_primer_16_allowed_loss`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The seventeen targets are named `angaria_primer_01_session` through `angaria_primer_17_native_pipeline`, matching their source filenames. Lesson 17 also compiles the two role source files in `examples/primer/native_pipeline/`. The generic inspection tool is `angaria_inspect`.
 
 Examples 1–5, 9, and 11–15 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
@@ -939,6 +939,35 @@ Use a gap to update application state: a display might mark its older value stal
 
 Loss is committed before its gap is returned. If the consumer dies between those events, a replacement continues after the lost prefix; the gap is not delivered again. Loss does not revoke an in-flight message, acknowledge application work, or free physical log bytes. Like acknowledgment, it changes the delivery obligation using reserved progress storage. [The receive contract](native-receive.md#configured-allowed-loss) explains these boundaries.
 
+## 17. Connect Feed, Strategy, and Audit through native Queues
+
+The earlier lessons isolate one operation at a time. This application combines them into a small market monitor with three independent processes:
+
+```mermaid
+flowchart LR
+    Feed -->|Quotes| Strategy
+    Strategy -->|PriceAlerts| Audit
+```
+
+Feed sends prices and quantities. Strategy receives each Quote, compares its price with 10004 ticks, and sends a PriceAlert. Audit receives the alert and prints its own incoming publication identity together with the original Feed identity carried in the payload. Each consumer has one input Queue in its Source Queue Set. Strategy owns both a receiving Source and a different outgoing Queue.
+
+Read [17_native_pipeline.cpp](../examples/primer/17_native_pipeline.cpp), [producers.cpp](../examples/primer/native_pipeline/producers.cpp), [consumers.cpp](../examples/primer/native_pipeline/consumers.cpp), and [native-pipeline.toml](../examples/primer/native-pipeline.toml). Each role calls the public Angaria API directly, loads the explicit TOML, and checks its Results. The small roles header holds application declarations and constants; it does not hide framework setup or error handling.
+
+Run the complete walkthrough using the temporary parent directory created at the start of this guide:
+
+```sh
+python3 test/native_pipeline.py ./build/angaria_primer_17_native_pipeline \
+    examples/primer/native-pipeline.toml --workspace "$primer_workspace/17-market"
+```
+
+The `17-market` path must not exist yet. The coordinator copies the TOML file, starts real application processes, waits for their readiness messages, and retains their Session and transcripts in that workspace. The two Queues carry the messages; process pipes only coordinate the walkthrough.
+
+Feed first sends four Quotes into a ring of two while Strategy is offline. Strategy still receives Queue sequence 1 from the log. The coordinator terminates that Strategy after it borrows the first message and before it forwards anything, then replaces Feed and Strategy. Replacement Feed's publication sequence restarts in a new incarnation; Queue sequence continues. Audit and replacement Strategy then run together to process all six Quotes.
+
+Two Quote versions have the same 16-byte length but opposite Field order. Strategy selects the exact schema in the received MessageHeader, copies the full header and bytes, and decodes that owning Message. It also releases its first input, receives a new token, rejects the stale old token, forwards a known-accepted PriceAlert, and only then acknowledges the input. Audit follows the original Feed Task/incarnation/sequence and input Queue sequence through each derived alert.
+
+Sending an alert and acknowledging its input are separate commits. This walkthrough terminates Strategy before any output, so replacement has no earlier output to duplicate. A crash between output acceptance and input acknowledgment can repeat application work. The [full walkthrough](native-pipeline.md) explains that boundary, expected values, header reports, cold acceptance lookup, and manual commands for running each role yourself. The five-process trading simulation with Publishing and selection policies remains its later milestone.
+
 ## What comes next
 
 New Sessions use format 2.2 with native delivery and the separate allowed-loss capability (`0xf`), even when all initial Queues use recovery delivery. Existing core (`0x7`) Sessions continue recovery delivery but reject allowed-loss defaults or Queue registration. Existing 2.0/2.1 Sessions retain their supported operations and reject native delivery; no profile is upgraded in place. Milestone 4 currently selects from at most one Active Queue per Source. A Source with no Active Queue can time out; multiple Active inputs return UnsupportedPolicy for fresh selection. An already borrowed delivery can still be finished if topology grows. Milestone 5 adds selection among those inputs.
@@ -992,7 +1021,7 @@ The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 4 | Run the mapped message path; explain rings, log recovery, wraparound, and bounded failures. |
+| 4 | Complete the performance measurements and milestone audit after the native multi-process application. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |
 | 7 | Compare spinning with Linux eventfd waiting and explain wakeups and endpoint replacement. |

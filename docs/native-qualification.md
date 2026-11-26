@@ -2,7 +2,7 @@
 
 Milestone 4, step 4.9, framework **0.4.11**, combines the failure cases introduced alongside native send, receive, and allowed loss. The public contract remains [two-plane mapped transport](native-transport.md). A **qualification test** checks that an implementation meets a stated guarantee under a controlled failure or boundary condition.
 
-The tests establish real Sessions and message history through public APIs. Private hooks select exact journal stores, inspect persisted state, or place an otherwise unreachable counter near its maximum. These hooks are test infrastructure. The native multi-process primer application follows in step 4.10; these workers are not application examples to copy.
+The tests establish real Sessions and message history through public APIs. Private hooks select exact journal stores, inspect persisted state, or place an otherwise unreachable counter near its maximum. These hooks are test infrastructure. For application code, use the [native multi-process primer application](native-pipeline.md) added in step 4.10; these qualification workers are not application examples to copy.
 
 ## Evidence by guarantee
 
