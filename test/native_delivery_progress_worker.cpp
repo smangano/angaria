@@ -1,6 +1,7 @@
 // Independent exec worker for private delivery progress and compact claim
-// cleanup crash qualification. Public send/receive remain disabled. The worker
-// pauses at a real journal checkpoint and the parent terminates it there.
+// cleanup crash qualification. These private operations isolate replay stores;
+// public delivery is qualified separately by the Source/transport workers.
+// The worker pauses at a real journal checkpoint for the parent to terminate it.
 
 #include "delivery_progress.h"
 #include "delivery_progress_fixture.h"

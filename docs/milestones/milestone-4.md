@@ -82,6 +82,14 @@ An idle Source reports the inclusive overwritten pending prefix as a DeliveryGap
 
 The [sixteenth primer lesson](../../examples/primer/16_allowed_loss.cpp) uses explicit TOML and public Result/Error checks to demonstrate gaps, pin protection, and the unchanged recovery default. Public policy, metadata/capability, malformed-redo, full-log, and independent process-death tests qualify these rules. Portable record encoding and the synchronization protocol remain unchanged. Multiple-Queue selection and Publishing retain their roadmap milestones.
 
+## Step 4.9 Failure and exhaustion qualification
+
+Framework **0.4.11** adds [combined failure and exhaustion qualification](../native-qualification.md), with separate producer, consumer, and recovery processes. A producer can die during Prepared or Committed publication while another process keeps an unchanged in-flight view. Repeatedly interrupted replay and later consumer replacement preserve acceptance, Queue ordering, protected pins, and the difference between recovery delivery and allowed loss. Other scenarios let a fresh producer operation finish an interrupted acknowledgment, then combine mixed receipt history and owner replacement at an exactly full log.
+
+Counter fixtures exercise the last representable publication ID, Source issuance, and global operation generation through public calls, then verify unchanged rejection without wrapping. A child-only OS file-size limit forces a real file-growth error, proving precommit rollback preserves earlier acceptance and a live borrow before an unchanged-ID retry. The test guide identifies private hooks and boundary edits explicitly; they are not application configuration.
+
+The primer now explains uncertain outcomes, preserved identities, stale tokens, possible application work repetition, and the difference between append exhaustion and counter exhaustion. The runnable lessons remain public-API examples. Linux CI uses an explicit three-job compiler limit, matching native-profile jobs, and all automatic profiles run the full suite. Native format, public API, and synchronization protocol are unchanged. The native multi-process primer application remains step 4.10; measurements and the completion audit remain step 4.11.
+
 ## Qualification and completion
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.

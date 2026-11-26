@@ -1,7 +1,8 @@
 // Private delivery progress and compact-cleanup qualification. Public Registry
 // setup is combined with deliberately installed core Publications; this does
-// not demonstrate the still-unimplemented public send/receive API. The public
-// replacement test does exercise a real Task claim after this private setup.
+// not demonstrate application setup. Public send/receive and combined owner
+// failures are covered by the Source and transport suites. The replacement
+// test below exercises a real Task claim after this private setup.
 
 #include "delivery_progress.h"
 #include "angaria/detail/byte_operations.h"
