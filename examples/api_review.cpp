@@ -3,6 +3,7 @@
 #include "angaria/proposed/api.h"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <ostream>
@@ -328,6 +329,32 @@ namespace angaria::api_review
     api::ReplayOptions options;
     options._timeBasis = api::ReplayTimeBasis::InputTraceElapsed;
     return value(api::ReplaySession::create(value(trace.inputs()), options));
+  }
+
+  Result<api::ReplayRunReport> replay_bounded(api::ReplaySession& replay,
+      const api::SchemaCodec& codec, const ProcessValues& process,
+      const std::atomic<bool>& stopRequested)
+  {
+    api::ReplayRunLimits limits;
+    limits._maxMessages = 1000;
+    limits._maxElapsed = 2s;
+    return replay.run([&](const api::ReplayFrame& frame) -> Result<api::ReplayDecision>
+    {
+      const auto values = frame._record.decode(codec);
+      if (const auto* error = std::get_if<Error>(&values))
+      {
+        return *error;
+      }
+      const auto result = process(std::get<std::vector<api::FieldValue>>(values), frame._context);
+      if (const auto* error = std::get_if<Error>(&result))
+      {
+        return *error;
+      }
+      return api::ReplayDecision::Continue;
+    }, limits, [&]()
+    {
+      return stopRequested.load(std::memory_order_relaxed);
+    });
   }
 
   using RememberReplay = std::function<OperationResult(const api::ReplayOrigin&,

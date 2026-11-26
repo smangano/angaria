@@ -13,7 +13,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -433,6 +432,11 @@ namespace angaria::proposed
   };
 
   using ReplayHandler = std::function<Result<ReplayDecision>(const ReplayFrame&)>;
+  // Portable C++20 cancellation, including standard libraries without
+  // std::stop_token. Empty means no cancellation; a callable can read an
+  // application-owned atomic stop flag. It is polled between bounded waits
+  // and frames and cannot preempt a running application handler.
+  using CancellationCheck = std::function<bool()>;
 
   class ReplaySession
   {
@@ -452,7 +456,7 @@ namespace angaria::proposed
     // frame next. Original commit/acceptance order is never a timestamp sort.
     Result<std::optional<ReplayFrame>> step();
     Result<ReplayRunReport> run(const ReplayHandler& handler, ReplayRunLimits limits = {},
-                                  std::stop_token stop = {});
+                                  const CancellationCheck& cancelled = {});
     Result<ReplayCheckpoint> checkpoint() const;
     // Restores this input/timing cursor only, never application state or side
     // effects. A handler failure may already have performed external work.
