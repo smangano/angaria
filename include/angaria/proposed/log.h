@@ -135,6 +135,8 @@ namespace angaria::proposed
     TaskClaim _consumer{};
     std::uint64_t _ordinal{};
     std::chrono::nanoseconds _elapsed{}; // Monotonic elapsed time in this trace.
+    MessageContext _context; // Original handler context, before replay marking.
+    DeliveryToken _recordedToken{}; // Historical issuance data, not ownership.
   };
 
   class LogRecord
@@ -148,7 +150,7 @@ namespace angaria::proposed
     std::vector<LoggedAcceptanceOutcome> _originalDestinations;
     // Cumulative acceptance plus latest receipt progress at this archive cut.
     std::vector<LoggedDestination> _destinations;
-    // Present only for a deliveries() cursor. A fan-out publication may then
+    // Present for deliveries() or recorded inputs. A fan-out publication may then
     // appear once per accepted destination; publications() yields it once.
     std::optional<LoggedDestination> _selectedDelivery;
     // Present only for acceptance_attempts(). Attempts are streamed rather
@@ -317,7 +319,15 @@ namespace angaria::proposed
     InputTraceRecorder(const InputTraceRecorder&) = delete;
     InputTraceRecorder& operator=(const InputTraceRecorder&) = delete;
     ~InputTraceRecorder();
-    Result<LogPosition> record_input(const DeliveryView& delivery);
+    // Retains this exact native claim and affinity. Validate current ownership
+    // and matching pin before resolving canonical stored bytes; never dereference
+    // a caller's stale borrowed span. Copy all schema/pool/context dependencies.
+    // Success publishes the complete framed input/dependencies beyond userspace
+    // buffering before processing begins: process-termination scope, not fsync or
+    // power-loss durability. An I/O failure is terminal; only close is usable,
+    // and readers can inspect the validated complete prefix, not skip a bad tail.
+    // Return this recorder's input ordinal, not an immutable-cut seek bookmark.
+    Result<std::uint64_t> record_input(const DeliveryView& delivery);
     OperationResult close();
   private:
     std::shared_ptr<detail::InputTraceState> _state;
@@ -334,6 +344,7 @@ namespace angaria::proposed
     struct Status
     {
       TaskClaim _consumer{};
+      UtcTimestamp _startedAt{}; // UTC anchor sampled when the recorder starts.
       std::uint64_t _completeInputs{};
       bool _finalized{};
       bool _incompleteTail{};
@@ -370,7 +381,10 @@ namespace angaria::proposed
   {
     // Speed affects wall-clock pacing, not original record order. Recorded
     // negative clock deltas contribute zero delay; virtual time is monotonic.
-    // Enqueue time requires a deliveries() projection. Default replay sleeps
+    // Enqueue time requires a selected delivery. InputTraceElapsed requires a
+    // recorded-input projection and anchors virtual UTC at trace startedAt plus
+    // monotonic recorded elapsed time, not the message's original wall clock.
+    // Default replay sleeps
     // nowhere; pacing is not a real-time or scheduling guarantee.
     ReplayPacing _pacing{ReplayPacing::Immediate};
     ReplayTimeBasis _timeBasis{ReplayTimeBasis::Publication};

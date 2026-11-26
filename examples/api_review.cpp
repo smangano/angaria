@@ -323,12 +323,20 @@ namespace angaria::api_review
     return consume_one(strategy._inputs, strategy._codec, strategy._pools, process, report_gap, &trace);
   }
 
-  api::ReplaySession replay_recorded_inputs(const std::filesystem::path& path)
+  struct RecordedReplay
+  {
+    api::ReplaySession _replay;
+    api::ExecutionTrace::Status _traceStatus;
+  };
+
+  RecordedReplay replay_recorded_inputs(const std::filesystem::path& path)
   {
     const auto trace = value(api::ExecutionTrace::open(path));
     api::ReplayOptions options;
     options._timeBasis = api::ReplayTimeBasis::InputTraceElapsed;
-    return value(api::ReplaySession::create(value(trace.inputs()), options));
+    // Expose incomplete/unfinalized status to the caller before it chooses to
+    // process this prefix. Creating the replay itself invokes no handler.
+    return {value(api::ReplaySession::create(value(trace.inputs()), options)), value(trace.status())};
   }
 
   Result<api::ReplayRunReport> replay_bounded(api::ReplaySession& replay,
