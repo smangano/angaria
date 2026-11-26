@@ -18,7 +18,7 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.9** adds the receive, acknowledgment/release, and explicit Source-close path to the implemented direct-send, named setup, and shared message-header model; the review's status table identifies the remaining work.
 
-New to Angaria? Start with the [programmer primer](docs/primer.md). Its fifteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
+New to Angaria? Start with the [programmer primer](docs/primer.md). Its sixteen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. The latest lesson configures stale-message loss and handles delivery gaps. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
@@ -123,9 +123,11 @@ Step **4.4**, framework **`0.4.5`**, adds [private committed payload mappings an
 
 Step **4.5**, framework **`0.4.6`**, adds [reserved delivery progress and publication-aware claim cleanup](docs/native-progress.md). Private issuance, acknowledgment, release, and Task/Source cleanup use existing storage and can finish at a full log. Claim replay preserves historical identities and releases old Thread pins when their parent Process is replaced.
 
-Step **4.6**, framework **`0.4.8`**, implements [direct Queue publication](docs/direct-publication.md). `QueueWriter::send` accepts an explicit issued ID and a `MessageView`; `Task::publication_status` resolves that ID, including retained earlier incarnations. Identical repeats preserve the original acceptance. New Sessions use core format 2.2/`0x7`; legacy Sessions remain attachable without native delivery. [Lesson 14](examples/primer/14_direct_send.cpp) demonstrates sending while a consumer is offline.
+Step **4.6**, framework **`0.4.8`**, implements [direct Queue publication](docs/direct-publication.md). `QueueWriter::send` accepts an explicit issued ID and a `MessageView`; `Task::publication_status` resolves that ID, including retained earlier incarnations. Identical repeats preserve the original acceptance. It introduced core format 2.2/`0x7`; legacy Sessions remain attachable without native delivery. [Lesson 14](examples/primer/14_direct_send.cpp) demonstrates sending while a consumer is offline.
 
-Step **4.7**, framework **`0.4.9`**, implements [basic Source delivery](docs/native-receive.md): stable borrowed `MessageView` payloads, complete headers, owning copies, exact acknowledgment/release tokens, finite spin waits, and explicit Source close with recoverable deferred cleanup. One Active Queue per Source is supported for fresh selection. Multiple-Queue selection, allowed loss, and Publishing remain their later steps.
+Step **4.7**, framework **`0.4.9`**, implements [basic Source delivery](docs/native-receive.md): stable borrowed `MessageView` payloads, complete headers, owning copies, exact acknowledgment/release tokens, finite spin waits, and explicit Source close with recoverable deferred cleanup. One Active Queue per Source is supported for fresh selection. Multiple-Queue selection and Publishing remain their later steps.
+
+Step **4.8**, framework **`0.4.10`**, enables configured `AllowLoss` delivery in both public descriptors and TOML. An idle consumer can skip stale pending messages outside the ring window and receive a `DeliveryGap`; an in-flight message stays protected. Recovery from the log remains the default. New Sessions select format **2.2/`0xf`**, while existing core Sessions remain usable without an in-place upgrade. [Lesson 16](examples/primer/16_allowed_loss.cpp) demonstrates the policy, gaps, and protected borrowing. Loss changes delivery obligations; it does not free physical log space.
 
 ## Run the restart walkthrough
 

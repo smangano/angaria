@@ -4,6 +4,8 @@
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/error_support.h"
 #include "delivery_words.h"
+#include "journal_atomic.h"
+#include "journal_metadata.h"
 #include "native_atomic.h"
 #include "publication_metadata.h"
 #include "session_metadata.h"
@@ -45,19 +47,7 @@ namespace angaria::detail::mapped
 
     std::vector<std::uint64_t> read_words(NativeFile& file, std::uint64_t offset, std::size_t count)
     {
-      if (count == 0)
-      {
-        return {};
-      }
-      auto mapping = value_or_throw<Failure>(file.map_read_write(offset, count * 8));
-      auto bytes = value_or_throw<Failure>(mapping.writable_bytes());
-      std::vector<std::uint64_t> result;
-      result.reserve(count);
-      for (std::size_t index = 0; index != count; ++index)
-      {
-        result.push_back(value_or_throw<Failure>(AtomicWord::bind(bytes, index * 8)).load_acquire());
-      }
-      return result;
+      return value_or_throw<Failure>(read_journal_words(file, offset, count));
     }
 
     const SectionLayout& section(const FixedLayout& layout, SectionKind kind, ErrorCode code)
@@ -249,11 +239,8 @@ namespace angaria::detail::mapped
         {
           fail(code, "Task index contains an invalid identity, duplicate, revision, or reserved word");
         }
-        const auto record = std::find_if(records.begin(), records.end(), [&](const auto& value)
-        {
-          return value._offset == entry[1];
-        });
-        if (record == records.end() || record->_envelope._kind != 2 ||
+        const auto* record = find_journal_record(records, entry[1]);
+        if (!record || record->_envelope._kind != 2 ||
             record->_envelope._readiness != 2 || record->_envelope._registryRevision != entry[2] ||
             !fits_size_t(record->_envelope._immutableBytes))
         {
@@ -351,13 +338,10 @@ namespace angaria::detail::mapped
           }
           continue;
         }
-        const auto record = std::find_if(records.begin(), records.end(), [&](const auto& candidate)
-        {
-          return candidate._offset == entry[1];
-        });
+        const auto* record = find_journal_record(records, entry[1]);
         if (entry[0] > max_entity_id || !ids.insert(entry[0]).second || entry[2] == 0 ||
             (entry[3] != 1 && entry[3] != 2) || !all_zero(std::span{entry}.subspan(4)) ||
-            record == records.end() || record->_envelope._kind != 4 || record->_envelope._readiness != 2 ||
+            !record || record->_envelope._kind != 4 || record->_envelope._readiness != 2 ||
             record->_envelope._registryRevision != entry[2] || !fits_host_size(record->_envelope._immutableBytes))
         {
           fail(code, "Source cleanup index does not name its committed definition");
@@ -386,14 +370,112 @@ namespace angaria::detail::mapped
       return sources;
     }
 
+    struct LossQueueContext
+    {
+      std::uint64_t _terminal{};
+      std::uint64_t _ringFloor{};
+      SourceQueueSetId _source{};
+      TaskId _producer{};
+    };
+
+    LossQueueContext read_loss_queue(NativeFile& file, const FixedLayout& layout,
+                            std::span<const JournalRecordRange> records,
+                            const PublicationMetadata& publication,
+                            std::span<const SourceRow> sources, ErrorCode code)
+    {
+      const auto& destination = publication._destinations.front();
+      const auto& index = section(layout, SectionKind::QueueIndex, code);
+      const auto& state = section(layout, SectionKind::QueueState, code);
+      if (index._stride != index_entry_bytes || state._stride != queue_state_bytes || state._count != index._count)
+      {
+        fail(code, "Lost cleanup requires parallel Queue index and state tables");
+      }
+      bool found{};
+      LossQueueContext result;
+      for (std::uint64_t slot = 0; slot != index._count; ++slot)
+      {
+        const auto entry = read_words(file, index._offset + slot * index._stride, 8);
+        if (entry[0] != static_cast<std::uint16_t>(destination._queue))
+        {
+          continue;
+        }
+        if (found || entry[1] == 0 || entry[2] == 0 || entry[3] != 2 || !all_zero(std::span{entry}.subspan(4)))
+        {
+          fail(code, "Lost cleanup Queue index is not a unique Active definition");
+        }
+        found = true;
+        const auto* record = find_journal_record(records, entry[1]);
+        if (!record || record->_envelope._kind != 3 || record->_envelope._readiness != 2 ||
+            record->_envelope._registryRevision != entry[2] || !fits_host_size(record->_envelope._immutableBytes))
+        {
+          fail(code, "Lost cleanup Queue index does not name its exact committed definition");
+        }
+        std::vector<std::byte> body(static_cast<std::size_t>(record->_envelope._immutableBytes));
+        value_or_throw<Failure>(file.read_exact(record->_offset + record_envelope_bytes, body));
+        const auto queue = value_or_throw<Failure>(decode_queue_definition(body, record->_offset));
+        const auto words = read_words(file, state._offset + slot * state._stride, 32);
+        const auto capacity = words[3];
+        const auto source = std::find_if(sources.begin(), sources.end(), [&](const auto& candidate)
+        {
+          return candidate._definition._id == queue._descriptor._sourceSet;
+        });
+        if (queue._id != destination._queue || queue._registration._revision != entry[2] ||
+            queue._state != EntityState::Active || queue._descriptor._delivery != DeliveryPolicy::AllowLoss ||
+            queue._descriptor._producer != publication._producer || queue._descriptor._ringCapacity != capacity ||
+            capacity == 0 || words[0] <= capacity || words[8] > words[0] ||
+            source == sources.end() || source->_definition._state != EntityState::Active ||
+            std::find(source->_definition._members.begin(), source->_definition._members.end(), queue._id) ==
+                source->_definition._members.end())
+        {
+          fail(code, "Lost cleanup receipt is outside its allowed-loss Queue's overwritten terminal prefix");
+        }
+        result = {words[8], words[0] - capacity + 1, queue._descriptor._sourceSet, queue._descriptor._producer};
+        const auto* ring = find_journal_record(records, words[2]);
+        const auto ringBytes = ring_storage_bytes(capacity);
+        if (!ringBytes || !ring || ring->_envelope._kind != 8 ||
+            ring->_envelope._readiness != 2 || ring->_envelope._immutableBytes != 0 ||
+            ring->_envelope._totalBytes != *ringBytes)
+        {
+          fail(code, "Lost cleanup Queue does not name its exact committed ring");
+        }
+        for (std::uint64_t index = 0; index != capacity; ++index)
+        {
+          const auto slot = read_words(file, words[2] + record_envelope_bytes + index * ring_slot_bytes, 4);
+          const auto lastIndex = (words[0] - 1) % capacity;
+          const auto distance = lastIndex >= index ? lastIndex - index : capacity - (index - lastIndex);
+          const auto expected = words[0] - distance;
+          const auto* publicationRecord = find_journal_record(records, slot[2]);
+          if (slot[0] != expected || slot[3] != 1 + (expected - 1) / capacity ||
+              !publicationRecord || publicationRecord->_envelope._kind != 9)
+          {
+            fail(code, "Lost cleanup Queue ring is outside its authoritative current window");
+          }
+          const auto retained = value_or_throw<Failure>(read_journal_publication(file, *publicationRecord, code));
+          if (retained._destinations.front()._queue != queue._id ||
+              retained._destinations.front()._queueSequence != expected ||
+              retained._layout._destinationsOffset != slot[1] ||
+              retained._producer != queue._descriptor._producer)
+          {
+            fail(code, "Lost cleanup Queue ring does not resolve its exact retained destination");
+          }
+        }
+      }
+      if (!found)
+      {
+        fail(code, "Lost cleanup receipt has no registered Queue");
+      }
+      return result;
+    }
+
     void append_delivery_cleanup(NativeFile& file, const FixedLayout& layout,
                                    std::span<const JournalRecordRange> records,
                                    std::span<const TaskRow> tasks,
                                    const std::map<TaskId, std::uint64_t>& endingClaims,
-                                   std::vector<RedoCommand>& expanded, ErrorCode code)
+                                   std::vector<RedoCommand>& expanded, ErrorCode code, bool allowLoss)
     {
       const auto sources = read_sources(file, layout, records, tasks, code);
       std::set<SourceQueueSetId> issuedSources;
+      std::map<QueueId, LossQueueContext> lossQueues;
       for (const auto& record : records)
       {
         if (record._envelope._kind == 10)
@@ -404,35 +486,30 @@ namespace angaria::detail::mapped
         {
           continue;
         }
-        // Core direct acceptance has one row. Read bounded metadata and one
-        // atomic receipt, never the application payload or its containing body.
-        std::array<std::byte, publication_fixed_bytes> fixed{};
-        value_or_throw<Failure>(file.read_exact(record._offset + record_envelope_bytes, fixed));
-        const auto prefix = value_or_throw<Failure>(decode_publication_prefix(
-            fixed, record._envelope._immutableBytes, record._offset, max_log_bytes));
-        if (prefix._header._publishingSet != PublishingQueueSetId::Invalid || prefix._destinationCount != 1 ||
-            prefix._layout._totalBytes != record._envelope._totalBytes)
-        {
-          fail(code, "Core claim cleanup requires canonical direct Publications");
-        }
-        DestinationRowBytes row{};
-        value_or_throw<Failure>(file.read_exact(prefix._layout._destinationsOffset, row));
-        const auto payloadEnd = prefix._layout._destinationsOffset + destination_row_bytes + prefix._payloadBytes;
-        std::array<std::byte, 7> padding{};
-        const auto paddingBytes = prefix._layout._receiptsOffset - payloadEnd;
-        if (paddingBytes > padding.size())
-        {
-          fail(code, "Publication padding exceeds its word boundary");
-        }
-        value_or_throw<Failure>(file.read_exact(payloadEnd, std::span{padding}.first(static_cast<std::size_t>(paddingBytes))));
-        const auto metadata = value_or_throw<Failure>(decode_publication_metadata(
-            fixed, row, std::span{padding}.first(static_cast<std::size_t>(paddingBytes)),
-            record._envelope._immutableBytes, record._offset, max_log_bytes));
+        const auto metadata = value_or_throw<Failure>(read_journal_publication(file, record, code));
         const auto receiptOffset = metadata._layout._receiptsOffset;
-        const auto receipt = value_or_throw<Failure>(decode_receipt_words(read_words(file, receiptOffset, 16)));
+        const auto receipt = value_or_throw<Failure>(decode_receipt_words(read_words(file, receiptOffset, 16),
+            allowLoss ? ReceiptProfile::AllowLoss : ReceiptProfile::Core));
         if (receipt._state == ReceiptState::Unused)
         {
           fail(code, "Accepted direct destination has no receipt obligation");
+        }
+        if (receipt._state == ReceiptState::Lost)
+        {
+          const auto& destination = metadata._destinations.front();
+          auto context = lossQueues.find(destination._queue);
+          if (context == lossQueues.end())
+          {
+            context = lossQueues.emplace(destination._queue,
+                read_loss_queue(file, layout, records, metadata, sources, code)).first;
+          }
+          if (destination._queueSequence > context->second._terminal ||
+              destination._queueSequence >= context->second._ringFloor ||
+              metadata._producer != context->second._producer ||
+              ((receipt._presence & 1) != 0 && receipt._sourceSet != context->second._source))
+          {
+            fail(code, "Lost cleanup receipt is outside its allowed-loss Queue's overwritten terminal prefix");
+          }
         }
         if ((receipt._presence & 1) == 0)
         {
@@ -515,7 +592,7 @@ namespace angaria::detail::mapped
   Result<std::vector<RedoCommand>> expand_task_claim_commands(
       NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records,
-      std::span<const RedoCommand> commands, ErrorCode errorCode, bool nativeDelivery)
+      std::span<const RedoCommand> commands, ErrorCode errorCode, bool nativeDelivery, bool allowLoss)
   {
     try
     {
@@ -701,7 +778,7 @@ namespace angaria::detail::mapped
               }
             }
           }
-          append_delivery_cleanup(file, layout, records, tasks, endingClaims, expanded, errorCode);
+          append_delivery_cleanup(file, layout, records, tasks, endingClaims, expanded, errorCode, allowLoss);
         }
         const auto detach = [&](TaskRow& task)
         {

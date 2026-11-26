@@ -542,8 +542,6 @@ namespace
     descriptor._randomSeed = 0;
     expect_error(actor.register_source_set(descriptor), ErrorCode::InvalidArgument);
     auto feed = queue();
-    feed._delivery = DeliveryPolicy::AllowLoss;
-    expect_error(actor.register_queue(feed), ErrorCode::UnsupportedPolicy);
     feed._delivery = static_cast<DeliveryPolicy>(99);
     expect_error(actor.register_queue(feed), ErrorCode::InvalidArgument);
     feed = queue();

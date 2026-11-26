@@ -33,6 +33,8 @@ add_library(angaria STATIC
   src/delivery_state.cpp
   src/delivery_runtime.cpp
   src/delivery_progress.cpp
+  src/delivery_loss.cpp
+  src/loss_redo.cpp
   src/payload.cpp
   src/configuration.cpp
   src/configuration_runtime.cpp
@@ -90,7 +92,7 @@ target_include_directories(angaria_public_api_review PRIVATE "${CMAKE_CURRENT_SO
 target_compile_features(angaria_public_api_review PRIVATE cxx_std_20)
 
 # Primer programs use implemented public APIs and remain runnable without tests.
-foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record 12_capture 13_process_exchange 14_direct_send 15_receive)
+foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record 12_capture 13_process_exchange 14_direct_send 15_receive 16_allowed_loss)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)
   target_link_libraries(angaria_primer_${lesson} PRIVATE angaria)
 endforeach()
@@ -127,6 +129,10 @@ if(BUILD_TESTING)
   add_executable(angaria_native_source_worker test/native_source_worker.cpp)
   target_include_directories(angaria_native_source_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_source_worker PRIVATE angaria)
+
+  add_executable(angaria_native_loss_worker test/native_loss_worker.cpp)
+  target_include_directories(angaria_native_loss_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_loss_worker PRIVATE angaria)
 
   add_executable(angaria_native_registration_worker test/native_registration_worker.cpp)
   target_include_directories(angaria_native_registration_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -167,6 +173,11 @@ if(BUILD_TESTING)
     test/test_source_lifecycle.cpp
     test/test_source_deadlines.cpp
     test/test_source_recovery.cpp
+    test/test_allowed_loss.cpp
+    test/test_loss_validation.cpp
+    test/test_loss_configuration.cpp
+    test/test_loss_redo.cpp
+    test/test_loss_recovery.cpp
     test/test_mapped_payload.cpp
     test/test_payload_rollback.cpp
     test/test_delivery_state.cpp
@@ -222,6 +233,7 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_DELIVERY_PROGRESS_WORKER="$<TARGET_FILE:angaria_native_delivery_progress_worker>"
     ANGARIA_NATIVE_PUBLICATION_WORKER="$<TARGET_FILE:angaria_native_publication_worker>"
     ANGARIA_NATIVE_SOURCE_WORKER="$<TARGET_FILE:angaria_native_source_worker>"
+    ANGARIA_NATIVE_LOSS_WORKER="$<TARGET_FILE:angaria_native_loss_worker>"
     ANGARIA_NATIVE_REGISTRATION_WORKER="$<TARGET_FILE:angaria_native_registration_worker>"
     ANGARIA_NATIVE_SCHEMA_WORKER="$<TARGET_FILE:angaria_native_schema_worker>"
     ANGARIA_NATIVE_TOPOLOGY_WORKER="$<TARGET_FILE:angaria_native_topology_worker>"
@@ -231,7 +243,7 @@ if(BUILD_TESTING)
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
-  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_delivery_progress_worker angaria_native_publication_worker angaria_native_source_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_delivery_progress_worker angaria_native_publication_worker angaria_native_source_worker angaria_native_loss_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 10)
@@ -260,6 +272,8 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/configuration.toml"
             "$<TARGET_FILE:angaria_primer_14_direct_send>"
             "$<TARGET_FILE:angaria_primer_15_receive>"
+            "$<TARGET_FILE:angaria_primer_16_allowed_loss>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/allowed-loss.toml"
   )
   set_tests_properties(primer_examples PROPERTIES TIMEOUT 45)
   add_test(

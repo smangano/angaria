@@ -24,6 +24,9 @@ Use the related header below before introducing another local implementation. Th
 | [payload_runtime.h](../src/payload_runtime.h) | Resolve an exact registered Binary codec under an existing recovered gate, shared by publication admission and received-message binding. |
 | [source_runtime_state.h](../src/source_runtime_state.h) | Source lifecycle/reservations, native ownership prechecks, stable payload ownership, and deferred-cleanup coordination shared by endpoint setup and receive/progress. |
 | [delivery_words.h](../src/delivery_words.h), [delivery_access.h](../src/delivery_access.h) | Local atomic-word/receipt codec bridges and gate-bound atomic byte copies, shared by history validation, reserved progress, and claim cleanup. They do not replace the native atomic adapter with ordinary mapped-byte reads. |
+| [delivery_history.h](../src/delivery_history.h) | Gate-bound metadata-only lookup of a Queue sequence and its exact destination/receipt, shared by issuance, acknowledgment, and loss. |
+| [journal_atomic.h](../src/journal_atomic.h), [journal_metadata.h](../src/journal_metadata.h) | Native atomic word copies and bounded direct Publication metadata reads shared by compact claim cleanup and streamed loss replay. Payload bytes are not copied. |
+| [journal_validation.h](../src/journal_validation.h) | Validated record ranges and exact boundary lookup by binary search over allocation order, shared by predecessor checks, compact claim cleanup, and loss validation. Operation-specific kind/readiness checks remain with callers. |
 | [text_escaping.h](../include/angaria/detail/text_escaping.h) | Printable ASCII/hex escaping, quote policy, and bounded diagnostic streaming. |
 | [native_file_state.h](../src/native_file_state.h) | Native file state and conversion of `stat` device/inode identity. Descriptor ownership and coordination remain separate. |
 

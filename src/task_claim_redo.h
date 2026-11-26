@@ -16,10 +16,11 @@ namespace angaria::detail::mapped
 
   // Expands ReleaseClaim without changing mapped storage. Core delivery cleanup
   // is explicitly admitted by the caller's already validated native profile.
+  // Record ranges are validated and ordered by allocation offset.
   // The caller validates all returned targets before performing any redo write.
   Result<std::vector<RedoCommand>> expand_task_claim_commands(
       NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records,
       std::span<const RedoCommand> commands, ErrorCode errorCode = ErrorCode::IoError,
-      bool nativeDelivery = false);
+      bool nativeDelivery = false, bool allowLoss = false);
 } // namespace angaria::detail::mapped

@@ -1,5 +1,6 @@
 #include "source_runtime_state.h"
 
+#include "delivery_loss.h"
 #include "message_retention.h"
 #include "payload_runtime.h"
 #include "registry_access.h"
@@ -283,6 +284,27 @@ namespace angaria::detail
           }
           if (selected && access.read_words(selected->_stateOffset + 72, 1)[0] != 0)
           {
+            if (selected->_definition._descriptor._delivery == DeliveryPolicy::AllowLoss)
+            {
+              runtime_require_source_active(state);
+              if (expired(deadline))
+              {
+                return ReceiveTimeout{};
+              }
+              const auto gap = runtime_value(runtime_lose_delivery_prefix(access, task,
+                  state->_id, selected->_definition._id,
+                  UtcTimestamp{std::chrono::nanoseconds{runtime_now_ns()}}, deadline));
+              if (gap)
+              {
+                // Loss ends delivery obligations, but never issues a Source
+                // token or consumes its counter. Offer the gap before a message.
+                return *gap;
+              }
+            }
+            if (expired(deadline))
+            {
+              return ReceiveTimeout{};
+            }
             const auto counter = words[1] == task->_claim._incarnation ? words[0] : 0;
             if (counter == std::numeric_limits<std::uint64_t>::max())
             {

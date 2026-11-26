@@ -5,6 +5,7 @@
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/error_support.h"
 #include "journal_validation.h"
+#include "loss_redo.h"
 #include "native_atomic.h"
 #include "task_claim_redo.h"
 
@@ -123,13 +124,9 @@ namespace angaria::detail::mapped
       {
         return;
       }
-      const auto found = std::lower_bound(earlier.begin(), earlier.end(), previous,
-                                          [](const auto& candidate, std::uint64_t value)
-                                          {
-                                            return candidate._offset < value;
-                                          });
+      const auto* found = find_journal_record(earlier, previous);
       const auto kind = record._envelope._kind;
-      if (found == earlier.end() || found->_offset != previous ||
+      if (!found ||
           (found->_envelope._kind != kind && !(kind == 10 && found->_envelope._kind == 9)))
       {
         fail(code, "Record predecessor is not an earlier compatible record boundary");
@@ -424,25 +421,34 @@ namespace angaria::detail::mapped
     {
       if (kind != JournalKind::FixedState && std::any_of(commands.begin(), commands.end(), [](const auto& command)
           {
-            return command._opcode == RedoOpcode::ReleaseClaim;
+            return command._opcode == RedoOpcode::ReleaseClaim || command._opcode == RedoOpcode::LoseRange;
           }))
       {
         fail(code == ErrorCode::InvalidArgument ? ErrorCode::UnsupportedPolicy : code,
-             "ReleaseClaim requires FixedState so Task discovery remains stable");
+             "Claim cleanup and loss require FixedState so replay discovery remains stable");
       }
     }
 
     void validate_domain_targets(MutationJournalState& state, NativeFile& file, const FixedLayout& layout,
                                  std::span<const JournalRecordRange> records,
                                  std::span<const RedoCommand> commands, JournalKind kind,
+                                 TaskId actor, std::uint64_t incarnation,
                                  ErrorCode code = ErrorCode::IoError)
     {
       require_fixed_compacts(commands, kind, code);
-      if (has_compact(commands))
+      const auto features = state._controller->configuration()._requiredFeatures;
+      const bool allowLoss = (features & allow_loss_feature) != 0;
+      if (has_loss_command(commands))
+      {
+        value_or_throw<JournalFailure>(validate_loss_commands(file, layout, records, commands,
+            actor, incarnation, allowLoss, false, code));
+        value_or_throw<JournalFailure>(validate_redo_targets(commands.subspan(1), layout, records, code));
+      }
+      else if (has_compact(commands))
       {
         const bool nativeDelivery = (state._controller->configuration()._requiredFeatures & native_delivery_feature) != 0;
         const auto expanded = value_or_throw<JournalFailure>(expand_task_claim_commands(
-            file, layout, records, commands, code, nativeDelivery));
+            file, layout, records, commands, code, nativeDelivery, allowLoss));
         value_or_throw<JournalFailure>(validate_redo_targets(expanded, layout, records, code));
       }
       else
@@ -494,13 +500,23 @@ namespace angaria::detail::mapped
         batch._commands = manifest._commands;
       }
       require_fixed_compacts(batch._commands, header._kind, ErrorCode::IoError);
-      if (has_compact(batch._commands))
+      const bool loss = has_loss_command(batch._commands);
+      const auto features = state._controller->configuration()._requiredFeatures;
+      const bool allowLoss = (features & allow_loss_feature) != 0;
+      if (loss)
+      {
+        value_or_throw<JournalFailure>(validate_loss_commands(file, fixed_layout(state), allRecords,
+            batch._commands, header._actor, header._actorIncarnation, allowLoss,
+            header._control != JournalControl::Prepared));
+      }
+      else if (has_compact(batch._commands))
       {
         const bool nativeDelivery = (state._controller->configuration()._requiredFeatures & native_delivery_feature) != 0;
         batch._commands = value_or_throw<JournalFailure>(expand_task_claim_commands(
-            file, fixed_layout(state), allRecords, batch._commands, ErrorCode::IoError, nativeDelivery));
+            file, fixed_layout(state), allRecords, batch._commands, ErrorCode::IoError, nativeDelivery, allowLoss));
       }
-      value_or_throw<JournalFailure>(validate_redo_targets(batch._commands, fixed_layout(state), allRecords));
+      value_or_throw<JournalFailure>(validate_redo_targets(
+          std::span{batch._commands}.subspan(loss ? 1 : 0), fixed_layout(state), allRecords));
       return batch;
     }
 
@@ -510,6 +526,15 @@ namespace angaria::detail::mapped
       std::uint64_t word{};
       for (const auto& command : batch._commands)
       {
+        if (command._opcode == RedoOpcode::LoseRange)
+        {
+          value_or_throw<JournalFailure>(apply_loss_command(file, fixed_layout(state), prefix._ranges,
+              command, [&]
+              {
+                checkpoint(state, JournalCheckpoint::RedoWord, word++);
+              }));
+          continue;
+        }
         // Retain one checked mapping for the command, including across fault
         // checkpoints, rather than mapping and unmapping every eight-byte word.
         auto mapping = value_or_throw<JournalFailure>(file.map_read_write(command._target, command._payload.size()));
@@ -560,7 +585,8 @@ namespace angaria::detail::mapped
         {
           const auto commands = value_or_throw<JournalFailure>(decode_commands(prefix_bytes(state).subspan(
               journal_offset + journal_header_bytes, header._inlineBytes)));
-          validate_domain_targets(state, file, fixed_layout(state), prefix._ranges, commands, header._kind);
+          validate_domain_targets(state, file, fixed_layout(state), prefix._ranges, commands, header._kind,
+                                  header._actor, header._actorIncarnation);
         }
         checkpoint(state, JournalCheckpoint::Rollback);
         publish(state, JournalControl::Idle, JournalCheckpoint::Idle);
@@ -790,7 +816,7 @@ namespace angaria::detail::mapped
         fail(ErrorCode::InvalidArgument, "Unknown journal operation kind");
       }
       validate_domain_targets(state, file, fixed_layout(state), allRecords, plan._commands,
-                              plan._kind, ErrorCode::InvalidArgument);
+                              plan._kind, plan._actor, plan._actorIncarnation, ErrorCode::InvalidArgument);
       operation._headerBytes = value_or_throw<JournalFailure>(encode_journal_header(header));
       operation._result._generation = header._generation;
       operation._result._tail = header._newTail;

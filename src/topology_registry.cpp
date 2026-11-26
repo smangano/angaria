@@ -165,7 +165,8 @@ namespace angaria::detail
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_queue_descriptor(descriptor));
       const auto sessionDefinition = runtime_session_definition(access);
-      const auto effective = resolve_queue(descriptor, sessionDefinition._options);
+      const auto effective = resolve_queue(descriptor, sessionDefinition._options,
+          (access._session->_controller->configuration()._requiredFeatures & mapped::allow_loss_feature) != 0);
       const auto topology = runtime_topology(access);
       for (const auto& queue : topology._queues)
       {

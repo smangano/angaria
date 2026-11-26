@@ -1,10 +1,10 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The fifteen lessons here use implemented APIs, including native send and receive in framework **0.4.9**, milestone 4 step 4.7.
+The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The sixteen lessons here use implemented APIs, including configured allowed loss in framework **0.4.10**, milestone 4 step 4.8.
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, and saves a message, then closes and reopens its Source. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, and saves a message, then closes and reopens its Source. Lesson 16 configures stale-message loss, handles gaps, and protects a message already being processed. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. Some additional public methods remain declarations for future steps; the separate full-interface review is compile-only. A declaration alone does not make an operation runnable.
 
@@ -34,7 +34,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lessons 14 and 15 join the milestone-4 staging branch at `0.4.8` and `0.4.9`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
+Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lessons 14–16 join the milestone-4 staging branch at `0.4.8`–`0.4.10`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -51,7 +51,7 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The fifteen targets are named `angaria_primer_01_session` through `angaria_primer_15_receive`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The sixteen targets are named `angaria_primer_01_session` through `angaria_primer_16_allowed_loss`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
 
 Examples 1–5, 9, and 11–15 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
@@ -349,7 +349,7 @@ As with ordinary attachment, validation may finish interrupted recovery and writ
 
 For an ordinary mistake, change `source_set = "ConsumerInputs"` in a copy to an unknown name. The error identifies the offending key path and reference. A misspelled key, a quoted number where an integer is required, or an out-of-range priority also fails explicitly. Syntax errors include the filename and the parser's line information where available. An unsuccessful creation does not publish a partially configured Session.
 
-Known policies can still be unavailable. For example, `delivery = "allow_loss"` is part of Angaria's design but currently returns `UnsupportedPolicy`. The runnable examples use `recover_from_log`. The [configuration contract](configuration.md) lists the complete schema and the current implementation boundary.
+Known policies can still be unavailable. For example, weighted-random Source selection returns `UnsupportedPolicy` until milestone 5 implements it. Both `recover_from_log` and `allow_loss` are supported in new Sessions; this lesson keeps the default recovery behavior, while lesson 16 demonstrates optional loss. The [configuration contract](configuration.md) lists the complete schema and the current implementation boundary.
 
 ## 8. Share a Registry and inspect its history
 
@@ -541,7 +541,7 @@ The 11 bytes are one Boolean byte, two flag bytes, one enum byte, six ASCII byte
 
 Field definitions remain immutable. Changing an enum mapping, width, or logical meaning requires a new Field ID and name, followed by a new message-schema version referencing it. A new message version alone cannot edit a Field used by earlier schemas. The existing base codes 0 through 25 retain their meanings; signed int8 adds code 26.
 
-New Sessions use core mapped format 2.2, including required logical-Field and native-delivery support. Existing format 2.1 Sessions retain logical Fields; existing 2.0 Sessions retain scalar behavior and reject added logical Fields or int8 with `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
+New Sessions use mapped format 2.2/`0xf`, including required logical-Field, native-delivery, and allowed-loss support. Existing format 2.1 Sessions retain logical Fields; existing 2.0 Sessions retain scalar behavior and reject added logical Fields or int8 with `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
 
 This example constructs and validates payloads in application memory. Lesson 11 adds a portable message envelope; Queue delivery follows its roadmap milestones.
 
@@ -745,7 +745,7 @@ Finally, after every application process has exited, the script starts the gener
 
 The example reserves each workspace and phase directory exclusively. Repeating a phase returns `Conflict` and preserves its earlier capture. Use a new workspace for another complete run. The [process-exchange contract](process-exchange.md) lists the individual commands and compatibility checks.
 
-This lesson tests claim replacement after process termination on a running system. The terminated producer's file was already complete. It does not demonstrate recovery of an interrupted capture write or power-loss durability. Ordinary files carry the encoded records between these applications; native Queue send/receive and Queue Set scheduling remain future milestone work.
+This lesson tests claim replacement after process termination on a running system. The terminated producer's file was already complete. It does not demonstrate recovery of an interrupted capture write or power-loss durability. Ordinary files carry the encoded records between these applications; lessons 14–16 introduce native Queue send/receive, while multi-Queue scheduling remains milestone 5.
 
 ## 14. Send directly and look up acceptance
 
@@ -879,7 +879,7 @@ else
 }
 ```
 
-The full program also checks Error and unexpected alternatives. Normal application code handles Delivery, ReceiveTimeout, and Error separately. DeliveryGap is reserved for configured allowed loss in the next step. A receive without a timeout makes one nonblocking availability attempt; it can time out if the gate is busy. A positive timeout repeatedly checks until its monotonic deadline. Negative or overflowing timeouts are errors.
+The full program also checks Error and unexpected alternatives. Normal application code handles Delivery, ReceiveTimeout, and Error separately, and DeliveryGap when configured for allowed loss in lesson 16. A receive without a timeout makes one nonblocking availability attempt; it can time out if the gate is busy. A positive timeout repeatedly checks until its monotonic deadline. Negative or overflowing timeouts are errors.
 
 A Delivery exposes two different things: `_message` borrows bytes, and `_token` identifies the current acknowledgment obligation. Its MessageHeader includes the original publication identity/time and destination Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. The example verifies those fields instead of interpreting timestamps hidden inside the payload.
 
@@ -904,11 +904,46 @@ Keep a borrowed payload alive only while its delivery remains in flight. Acknowl
 
 Explicit close lets you see cleanup errors. Once a valid close begins, that handle accepts only close retries. A failed close retains its reservation, preventing a second opening from bypassing unfinished cleanup. Destruction and move assignment attempt cleanup too; if it fails, the Task must settle a preallocated deferred marker before further delivery/progress. The [receive contract](native-receive.md) explains these recovery rules in detail.
 
+## 16. Skip stale pending data and handle gaps
+
+Some applications need every message. Others, such as a display of current prices, may prefer recent data after falling behind. **Allowed loss** is a Queue policy that lets the consumer skip pending messages whose ring entries have been overwritten. Recovery from the log remains the default for every Queue that does not choose this policy.
+
+Read [16_allowed_loss.cpp](../examples/primer/16_allowed_loss.cpp) and [allowed-loss.toml](../examples/primer/allowed-loss.toml), then run:
+
+```sh
+mkdir "$primer_workspace/16-allowed-loss"
+cp examples/primer/allowed-loss.toml "$primer_workspace/16-allowed-loss/settings.toml"
+./build/angaria_primer_16_allowed_loss "$primer_workspace/16-allowed-loss/settings.toml"
+```
+
+The TOML file explicitly keeps the default `delivery = "recover_from_log"`, sets a ring capacity of two, and overrides just the Ticks Queue with `delivery = "allow_loss"`. The program calls `Session::create_from_file` and checks its Result before using the Session. An equivalent public QueueDescriptor can set `_delivery = DeliveryPolicy::AllowLoss`; both configuration paths apply the same validation.
+
+First the Feed sends sequences 1, 2, and 3 while the Consumer is offline. Only 2 and 3 still have ring entries. When the Consumer opens ConsumerInputs, receive returns a `DeliveryGap` for the inclusive range 1..1. A gap has a Queue identity and first/last sequence numbers. It has no message bytes or token to acknowledge. The next receive offers sequence 2.
+
+The Consumer keeps sequence 2 in flight while the Feed sends 4 and 5. Even though its ring entry has now been overwritten, repeated receive returns the same token and payload address. That **pin** protects the borrowed message until the Consumer finishes with it. The program releases sequence 2 rather than acknowledging it. Release makes it Pending again; the next receive can now report the stale range 2..3. Finally, the Consumer receives and acknowledges sequences 4 and 5.
+
+Expected output:
+
+```text
+Configured delivery: allow_loss (ring capacity 2).
+Gap: 1..1
+Received after gap: 2
+In-flight sequence 2 survives ring overwrite.
+Gap after release: 2..3
+Received retained sequences: 4,5
+Final receive: timeout.
+Default delivery remains recover_from_log.
+```
+
+Use a gap to update application state: a display might mark its older value stale until the next tick arrives. The complete program checks each ReceiveResult alternative and each fallible public call explicitly. Its application-specific send function also resolves an uncertain send using the original PublicationId instead of silently sending a second publication.
+
+Loss is committed before its gap is returned. If the consumer dies between those events, a replacement continues after the lost prefix; the gap is not delivered again. Loss does not revoke an in-flight message, acknowledge application work, or free physical log bytes. Like acknowledgment, it changes the delivery obligation using reserved progress storage. [The receive contract](native-receive.md#configured-allowed-loss) explains these boundaries.
+
 ## What comes next
 
-Current core Sessions use format 2.2 with native-delivery support. Existing 2.0/2.1 Sessions retain their supported operations and reject native delivery; they are not upgraded in place. Milestone 4 currently selects from at most one Active Queue per Source. A Source with no Active Queue can time out; multiple Active inputs return UnsupportedPolicy for fresh selection. An already borrowed delivery can still be finished if topology grows. Milestone 5 adds selection among those inputs.
+New Sessions use format 2.2 with native delivery and the separate allowed-loss capability (`0xf`), even when all initial Queues use recovery delivery. Existing core (`0x7`) Sessions continue recovery delivery but reject allowed-loss defaults or Queue registration. Existing 2.0/2.1 Sessions retain their supported operations and reject native delivery; no profile is upgraded in place. Milestone 4 currently selects from at most one Active Queue per Source. A Source with no Active Queue can time out; multiple Active inputs return UnsupportedPolicy for fresh selection. An already borrowed delivery can still be finished if topology grows. Milestone 5 adds selection among those inputs.
 
-Acknowledgment ends a delivery obligation; it does not reclaim physical append space. Reserved receipt progress, cleanup, and owner replacement can finish at a full log. Step 4.8 adds optional allowed loss for applications where stale pending messages have no value. Later milestones add fan-out/retry, eventfd waiting, storage reclamation, advanced Fields, and message replay.
+Acknowledgment and configured loss end delivery obligations; they do not reclaim physical append space. Reserved receipt progress, cleanup, and owner replacement can finish at a full log. Later milestones add fan-out/retry, eventfd waiting, storage reclamation, advanced Fields, and message replay.
 
 ## Understand bounds and ordinary failures
 

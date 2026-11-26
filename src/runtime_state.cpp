@@ -414,7 +414,7 @@ namespace angaria::detail
       runtime_fail(invalidCode, "session.defaults", "Unknown default policy code");
     }
     if (options._storage != StorageMapping::TwoPlane || defaults._selection != SelectionPolicy::Strict ||
-        defaults._wait != WaitPolicy::Spin || defaults._delivery != DeliveryPolicy::RecoverFromLog ||
+        defaults._wait != WaitPolicy::Spin ||
         defaults._acceptance != AcceptancePolicy::AllDestinations)
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "session.defaults", "Requested native policy is not implemented yet");
@@ -427,6 +427,11 @@ namespace angaria::detail
     auto definition = runtime_value(mapped::decode_session_definition(access.immutable_record(reference, 1),
         reference, access._session->_controller->configuration()));
     runtime_validate_options(definition._options, ErrorCode::IoError);
+    if (definition._options._defaults._delivery == DeliveryPolicy::AllowLoss &&
+        (access._session->_controller->configuration()._requiredFeatures & mapped::allow_loss_feature) == 0)
+    {
+      runtime_fail(ErrorCode::IoError, "session.defaults.delivery", "Allowed-loss defaults require the negotiated capability");
+    }
     if (definition._policyFeatures != 0)
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "session.policy_features", "Session requires unsupported policy features");

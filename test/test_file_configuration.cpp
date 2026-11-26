@@ -939,7 +939,7 @@ fields = ["Price"]
         Policy{"storage = \"two_plane\"", "storage = \"segmented\"", "storage", ErrorCode::UnsupportedPolicy},
         Policy{"selection = \"strict\"", "selection = \"fair\"", "selection", ErrorCode::UnsupportedPolicy},
         Policy{"wait = \"spin\"", "wait = \"eventfd\"", "wait", ErrorCode::UnsupportedPolicy},
-        Policy{"delivery = \"recover_from_log\"", "delivery = \"allow_loss\"", "delivery", ErrorCode::UnsupportedPolicy},
+        Policy{"delivery = \"recover_from_log\"", "delivery = \"allow_los\"", "delivery", ErrorCode::InvalidConfiguration},
         Policy{"acceptance = \"all_destinations\"", "acceptance = \"partial\"", "acceptance", ErrorCode::UnsupportedPolicy},
         Policy{"selection = \"strict\"", "selection = \"strcit\"", "selection", ErrorCode::InvalidConfiguration},
         Policy{"type = \"int64\"", "type = \"string\"", "type", ErrorCode::UnsupportedPolicy},
@@ -962,8 +962,8 @@ fields = ["Price"]
                             ErrorCode::InvalidConfiguration, "random_seed");
     expect_creation_failure(replace_once(valid, "storage = \"two_plane\"", "storage = \"two_plane\"\nsegment_bytes = 1048576"),
                             ErrorCode::InvalidConfiguration, "segment_bytes");
-    expect_creation_failure(replace_once(valid, "source_set = \"Inputs\"", "source_set = \"Inputs\"\ndelivery = \"allow_loss\""),
-                            ErrorCode::UnsupportedPolicy, "delivery");
+    expect_creation_failure(replace_once(valid, "source_set = \"Inputs\"", "source_set = \"Inputs\"\ndelivery = \"allow_los\""),
+                            ErrorCode::InvalidConfiguration, "delivery");
   }
 
   TEST_F(FileConfigurationTest, ChecksEveryDeclarationCapacityAndSourceMembershipBeforePublication)
