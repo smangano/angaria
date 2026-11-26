@@ -4,7 +4,8 @@
 
 namespace angaria::detail
 {
-  QueuePolicy resolve_queue(const QueueDescriptor& descriptor, const SessionOptions& options)
+  QueuePolicy resolve_queue(const QueueDescriptor& descriptor, const SessionOptions& options,
+                              bool allowLoss)
   {
     const auto capacity = descriptor._ringCapacity.value_or(options._defaults._ringCapacity);
     const auto delivery = descriptor._delivery.value_or(options._defaults._delivery);
@@ -12,7 +13,8 @@ namespace angaria::detail
     {
       runtime_fail(ErrorCode::InvalidArgument, "queue.ring_capacity", "Queue ring geometry exceeds format bounds");
     }
-    if (delivery != DeliveryPolicy::RecoverFromLog)
+    if (delivery != DeliveryPolicy::RecoverFromLog &&
+        (delivery != DeliveryPolicy::AllowLoss || !allowLoss))
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "queue.delivery", "Queue delivery policy is not implemented by this native profile");
     }

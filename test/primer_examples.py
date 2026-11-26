@@ -207,12 +207,38 @@ def receive_example(executable, workspace):
     check(log.read_bytes() == original, "Receive lesson changed an existing Session")
 
 
+def allowed_loss_example(executable, fixture, workspace):
+    directory = workspace / "allowed-loss"
+    directory.mkdir()
+    configuration = directory / "settings.toml"
+    shutil.copyfile(fixture, configuration)
+    output = command(executable, configuration)
+    for marker in (
+        "Configured delivery: allow_loss (ring capacity 2).",
+        "Gap: 1..1",
+        "Received after gap: 2",
+        "In-flight sequence 2 survives ring overwrite.",
+        "Gap after release: 2..3",
+        "Received retained sequences: 4,5",
+        "Final receive: timeout.",
+        "Default delivery remains recover_from_log.",
+    ):
+        check(marker in output.splitlines(), f"Allowed-loss lesson omitted {marker!r}: {output!r}")
+    log = directory / "allowed-loss-session" / "session.ang"
+    original = log.read_bytes()
+    retry = command(executable, configuration, succeeds=False)
+    check("Conflict" in retry, f"Repeated allowed-loss creation did not report Conflict: {retry!r}")
+    check(log.read_bytes() == original, "Allowed-loss lesson changed an existing Session")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("examples", type=Path, nargs=7, help="primer executables in lesson order")
     parser.add_argument("configuration", type=Path, help="lesson 7 TOML fixture")
     parser.add_argument("direct_send", type=Path, help="lesson 14 direct-send executable")
     parser.add_argument("receive", type=Path, help="lesson 15 receive executable")
+    parser.add_argument("allowed_loss", type=Path, help="lesson 16 allowed-loss executable")
+    parser.add_argument("loss_configuration", type=Path, help="lesson 16 TOML fixture")
     arguments = parser.parse_args()
     executables = [path.resolve() for path in arguments.examples]
     try:
@@ -223,10 +249,11 @@ def main():
             configuration_example(executables[6], arguments.configuration.resolve(), workspace)
             direct_send_example(arguments.direct_send.resolve(), workspace)
             receive_example(arguments.receive.resolve(), workspace)
+            allowed_loss_example(arguments.allowed_loss.resolve(), arguments.loss_configuration.resolve(), workspace)
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"primer_examples: {error}", file=sys.stderr)
         return 1
-    print("Primer examples passed: setup, ownership, TOML, direct send, receive, copy, and Source close.")
+    print("Primer examples passed: setup, ownership, TOML, direct send, receive, copy, close, and allowed-loss gaps.")
     return 0
 
 

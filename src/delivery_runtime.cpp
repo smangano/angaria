@@ -174,7 +174,7 @@ namespace angaria::detail
     }
 
     void check_queue(RuntimeAccess& access, const LoadedQueue& queue,
-                       const std::vector<DeliveryEntry>& deliveries)
+                       const std::vector<DeliveryEntry>& deliveries, bool allowLoss)
     {
       const auto state = access.read_words(queue._stateOffset, 32);
       require(state[0] == deliveries.size(), "queue.history", "Queue sequence root disagrees with complete retained history");
@@ -191,15 +191,26 @@ namespace angaria::detail
         std::uint64_t terminal{};
         bool acknowledged{};
         std::uint64_t lastAcknowledgment{};
+        const auto capacity = state[3];
+        const auto ringFloor = state[0] < capacity ? 1 : state[0] - capacity + 1;
         for (const auto& delivery : deliveries)
         {
           const auto& receipt = delivery._receipt;
-          if (receipt._state == mapped::ReceiptState::Acknowledged)
+          if (receipt._state == mapped::ReceiptState::Acknowledged || receipt._state == mapped::ReceiptState::Lost)
           {
-            acknowledged = true;
             require(delivery._sequence - terminal == 1, "queue.progress",
-                    "Acknowledgment skips an earlier nonterminal delivery");
-            lastAcknowledgment = std::bit_cast<std::uint64_t>(receipt._acknowledgedAt.time_since_epoch().count());
+                    "Terminal receipt skips an earlier nonterminal delivery");
+            if (receipt._state == mapped::ReceiptState::Acknowledged)
+            {
+              acknowledged = true;
+              lastAcknowledgment = std::bit_cast<std::uint64_t>(receipt._acknowledgedAt.time_since_epoch().count());
+            }
+            else
+            {
+              require(allowLoss && queue._definition._descriptor._delivery == DeliveryPolicy::AllowLoss &&
+                          delivery._sequence < ringFloor,
+                      "queue.loss", "Lost receipt requires allowed loss and an overwritten Queue prefix");
+            }
             terminal = delivery._sequence;
           }
           else if ((receipt._presence & 1) != 0)
@@ -224,6 +235,7 @@ namespace angaria::detail
     const auto& configuration = access._session->_controller->configuration();
     require((configuration._requiredFeatures & mapped::native_delivery_feature) != 0,
             "publication.feature", "Delivery history requires native_delivery_v1");
+    const bool allowLoss = (configuration._requiredFeatures & mapped::allow_loss_feature) != 0;
     std::map<TaskId, TaskContext> tasks;
     for (const auto& task : topology._tasks)
     {
@@ -285,7 +297,8 @@ namespace angaria::detail
                   destination._queueSequence == queueDeliveries.size() + 1 &&
                   destination._previousDelivery == (queueDeliveries.empty() ? 0 : queueDeliveries.back()._link),
               "queue.history", "Queue sequence or predecessor breaks complete accepted history");
-      const auto receipt = runtime_value(mapped::decode_receipt_words(access.read_words(destination._receiptReference, 16)));
+      const auto receipt = runtime_value(mapped::decode_receipt_words(access.read_words(destination._receiptReference, 16),
+          allowLoss ? mapped::ReceiptProfile::AllowLoss : mapped::ReceiptProfile::Core));
       require(receipt._state != mapped::ReceiptState::Unused, "publication.receipt", "Accepted destination has no receipt obligation");
       if ((receipt._presence & 1) != 0)
       {
@@ -326,7 +339,7 @@ namespace angaria::detail
     {
       if (queue._definition._state == EntityState::Active)
       {
-        check_queue(access, queue, deliveries[queue._definition._id]);
+        check_queue(access, queue, deliveries[queue._definition._id], allowLoss);
       }
     }
     for (const auto& [id, context] : sources)

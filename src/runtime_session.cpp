@@ -256,7 +256,7 @@ namespace angaria
       mapped::SuperblockConfiguration configuration;
       configuration._formatMinor = mapped::delivery_format_minor;
       configuration._requiredFeatures = mapped::journal_feature | mapped::basic_fields_feature |
-          mapped::native_delivery_feature;
+          mapped::native_delivery_feature | mapped::allow_loss_feature;
       configuration._session = new_identity();
       configuration._maxLogBytes = options._maxLogBytes;
       configuration._limits = options._limits;
@@ -386,10 +386,17 @@ namespace angaria
     {
       const auto requested = runtime_value(load_configuration_options(configuration));
       auto session = runtime_value(attach(requested._directory));
+      if (requested._defaults._delivery == DeliveryPolicy::AllowLoss &&
+          (session._state->_controller->configuration()._requiredFeatures & mapped::allow_loss_feature) == 0)
+      {
+        runtime_fail(ErrorCode::UnsupportedPolicy, "defaults.queue.delivery",
+                     "Allowed loss requires the Session's allowed-loss capability");
+      }
       const auto recorded = runtime_value(session.options());
       match_configuration_options(requested, recorded);
       auto registry = session.registry();
-      const auto plan = runtime_value(load_configuration(configuration, {}, &registry));
+      const auto plan = runtime_value(load_configuration(configuration, {}, &registry,
+          (session._state->_controller->configuration()._requiredFeatures & mapped::allow_loss_feature) != 0));
       // The second parse resolves references against the live Registry. Recheck
       // its settings and location if another process replaced the TOML file.
       match_configuration_options(plan._options, recorded);

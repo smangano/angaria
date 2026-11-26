@@ -1,6 +1,6 @@
 # Direct Queue publication
 
-Milestone 4, step 4.6, framework **0.4.8**, implements `QueueWriter::send` and `Task::publication_status`. Public Session factories now create core native format **2.2/`0x7`**. The [fourteenth primer program](../examples/primer/14_direct_send.cpp) demonstrates the public path. Receiving, acknowledgment, and explicit Source close follow in step 4.7; Publishing fan-out and retry follow in milestone 6.
+Milestone 4, step 4.6, framework **0.4.8**, implements `QueueWriter::send` and `Task::publication_status`. Step 4.8, framework **0.4.10**, selects native format **2.2/`0xf`** for all new public Sessions, adding allowed-loss capability while retaining recovery as the default policy. The [fourteenth primer program](../examples/primer/14_direct_send.cpp) demonstrates direct sending. [Receiving, acknowledgment, and explicit Source close](native-receive.md) are implemented in step 4.7, with allowed-loss gaps added in step 4.8; Publishing fan-out and retry follow in milestone 6.
 
 ## Ordinary application use
 
@@ -59,10 +59,10 @@ An identical repeat under the same current-claim ID returns the original accepta
 
 One existing journal transaction commits the immutable Publication, its Pending receipt, Queue order/links, and ring entry. The whole allocation is sized before copying a large payload: record framing, destination metadata, receipt, manifest, redo, and padding all count against the log ceiling. Known rejection creates none of these resources. Recovery of previously interrupted work can legitimately repair the Session before a later request rejects.
 
-A full ring is an overwriteable cache, not a pending-message limit. Sending while the consumer is offline is supported. Accepted history remains after producer detachment/replacement, ring overwrite, or consumer progress. Acknowledgment in the next step will end a delivery obligation without reclaiming append space.
+A full ring is an overwriteable cache, not a pending-message limit. Sending while the consumer is offline is supported. Accepted history remains after producer detachment/replacement, ring overwrite, or consumer progress. Acknowledgment ends a delivery obligation without reclaiming append space. An allowed-loss Queue can terminate an overwritten pending prefix during receive and report its sequence range; loss also retains history and does not free append capacity.
 
 Precommit failures with proven rollback create no delivery. Once committed, repair either establishes the accepted result or returns `OutcomeUnknown`. Retain the original ID and query it; an uncertain result is never presented as known rejection. These are process-recovery guarantees, without a new power-loss durability guarantee.
 
-Legacy **2.0/`0x1`** and **2.1/`0x3`** Sessions remain attachable for their existing Registry, claim, and codec behavior. Direct send and status return `UnsupportedPolicy` before new delivery work. No in-place profile upgrade is provided. Allowed-loss format **2.2/`0xf`** remains rejected before recovery until step 4.8.
+Legacy **2.0/`0x1`** and **2.1/`0x3`** Sessions remain attachable for their existing Registry, claim, and codec behavior. Direct send and status return `UnsupportedPolicy` before new delivery work. Existing core **2.2/`0x7`** Sessions remain usable for recovery delivery, but reject allowed-loss defaults and Queue registrations. New **2.2/`0xf`** Sessions support both Queue policies. No in-place profile upgrade is provided. Unknown required capabilities and unsupported native profiles still reject attachment before recovery; older core-only readers reject `0x8` at that boundary.
 
 [Native transport contract](native-transport.md) · [Primer](primer.md#14-send-directly-and-look-up-acceptance) · [Milestone plan](milestones/milestone-4.md)

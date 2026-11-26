@@ -489,10 +489,6 @@ namespace angaria::detail
           {
             error._path = "defaults.source_set.wait";
           }
-          else if (options._defaults._delivery != DeliveryPolicy::RecoverFromLog)
-          {
-            error._path = "defaults.queue.delivery";
-          }
           else
           {
             error._path = "defaults.publishing_set.acceptance";
@@ -524,10 +520,15 @@ namespace angaria::detail
     class PlanParser
     {
     public:
-      PlanParser(Table root, SessionOptions options, const Registry* existing)
-          : _root(std::move(root)), _existing(existing)
+      PlanParser(Table root, SessionOptions options, const Registry* existing, bool allowLoss)
+          : _root(std::move(root)), _existing(existing), _allowLoss(allowLoss)
       {
         _plan._options = std::move(options);
+        if (_plan._options._defaults._delivery == DeliveryPolicy::AllowLoss && !_allowLoss)
+        {
+          runtime_fail(ErrorCode::UnsupportedPolicy, "defaults.queue.delivery",
+                       "Allowed-loss defaults require the Session's negotiated capability");
+        }
       }
 
       ConfigurationPlan parse(std::string_view creator)
@@ -1087,7 +1088,7 @@ namespace angaria::detail
           at_path(path, [&]
           {
             runtime_value(mapped::validate_queue_descriptor(descriptor));
-            const auto policy = resolve_queue(descriptor, _plan._options);
+            const auto policy = resolve_queue(descriptor, _plan._options, _allowLoss);
             descriptor._ringCapacity = policy._capacity;
             descriptor._delivery = policy._delivery;
           });
@@ -1156,6 +1157,7 @@ namespace angaria::detail
 
       Table _root;
       const Registry* _existing{};
+      bool _allowLoss{};
       ConfigurationPlan _plan;
       std::map<std::string, TaskReference> _tasks;
       std::map<std::string, FieldId> _fields;
@@ -1178,13 +1180,14 @@ namespace angaria::detail
   }
 
   Result<ConfigurationPlan> load_configuration(const std::filesystem::path& file,
-                                                std::string_view creator, const Registry* existing)
+                                                std::string_view creator, const Registry* existing,
+                                                bool allowLoss)
   {
     try
     {
       auto root = parse_file(file);
       auto options = parse_options(root, file);
-      return PlanParser{std::move(root), std::move(options), existing}.parse(creator);
+      return PlanParser{std::move(root), std::move(options), existing, allowLoss}.parse(creator);
     }
     catch (...)
     {

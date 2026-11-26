@@ -631,7 +631,7 @@ namespace
     EXPECT_EQ(get_integer(bytes, 56, 8), 3u);
   }
 
-  TEST(MappedSuperblock, CoreReaderAcceptsDeliveryHistoryButRejectsTheLossCapability)
+  TEST(MappedSuperblock, AllowedLossReaderRetainsCoreCompatibilityAndOlderReadersRejectLoss)
   {
     auto core = fixture_configuration();
     core._formatMinor = 2;
@@ -648,12 +648,11 @@ namespace
 
     auto loss = core;
     loss._requiredFeatures = 15;
-    expect_error(mapped::check_live_compatibility(loss, current), ErrorCode::IoError);
-    auto future = current;
-    future._supportedRequiredFeatures = 15;
-    // This tests explicit capability negotiation only. It does not enable the
-    // native adapter's loss replay, which still advertises only the core bits.
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(loss, future)));
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(loss, current)));
+    auto coreReader = current;
+    coreReader._supportedRequiredFeatures = 7;
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(core, coreReader)));
+    expect_error(mapped::check_live_compatibility(loss, coreReader), ErrorCode::IoError);
   }
 
   TEST(MappedSuperblock, UnknownDeliveryRequirementsRemainInspectableButCannotAttachLive)

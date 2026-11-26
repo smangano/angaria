@@ -43,10 +43,12 @@ namespace angaria::detail
       std::map<std::uint16_t, std::uint64_t> _firstRevision;
     };
 
-    void check_policy(const mapped::QueueDefinition& definition)
+    void check_policy(RuntimeAccess& access, const mapped::QueueDefinition& definition)
     {
       const auto& descriptor = definition._descriptor;
-      if (descriptor._delivery != DeliveryPolicy::RecoverFromLog)
+      if (descriptor._delivery != DeliveryPolicy::RecoverFromLog &&
+          (descriptor._delivery != DeliveryPolicy::AllowLoss ||
+           (access._session->_controller->configuration()._requiredFeatures & mapped::allow_loss_feature) == 0))
       {
         runtime_fail(ErrorCode::UnsupportedPolicy, "queue.delivery", "Queue delivery policy is not implemented by this native profile");
       }
@@ -56,7 +58,7 @@ namespace angaria::detail
       }
     }
 
-    void check_policy(const mapped::SourceDefinition& definition)
+    void check_policy(RuntimeAccess&, const mapped::SourceDefinition& definition)
     {
       const auto& descriptor = definition._descriptor;
       if (descriptor._selection != SelectionPolicy::Strict || descriptor._wait != WaitPolicy::Spin)
@@ -65,7 +67,7 @@ namespace angaria::detail
       }
     }
 
-    void check_policy(const mapped::PublishingDefinition& definition)
+    void check_policy(RuntimeAccess&, const mapped::PublishingDefinition& definition)
     {
       if (definition._descriptor._acceptance != AcceptancePolicy::AllDestinations)
       {
@@ -138,7 +140,7 @@ namespace angaria::detail
         {
           runtime_fail(ErrorCode::IoError, "topology.definition", "Definition has inconsistent revision or creator");
         }
-        check_policy(definition);
+        check_policy(access, definition);
         const auto previous = history._latest.find(id);
         if (previous == history._latest.end())
         {

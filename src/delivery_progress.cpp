@@ -2,6 +2,7 @@
 
 #include "angaria/detail/byte_operations.h"
 #include "delivery_words.h"
+#include "delivery_history.h"
 #include "mapped_payload.h"
 #include "registry_access.h"
 #include "topology_state.h"
@@ -77,30 +78,6 @@ namespace angaria::detail
               UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(words[6])}}};
     }
 
-    struct QueueDelivery
-    {
-      std::uint64_t _publication{};
-      std::uint64_t _link{};
-      std::uint64_t _receipt{};
-    };
-
-    QueueDelivery queue_delivery(RuntimeAccess& access, QueueId queue, std::uint64_t sequence)
-    {
-      // Links point backwards, so finding the next oldest pending delivery
-      // uses retained metadata. The bounded reader never copies application
-      // payloads, including when the ring has overwritten this delivery.
-      for (const auto reference : access.record_references(9))
-      {
-        const auto publication = runtime_publication_metadata(access, reference);
-        const auto& destination = publication._destinations.front();
-        if (destination._queue == queue && destination._queueSequence == sequence)
-        {
-          return {reference, publication._layout._destinationsOffset, destination._receiptReference};
-        }
-      }
-      runtime_fail(ErrorCode::IoError, "queue.history", "Queue progress has no retained delivery");
-    }
-
     void commit_progress(RuntimeAccess& access, const TaskClaim& consumer,
                              std::vector<mapped::RedoCommand> commands)
     {
@@ -169,7 +146,7 @@ namespace angaria::detail
       require(counter != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
               "Source issuance counter is exhausted for this consumer claim");
       const auto sequence = queueWords[8] + 1;
-      const auto delivery = queue_delivery(access, queue, sequence);
+      const auto delivery = runtime_queue_delivery(access, queue, sequence);
       require(delivery._link == queueWords[9], ErrorCode::IoError,
               "Queue oldest pending link disagrees with its receipt");
       const auto oldReceipt = runtime_value(mapped::decode_receipt_words(access.read_words(delivery._receipt, 16)));
@@ -221,7 +198,7 @@ namespace angaria::detail
       receipt._acknowledgedAt = receipt._terminalAt = acknowledgedAt;
       const auto receiptWords = runtime_value(mapped::encode_receipt_words(receipt));
       const auto next = token._sequence == queueWords[0] ? 0 :
-          queue_delivery(access, token._queue, token._sequence + 1)._link;
+          runtime_queue_delivery(access, token._queue, token._sequence + 1)._link;
       const std::array<std::uint64_t, 4> acknowledged{
           token._sequence, next, std::bit_cast<std::uint64_t>(acknowledgedAt.time_since_epoch().count()), 1};
       const std::array<std::uint64_t, 6> empty{};

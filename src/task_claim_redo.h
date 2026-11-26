@@ -21,5 +21,5 @@ namespace angaria::detail::mapped
       NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records,
       std::span<const RedoCommand> commands, ErrorCode errorCode = ErrorCode::IoError,
-      bool nativeDelivery = false);
+      bool nativeDelivery = false, bool allowLoss = false);
 } // namespace angaria::detail::mapped

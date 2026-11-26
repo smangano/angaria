@@ -74,6 +74,14 @@ Zero-time polls and finite waits use nonblocking gate attempts; checked monotoni
 
 The [fifteenth primer lesson](../../examples/primer/15_receive.cpp) demonstrates backlog recovery, release/redelivery, complete-header copying, acknowledgment, close/reopen, and decoding an owning copy after all runtime handles close. Public, fault-injection, deadline, and independent consumer-process tests qualify these operations, including progress at an exactly full log and inherited/wrong-thread rejection. Native format **2.2/0x7**, portable record version 1, and the synchronization protocol remain unchanged. Configured allowed loss follows in step 4.8.
 
+## Step 4.8 Configured allowed loss
+
+Framework **0.4.10** enables `DeliveryPolicy::AllowLoss` through public descriptors and the common TOML loader. Default delivery remains recovery from the log. Factories create format **2.2/0xf**, including the separate allowed-loss capability; existing core **2.2/0x7** Sessions remain attachable and reject allowed-loss options/registration without applying them.
+
+An idle Source reports the inclusive overwritten pending prefix as a DeliveryGap before offering the retained window. Already Issued messages remain protected until release, close, or claim cleanup ends the pin. Compact LoseRange plus absolute Queue progress uses 80 reserved journal bytes, streams receipt updates without payload reads, preserves actual acknowledgment context, and finishes at a full log without reclaiming history. Complete validation precedes mutation; interrupted replay repairs every partial word using the captured loss timestamp. A committed gap not returned before a crash is not emitted again.
+
+The [sixteenth primer lesson](../../examples/primer/16_allowed_loss.cpp) uses explicit TOML and public Result/Error checks to demonstrate gaps, pin protection, and the unchanged recovery default. Public policy, metadata/capability, malformed-redo, full-log, and independent process-death tests qualify these rules. Portable record encoding and the synchronization protocol remain unchanged. Multiple-Queue selection and Publishing retain their roadmap milestones.
+
 ## Qualification and completion
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.

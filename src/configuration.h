@@ -37,5 +37,6 @@ namespace angaria::detail
   Result<SessionOptions> load_configuration_options(const std::filesystem::path& file);
   Result<ConfigurationPlan> load_configuration(const std::filesystem::path& file,
                                                 std::string_view creator = {},
-                                                const Registry* existing = nullptr);
+                                                const Registry* existing = nullptr,
+                                                bool allowLoss = true);
 } // namespace angaria::detail

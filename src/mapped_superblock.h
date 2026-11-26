@@ -46,7 +46,7 @@ namespace angaria::detail::mapped
   {
     std::uint32_t _liveAbiProfile{};
     std::uint16_t _synchronizationVersion{synchronization_version};
-    std::uint64_t _supportedRequiredFeatures{journal_feature | basic_fields_feature | native_delivery_feature};
+    std::uint64_t _supportedRequiredFeatures{journal_feature | basic_fields_feature | native_delivery_feature | allow_loss_feature};
     bool _segmentedStorage{};
     std::optional<CapacityLimits> _capacityCeilings{};
     std::uint16_t _maxFormatMinor{delivery_format_minor};

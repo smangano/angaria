@@ -171,7 +171,7 @@ namespace
         switch (variant)
         {
         case 0:
-          put_integer(before, 56, 15); // Known, separately gated allowed loss.
+          put_integer(before, 56, 31); // An unknown required capability.
           break;
         case 1:
           put_integer(before, 56, (std::uint64_t{1} << 63) | 7);

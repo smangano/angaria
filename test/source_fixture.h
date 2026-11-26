@@ -27,7 +27,8 @@ namespace angaria::test_support
 
   inline SourceScenario create_source_scenario(const std::filesystem::path& directory,
                                                   bool activateQueue = true,
-                                                  TaskKind consumerKind = TaskKind::Process)
+                                                  TaskKind consumerKind = TaskKind::Process,
+                                                  DeliveryPolicy delivery = DeliveryPolicy::RecoverFromLog)
   {
     SessionOptions options;
     options._name = "Source delivery examples";
@@ -56,6 +57,7 @@ namespace angaria::test_support
     queue._name = "Updates";
     queue._producer = created._creator.claim()._task;
     queue._sourceSet = source_id;
+    queue._delivery = delivery;
     const auto queue_id = require_value(registry.register_queue(queue));
     require_value(registry.activate_source_set(source_id));
     if (activateQueue)
