@@ -278,8 +278,7 @@ namespace angaria::detail::mapped
       return result;
     }
 
-    void check_publication(const PublicationDefinition& publication, const PublicationLayout& layout,
-                             std::uint64_t offset, ErrorCode code)
+    void check_header(const PublicationHeader& publication, std::uint64_t offset, ErrorCode code)
     {
       require(publication._producer != TaskId::Invalid && publication._schema._type != MessageType::Invalid &&
                   publication._schema._version != 0 && publication._producerIncarnation != 0 &&
@@ -291,11 +290,18 @@ namespace angaria::detail::mapped
               code, "publication.schema", "Exact Schema reference must point to older aligned history");
       encode_format(publication._format, code);
       encode_acceptance(publication._acceptance, code);
+    }
+
+    void check_publication(const PublicationHeader& publication,
+                             std::span<const DestinationDefinition> destinations,
+                             const PublicationLayout& layout, std::uint64_t offset, ErrorCode code)
+    {
+      check_header(publication, offset, code);
       std::bitset<65536> queues;
       std::size_t accepted{};
-      for (std::size_t index = 0; index < publication._destinations.size(); ++index)
+      for (std::size_t index = 0; index < destinations.size(); ++index)
       {
-        const auto& destination = publication._destinations[index];
+        const auto& destination = destinations[index];
         check_destination(destination, offset, layout._receiptsOffset + index * publication_receipt_bytes, code);
         const auto queue = static_cast<std::uint16_t>(destination._queue);
         require(!queues[queue], code, "publication.destinations", "Original destination Queues must be unique");
@@ -303,14 +309,83 @@ namespace angaria::detail::mapped
         accepted += destination._status == DestinationStatus::Accepted ? 1 : 0;
       }
       require(accepted != 0, code, "publication.destinations", "Fully rejected attempts do not create Publications");
-      require(publication._acceptance != AcceptancePolicy::AllDestinations || accepted == publication._destinations.size(),
+      require(publication._acceptance != AcceptancePolicy::AllDestinations || accepted == destinations.size(),
               code, "publication.acceptance", "All-destination acceptance cannot contain a rejection");
       require(publication._publishingSet != PublishingQueueSetId::Invalid ||
-                  (publication._destinations.size() == 1 && publication._acceptance == AcceptancePolicy::AllDestinations),
+                  (destinations.size() == 1 && publication._acceptance == AcceptancePolicy::AllDestinations),
               code, "publication.direct", "Direct send has one accepted destination and all-destination acceptance");
       require(publication._publishingSet != PublishingQueueSetId::Invalid ||
-                  publication._publishedAt == publication._destinations.front()._enqueuedAt,
+                  publication._publishedAt == destinations.front()._enqueuedAt,
               code, "publication.direct", "Direct send shares its publication and enqueue timestamp sample");
+    }
+
+    PublicationPrefix read_prefix(std::span<const std::byte> bytes, std::uint64_t immutableBytes,
+                                    std::uint64_t offset, std::uint64_t maxRecordBytes)
+    {
+      constexpr auto code = ErrorCode::IoError;
+      require(bytes.size() == publication_fixed_bytes, code, "publication.bytes",
+              "Publication prefix must contain exactly 128 bytes");
+      PublicationPrefix result;
+      result._destinationCount = read_integer<std::uint32_t>(bytes, 48);
+      result._payloadBytes = read_integer<std::uint64_t>(bytes, 64);
+      result._layout = make_layout(offset, result._destinationCount, result._payloadBytes, maxRecordBytes, code);
+      const auto& layout = result._layout;
+      require(immutableBytes == layout._immutableBytes, code, "publication.bytes",
+              "Publication immutable byte count is not canonical");
+      require(zero(bytes.subspan(52, 4)) && zero(bytes.subspan(114, 14)), code,
+              "publication.reserved", "Publication reserved bytes must be zero");
+      require(read_integer<std::uint64_t>(bytes, 56) == layout._payloadOffset &&
+                  read_integer<std::uint64_t>(bytes, 80) == layout._destinationsOffset &&
+                  read_integer<std::uint64_t>(bytes, 88) == result._destinationCount &&
+                  read_integer<std::uint64_t>(bytes, 96) == layout._receiptsOffset &&
+                  read_integer<std::uint64_t>(bytes, 104) == result._destinationCount,
+              code, "publication.slices", "Publication slices must match its canonical layout and destination count");
+      auto& header = result._header;
+      header._producer = TaskId{read_integer<std::uint16_t>(bytes, 0)};
+      header._publishingSet = PublishingQueueSetId{read_integer<std::uint16_t>(bytes, 2)};
+      header._schema = SchemaId{MessageType{read_integer<std::uint16_t>(bytes, 4)}, read_integer<std::uint32_t>(bytes, 8)};
+      header._format = decode_format(read_integer<std::uint16_t>(bytes, 6), code);
+      header._flags = read_integer<std::uint32_t>(bytes, 12);
+      header._producerIncarnation = read_integer<std::uint64_t>(bytes, 16);
+      header._publicationSequence = read_integer<std::uint64_t>(bytes, 24);
+      header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
+          std::bit_cast<std::int64_t>(read_integer<std::uint64_t>(bytes, 32))}};
+      header._topologyRevision = read_integer<std::uint64_t>(bytes, 40);
+      header._schemaReference = read_integer<std::uint64_t>(bytes, 72);
+      header._acceptance = decode_acceptance(read_integer<std::uint16_t>(bytes, 112), code);
+      check_header(header, offset, code);
+      require(header._publishingSet != PublishingQueueSetId::Invalid ||
+                  (result._destinationCount == 1 && header._acceptance == AcceptancePolicy::AllDestinations),
+              code, "publication.direct", "Direct send has one accepted destination and all-destination acceptance");
+      return result;
+    }
+
+    PublicationMetadata read_metadata(const PublicationPrefix& prefix,
+                                        std::span<const std::byte> rows,
+                                        std::span<const std::byte> padding,
+                                        std::uint64_t offset)
+    {
+      constexpr auto code = ErrorCode::IoError;
+      const auto count = prefix._destinationCount;
+      const auto rowsBytes = std::size_t{count} * destination_row_bytes;
+      require(rows.size() == rowsBytes, code, "publication.destinations",
+              "Publication destination bytes disagree with the checked count");
+      const auto bodyBytes = publication_fixed_bytes + rowsBytes + prefix._payloadBytes;
+      require(padding.size() == prefix._layout._immutableBytes - bodyBytes && zero(padding),
+              code, "publication.padding", "Publication alignment padding must have its exact zero-byte encoding");
+      PublicationMetadata result;
+      static_cast<PublicationHeader&>(result) = prefix._header;
+      result._layout = prefix._layout;
+      result._payloadBytes = prefix._payloadBytes;
+      result._destinations.reserve(count);
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        result._destinations.push_back(read_destination(rows.subspan(index * destination_row_bytes, destination_row_bytes),
+                                                         offset, prefix._layout._receiptsOffset + index * publication_receipt_bytes,
+                                                         code));
+      }
+      check_publication(result, result._destinations, result._layout, offset, code);
+      return result;
     }
   }
 
@@ -356,7 +431,7 @@ namespace angaria::detail::mapped
     {
       const auto layout = make_layout(recordOffset, publication._destinations.size(), publication._payload.size(),
                                       maxRecordBytes, ErrorCode::InvalidArgument);
-      check_publication(publication, layout, recordOffset, ErrorCode::InvalidArgument);
+      check_publication(publication, publication._destinations, layout, recordOffset, ErrorCode::InvalidArgument);
       std::vector<std::byte> bytes(host_size(layout._immutableBytes, ErrorCode::InvalidArgument));
       write_integer(bytes, 0, static_cast<std::uint16_t>(publication._producer));
       write_integer(bytes, 2, static_cast<std::uint16_t>(publication._publishingSet));
@@ -388,6 +463,31 @@ namespace angaria::detail::mapped
     });
   }
 
+  Result<PublicationPrefix> decode_publication_prefix(std::span<const std::byte> fixedBody,
+                                                      std::uint64_t immutableBytes,
+                                                      std::uint64_t recordOffset,
+                                                      std::uint64_t maxRecordBytes)
+  {
+    return protect<PublicationPrefix>([&]
+    {
+      return read_prefix(fixedBody, immutableBytes, recordOffset, maxRecordBytes);
+    });
+  }
+
+  Result<PublicationMetadata> decode_publication_metadata(std::span<const std::byte> fixedBody,
+                                                          std::span<const std::byte> destinationRows,
+                                                          std::span<const std::byte> immutablePadding,
+                                                          std::uint64_t immutableBytes,
+                                                          std::uint64_t recordOffset,
+                                                          std::uint64_t maxRecordBytes)
+  {
+    return protect<PublicationMetadata>([&]
+    {
+      const auto prefix = read_prefix(fixedBody, immutableBytes, recordOffset, maxRecordBytes);
+      return read_metadata(prefix, destinationRows, immutablePadding, recordOffset);
+    });
+  }
+
   Result<PublicationDefinition> decode_publication_body(std::span<const std::byte> bytes,
                                                         std::uint64_t recordOffset,
                                                         std::uint64_t maxRecordBytes)
@@ -396,42 +496,15 @@ namespace angaria::detail::mapped
     {
       constexpr auto code = ErrorCode::IoError;
       require(bytes.size() >= publication_fixed_bytes, code, "publication.bytes", "Truncated Publication fixed body");
-      const auto count = read_integer<std::uint32_t>(bytes, 48);
-      const auto payloadBytes = read_integer<std::uint64_t>(bytes, 64);
-      const auto layout = make_layout(recordOffset, count, payloadBytes, maxRecordBytes, code);
-      require(bytes.size() == layout._immutableBytes, code, "publication.bytes", "Publication immutable byte count is not canonical");
-      require(zero(bytes.subspan(52, 4)) && zero(bytes.subspan(114, 14)), code,
-              "publication.reserved", "Publication reserved bytes must be zero");
-      require(read_integer<std::uint64_t>(bytes, 56) == layout._payloadOffset &&
-                  read_integer<std::uint64_t>(bytes, 80) == layout._destinationsOffset &&
-                  read_integer<std::uint64_t>(bytes, 88) == count &&
-                  read_integer<std::uint64_t>(bytes, 96) == layout._receiptsOffset &&
-                  read_integer<std::uint64_t>(bytes, 104) == count,
-              code, "publication.slices", "Publication slices must match its canonical layout and destination count");
-      const auto payloadBegin = publication_fixed_bytes + std::size_t{count} * destination_row_bytes;
-      const auto payloadEnd = payloadBegin + host_size(payloadBytes, code);
-      require(zero(bytes.subspan(payloadEnd)), code, "publication.padding", "Publication alignment padding must be zero");
+      const auto prefix = read_prefix(bytes.first(publication_fixed_bytes), bytes.size(), recordOffset, maxRecordBytes);
+      const auto rowsBytes = std::size_t{prefix._destinationCount} * destination_row_bytes;
+      const auto payloadBegin = publication_fixed_bytes + rowsBytes;
+      const auto payloadEnd = payloadBegin + host_size(prefix._payloadBytes, code);
+      auto metadata = read_metadata(prefix, bytes.subspan(publication_fixed_bytes, rowsBytes),
+                                     bytes.subspan(payloadEnd), recordOffset);
       PublicationDefinition result;
-      result._producer = TaskId{read_integer<std::uint16_t>(bytes, 0)};
-      result._publishingSet = PublishingQueueSetId{read_integer<std::uint16_t>(bytes, 2)};
-      result._schema = SchemaId{MessageType{read_integer<std::uint16_t>(bytes, 4)}, read_integer<std::uint32_t>(bytes, 8)};
-      result._format = decode_format(read_integer<std::uint16_t>(bytes, 6), code);
-      result._flags = read_integer<std::uint32_t>(bytes, 12);
-      result._producerIncarnation = read_integer<std::uint64_t>(bytes, 16);
-      result._publicationSequence = read_integer<std::uint64_t>(bytes, 24);
-      result._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
-          std::bit_cast<std::int64_t>(read_integer<std::uint64_t>(bytes, 32))}};
-      result._topologyRevision = read_integer<std::uint64_t>(bytes, 40);
-      result._schemaReference = read_integer<std::uint64_t>(bytes, 72);
-      result._acceptance = decode_acceptance(read_integer<std::uint16_t>(bytes, 112), code);
-      result._destinations.reserve(count);
-      for (std::size_t index = 0; index < count; ++index)
-      {
-        result._destinations.push_back(read_destination(bytes.subspan(publication_fixed_bytes + index * destination_row_bytes,
-                                                                       destination_row_bytes), recordOffset,
-                                                         layout._receiptsOffset + index * publication_receipt_bytes, code));
-      }
-      check_publication(result, layout, recordOffset, code);
+      static_cast<PublicationHeader&>(result) = metadata;
+      result._destinations = std::move(metadata._destinations);
       result._payload.assign(bytes.begin() + payloadBegin, bytes.begin() + payloadEnd);
       return result;
     });

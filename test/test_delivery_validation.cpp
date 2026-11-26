@@ -83,6 +83,43 @@ namespace
     std::uint64_t _receipt{};
     std::uint64_t _totalBytes{};
     std::uint64_t _manifest{};
+    std::uint64_t _payloadOffset{};
+    std::uint64_t _payloadBytes{};
+  };
+
+  class PayloadReadGuard final : public runtime::RuntimeAccessReadObserver
+  {
+  public:
+    explicit PayloadReadGuard(std::span<const StoredPublication> publications)
+        : _publications(publications)
+    {
+    }
+
+    OperationResult before_read(std::uint64_t offset, std::uint64_t length) override
+    {
+      for (const auto& publication : _publications)
+      {
+        if (length != 0 && publication._payloadBytes != 0 &&
+            offset < publication._payloadOffset + publication._payloadBytes &&
+            publication._payloadOffset < offset + length)
+        {
+          ++_rejectedReads;
+          return Error{ErrorCode::IoError, "Metadata inspection attempted to read payload bytes", "test.payload_read"};
+        }
+      }
+      ++_calls;
+      _totalBytes += length;
+      _maxBytes = std::max(_maxBytes, length);
+      return std::monostate{};
+    }
+
+    std::uint64_t _calls{};
+    std::uint64_t _totalBytes{};
+    std::uint64_t _maxBytes{};
+    std::uint64_t _rejectedReads{};
+
+  private:
+    std::span<const StoredPublication> _publications;
   };
 
   class DeliveryValidationTest : public testing::Test
@@ -104,7 +141,7 @@ namespace
     }
 
     void create(unsigned publications = 1, std::uint64_t capacity = 2, bool reverseIds = false,
-                  TaskKind consumerKind = TaskKind::Process)
+                  TaskKind consumerKind = TaskKind::Process, std::size_t payloadBytes = 0)
     {
       _capacity = capacity;
       _threadConsumer = consumerKind == TaskKind::Thread;
@@ -218,7 +255,7 @@ namespace
       reopen_state();
       for (unsigned index = 0; index < publications; ++index)
       {
-        append_publication(index + 1, reverseIds ? publications - index : index + 1);
+        append_publication(index + 1, reverseIds ? publications - index : index + 1, payloadBytes);
       }
     }
 
@@ -230,11 +267,13 @@ namespace
       _state->_controller = require_value(mapped::SessionController::open_existing(_directory));
     }
 
-    void append_publication(std::uint64_t sequence, std::uint64_t publicationSequence)
+    void append_publication(std::uint64_t sequence, std::uint64_t publicationSequence,
+                              std::size_t payloadBytes = 0)
     {
       runtime::RuntimeAccess access(_state);
       const auto reference = access._snapshot._tail;
-      const auto layout = require_value(mapped::plan_publication_layout(reference, 1, 0, 1024));
+      constexpr std::uint64_t recordLimit = 2 * 1024 * 1024;
+      const auto layout = require_value(mapped::plan_publication_layout(reference, 1, payloadBytes, recordLimit));
       mapped::PublicationDefinition definition;
       definition._producer = _producer;
       definition._schema = _schema;
@@ -243,6 +282,15 @@ namespace
       definition._publishedAt = UtcTimestamp{std::chrono::nanoseconds{42}};
       definition._topologyRevision = _queueRevision;
       definition._schemaReference = _schemaReference;
+      if (payloadBytes != 0)
+      {
+        // Opaque application Text bytes do not need the empty Heartbeat's Binary
+        // layout. Nonzero sentinels expose accidental interpretation as padding.
+        definition._format = PayloadFormat::Text;
+        definition._payload.assign(payloadBytes, std::byte{0xa5});
+        definition._payload.front() = std::byte{0x41};
+        definition._payload.back() = std::byte{0x5a};
+      }
       definition._destinations = {mapped::DestinationDefinition{
           _queue, DestinationStatus::Accepted, ErrorCode::None, sequence,
           _publications.empty() ? 0 : _publications.back()._link, definition._publishedAt,
@@ -252,7 +300,7 @@ namespace
       const auto receiptBytes = require_value(mapped::encode_receipt(receipt));
       mapped::JournalRecord record;
       record._kind = 9;
-      record._immutable = require_value(mapped::encode_publication_body(definition, reference, 1024));
+      record._immutable = require_value(mapped::encode_publication_body(definition, reference, recordLimit));
       record._mutable.assign(receiptBytes.begin(), receiptBytes.end());
       mapped::TransactionPlan plan;
       plan._base = access._snapshot;
@@ -278,7 +326,7 @@ namespace
       const auto result = require_value(access._journal.execute(access._guard, plan));
       EXPECT_EQ(result._records.front(), reference);
       _publications.push_back({reference, layout._destinationsOffset, layout._receiptsOffset,
-                                layout._totalBytes, result._manifest});
+                                layout._totalBytes, result._manifest, layout._payloadOffset, payloadBytes});
     }
 
     void revise_queue_documentation()
@@ -506,6 +554,71 @@ namespace
     EXPECT_EQ(image(), before);
   }
 
+  TEST_F(DeliveryValidationTest, MetadataInspectionNeverReadsOrAllocatesRetainedPayloadBytes)
+  {
+    const auto inspect = [&](std::size_t payloadBytes)
+    {
+      create(1, 2, false, TaskKind::Process, payloadBytes);
+      const auto& publication = _publications.front();
+      EXPECT_EQ(read(publication._payloadOffset, 1), std::vector<std::byte>{std::byte{0x41}});
+      EXPECT_EQ(read(publication._payloadOffset + publication._payloadBytes - 1, 1),
+                std::vector<std::byte>{std::byte{0x5a}});
+      const auto before = image();
+      PayloadReadGuard observer(_publications);
+      std::array<std::uint64_t, 3> metrics{};
+      {
+        // This private observer rejects any immutable read intersecting payload
+        // bytes before RuntimeAccess allocates its read buffer or performs I/O.
+        // It makes this a deterministic regression, without RSS/timing limits.
+        runtime::RuntimeAccess access(_state, true, nullptr, &observer);
+        EXPECT_NO_THROW(static_cast<void>(runtime::runtime_topology(access)));
+        EXPECT_EQ(observer._rejectedReads, 0u);
+        EXPECT_LT(observer._maxBytes, 64u * 1024);
+        EXPECT_LT(observer._totalBytes, 64u * 1024);
+        metrics = {observer._calls, observer._totalBytes, observer._maxBytes};
+        // Negative control: the observer really rejects a payload read, rather
+        // than silently permitting it through an unused instrumentation hook.
+        EXPECT_THROW(static_cast<void>(access.read_bytes(publication._payloadOffset, 1)), runtime::RuntimeFailure);
+        EXPECT_EQ(observer._rejectedReads, 1u);
+      }
+      auto attached = require_value(Session::attach(_directory));
+      auto registry = attached.registry();
+      EXPECT_EQ(require_value(registry.find_queue("FeedToConsumer")), _queue);
+      EXPECT_EQ(require_value(registry.source_members(_source)), std::vector<QueueId>{_queue});
+      EXPECT_EQ(require_value(registry.snapshot())._queues.size(), 1u);
+      EXPECT_EQ(image(), before);
+      return metrics;
+    };
+
+    const auto small = inspect(3);
+    _state.reset();
+    fs::remove_all(_directory);
+    _publications.clear();
+    const auto large = inspect(1024 * 1024 + 3);
+    // Both payloads need five immutable alignment bytes and the same metadata.
+    // Metadata read volume and largest read do not grow with the payload plane.
+    EXPECT_EQ(large, small);
+  }
+
+  TEST_F(DeliveryValidationTest, BoundedInspectionStillChecksPayloadSlicesAndImmutablePadding)
+  {
+    create(1, 2, false, TaskKind::Process, 3);
+    const auto& publication = _publications.front();
+    const auto payloadEnd = publication._payloadOffset + publication._payloadBytes;
+    ASSERT_EQ(publication._receipt - payloadEnd, 5u);
+    auto attached = require_value(Session::attach(_directory));
+    EXPECT_EQ(require_value(attached.registry().find_queue("FeedToConsumer")), _queue);
+    // Skipping application bytes must still reject noncanonical slices and each
+    // nonzero alignment byte, preserving the recovered Session on every error.
+    reject_word(publication._reference + 64 + 56, publication._payloadOffset + 1);
+    reject_word(publication._reference + 64 + 64, publication._payloadBytes + 8);
+    reject_word(publication._reference + 64 + 64, std::numeric_limits<std::uint64_t>::max());
+    for (auto offset = payloadEnd; offset < publication._receipt; ++offset)
+    {
+      reject_word(offset, 1, 1);
+    }
+  }
+
   TEST_F(DeliveryValidationTest, IssuedPublicationIdsMayBeAcceptedInADifferentOrder)
   {
     // Queue order records acceptance order. Producer-issued IDs distinguish
@@ -541,6 +654,48 @@ namespace
     const auto before = image();
     auto attached = require_value(Session::attach(_directory));
     EXPECT_EQ(require_value(attached.registry().source_members(_source)), std::vector<QueueId>{_queue});
+    EXPECT_EQ(image(), before);
+  }
+
+  TEST_F(DeliveryValidationTest, ReleasedPendingCanFollowAnAcknowledgedPrefix)
+  {
+    create(3);
+    auto acknowledged = historical_receipt(mapped::ReceiptState::Acknowledged);
+    acknowledged._presence = 7;
+    set_receipt(0, acknowledged);
+    auto released = historical_receipt();
+    released._issuance = 2;
+    set_receipt(1, released);
+    write_word(_sourceState, 2);
+    write_word(_sourceState + 8, 1);
+    write_word(_queueState + 64, 1);
+    write_word(_queueState + 72, _publications[1]._link);
+    write_word(_queueState + 88, 1);
+    // Sequence 1 terminated, then sequence 2 was received and released. Its
+    // retained dequeue tags are valid at the oldest nonterminal position;
+    // sequence 3 remains an ordinary Pending receipt without dequeue history.
+    const auto before = image();
+    auto attached = require_value(Session::attach(_directory));
+    EXPECT_EQ(require_value(attached.registry().state(_queue)), EntityState::Active);
+    EXPECT_EQ(image(), before);
+  }
+
+  TEST_F(DeliveryValidationTest, ReleasedPendingCannotAppearBeyondAnEarlierPendingDelivery)
+  {
+    create(2);
+    set_receipt(1, historical_receipt());
+    write_word(_sourceState, 1);
+    write_word(_sourceState + 8, 1);
+    // Both receipts are Pending, but only sequence 2 claims a previous dequeue.
+    // Releasing a delivery cannot move selection past still-pending sequence 1,
+    // so individually valid receipt/context bytes cannot establish this history.
+    const auto before = image();
+    const auto attached = Session::attach(_directory);
+    expect_error(attached, ErrorCode::IoError);
+    if (const auto* error = std::get_if<Error>(&attached))
+    {
+      EXPECT_EQ(error->_path, "queue.progress");
+    }
     EXPECT_EQ(image(), before);
   }
 

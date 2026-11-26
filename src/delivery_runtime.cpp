@@ -123,6 +123,31 @@ namespace angaria::detail
       std::uint64_t _publication{};
     };
 
+    mapped::PublicationMetadata read_publication_metadata(RuntimeAccess& access, std::uint64_t reference)
+    {
+      const auto& envelope = access.record_envelope(reference, 9);
+      const auto limit = access._session->_controller->configuration()._maxLogBytes;
+      const auto fixed = access.read_bytes(reference + mapped::record_envelope_bytes,
+                                           mapped::publication_fixed_bytes);
+      const auto prefix = runtime_value(mapped::decode_publication_prefix(fixed, envelope._immutableBytes,
+                                                                           reference, limit));
+      require(prefix._layout._totalBytes == envelope._totalBytes, "publication.layout",
+              "Publication allocation disagrees with its envelope");
+      if (prefix._header._publishingSet != PublishingQueueSetId::Invalid)
+      {
+        runtime_fail(ErrorCode::UnsupportedPolicy, "publication.publishing", "Native Publishing acceptance requires a later capability");
+      }
+      // The checked prefix bounds both reads before allocation. Application
+      // bytes between destinations and padding are never needed for metadata
+      // inspection, regardless of the size of the retained payload plane.
+      const auto rowsBytes = std::uint64_t{prefix._destinationCount} * mapped::destination_row_bytes;
+      const auto destinations = access.read_bytes(prefix._layout._destinationsOffset, rowsBytes);
+      const auto payloadEnd = prefix._layout._destinationsOffset + rowsBytes + prefix._payloadBytes;
+      const auto padding = access.read_bytes(payloadEnd, prefix._layout._receiptsOffset - payloadEnd);
+      return runtime_value(mapped::decode_publication_metadata(fixed, destinations, padding,
+                                                                envelope._immutableBytes, reference, limit));
+    }
+
     std::map<std::uint64_t, AcceptanceBatch> acceptance_batches(RuntimeAccess& access)
     {
       const auto publications = access.record_references(9);
@@ -225,10 +250,10 @@ namespace angaria::detail
             lastAcknowledgment = std::bit_cast<std::uint64_t>(receipt._acknowledgedAt.time_since_epoch().count());
             terminal = delivery._sequence;
           }
-          else if (receipt._state == mapped::ReceiptState::Issued)
+          else if ((receipt._presence & 1) != 0)
           {
             require(delivery._sequence - terminal == 1, "queue.progress",
-                    "Issued receipt skips the oldest nonterminal Queue delivery");
+                    "Dequeue history skips the oldest nonterminal Queue delivery");
           }
         }
         const auto pending = terminal == deliveries.size() ? 0 : deliveries[static_cast<std::size_t>(terminal)]._link;
@@ -276,12 +301,7 @@ namespace angaria::detail
     for (const auto reference : access.record_references(9))
     {
       const auto& envelope = access.record_envelope(reference, 9);
-      const auto publication = runtime_value(mapped::decode_publication_body(
-          access.immutable_record(reference, 9), reference, configuration._maxLogBytes));
-      if (publication._publishingSet != PublishingQueueSetId::Invalid)
-      {
-        runtime_fail(ErrorCode::UnsupportedPolicy, "publication.publishing", "Native Publishing acceptance requires a later capability");
-      }
+      const auto publication = read_publication_metadata(access, reference);
       const auto batch = batches.find(envelope._generation);
       require(envelope._previous == 0 && batch != batches.end() && batch->second._publication == reference &&
                   batch->second._actor == publication._producer && batch->second._incarnation == publication._producerIncarnation,

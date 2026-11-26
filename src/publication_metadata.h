@@ -28,7 +28,7 @@ namespace angaria::detail::mapped
     bool operator==(const DestinationDefinition&) const = default;
   };
 
-  struct PublicationDefinition
+  struct PublicationHeader
   {
     TaskId _producer{};
     PublishingQueueSetId _publishingSet{};
@@ -41,6 +41,12 @@ namespace angaria::detail::mapped
     std::uint64_t _topologyRevision{};
     std::uint64_t _schemaReference{};
     AcceptancePolicy _acceptance{AcceptancePolicy::AllDestinations};
+
+    bool operator==(const PublicationHeader&) const = default;
+  };
+
+  struct PublicationDefinition : PublicationHeader
+  {
     std::vector<DestinationDefinition> _destinations;
     std::vector<std::byte> _payload;
 
@@ -56,6 +62,27 @@ namespace angaria::detail::mapped
     std::uint64_t _totalBytes{};
 
     bool operator==(const PublicationLayout&) const = default;
+  };
+
+  struct PublicationPrefix
+  {
+    PublicationHeader _header;
+    PublicationLayout _layout;
+    std::uint32_t _destinationCount{};
+    std::uint64_t _payloadBytes{};
+
+    bool operator==(const PublicationPrefix&) const = default;
+  };
+
+  // Metadata owns only destination rows. The payload remains a checked logical
+  // slice described by _layout._payloadOffset and _payloadBytes, never copied.
+  struct PublicationMetadata : PublicationHeader
+  {
+    std::vector<DestinationDefinition> _destinations;
+    PublicationLayout _layout;
+    std::uint64_t _payloadBytes{};
+
+    bool operator==(const PublicationMetadata&) const = default;
   };
 
   using DestinationRowBytes = std::array<std::byte, destination_row_bytes>;
@@ -78,6 +105,20 @@ namespace angaria::detail::mapped
   Result<std::vector<std::byte>> encode_publication_body(const PublicationDefinition& publication,
                                                          std::uint64_t recordOffset,
                                                          std::uint64_t maxRecordBytes);
+  // First decode exactly the fixed 128 bytes to bound subsequent metadata
+  // reads. immutableBytes comes from the already checked record envelope.
+  Result<PublicationPrefix> decode_publication_prefix(std::span<const std::byte> fixedBody,
+                                                      std::uint64_t immutableBytes,
+                                                      std::uint64_t recordOffset,
+                                                      std::uint64_t maxRecordBytes);
+  // Supply exactly the destination array and the zero-to-seven immutable
+  // alignment bytes after the payload. The application payload is not needed.
+  Result<PublicationMetadata> decode_publication_metadata(std::span<const std::byte> fixedBody,
+                                                          std::span<const std::byte> destinationRows,
+                                                          std::span<const std::byte> immutablePadding,
+                                                          std::uint64_t immutableBytes,
+                                                          std::uint64_t recordOffset,
+                                                          std::uint64_t maxRecordBytes);
   Result<PublicationDefinition> decode_publication_body(std::span<const std::byte> immutableBody,
                                                         std::uint64_t recordOffset,
                                                         std::uint64_t maxRecordBytes);

@@ -12,7 +12,7 @@ The admission tests leave real Prepared and Committed journal operations pending
 
 ## History and current state
 
-Session attachment, topology reads, and current/historical Registry snapshots validate delivery history after journal recovery while holding the mutation gate. Immutable bytes are ordinary reads; receipt and ring words are copied through the native atomic adapter. The validator never starts delivery or writes progress. In a quiescent recovered Session, validation succeeds or rejects without changing its bytes. Recovery of a previously interrupted operation can legitimately repair state first.
+Session attachment, topology reads, and current/historical Registry snapshots validate delivery history after journal recovery while holding the mutation gate. Publication inspection reads a fixed header, destination metadata, and alignment padding; it retains the payload's checked offset/length without reading or copying application bytes. Its I/O and temporary metadata storage do not grow with payload size. Immutable metadata uses ordinary reads; receipt and ring words are copied through the native atomic adapter. The validator never starts delivery or writes progress. In a quiescent recovered Session, validation succeeds or rejects without changing its bytes. Recovery of a previously interrupted operation can legitimately repair state first.
 
 | Evidence | Required relationship |
 | --- | --- |
@@ -21,7 +21,7 @@ Session attachment, topology reads, and current/historical Registry snapshots va
 | Schema and topology | The exact immutable registered schema matches type/version and existed by acceptance. The effective Queue and Source were Active, ownership matches the producer, and the original topology revision names the Queue definition effective at acceptance. Later documentation revisions do not alter that context. |
 | Queue history | Accepted Queue sequences start at 1 and are contiguous. Each predecessor is exactly the preceding destination row. Latest link, last producer incarnation, and retained-history floor agree with this complete history. |
 | Receipt and Source | Every accepted destination has a valid Core receipt. Captured consumer tags name its Source owner and a retained incarnation/issuance. An Issued receipt has exactly one matching current Source pin, and an idle Source cannot retain a pin. |
-| Queue progress | Acknowledgments form a contiguous prefix. Issued delivery, when present, is the oldest nonterminal delivery. The terminal watermark, oldest nonterminal link, and last acknowledgment timestamp agree with receipts. |
+| Queue progress | Acknowledgments form a contiguous prefix. Any nonterminal receipt with recorded dequeue history, including released Pending, must be the oldest nonterminal delivery. The terminal watermark, oldest nonterminal link, and last acknowledgment timestamp agree with receipts. |
 | Ring | Exactly the latest window is cached, with full-width generations and exact Queue destination/Publication references. Overwritten entries do not remove retained history. Slot and allocation padding remain canonical. |
 
 Publication IDs may be accepted in a different order from their issuance: a producer can issue IDs 1 and 2, then send 2 before 1. Queue sequences describe acceptance order; publication sequences distinguish requests. Validation enforces uniqueness and issued bounds without confusing those two orders.
@@ -43,6 +43,6 @@ An Issued receipt can remain valid after its process dies: recorded claim identi
 
 ## Tests and next steps
 
-The [delivery validation tests](../test/test_delivery_validation.cpp) start with real Registry definitions, then install private journal records. They cover ring wrap, old incarnations, accepted-ID order, historical snapshots, pins, acknowledgment clocks, and deliberately inconsistent references/roots. The [capability tests](../test/test_delivery_compatibility.cpp) qualify rejection before recovery. The [test reading guide](../test/README.md) separates these fixtures from runnable public API examples.
+The [delivery validation tests](../test/test_delivery_validation.cpp) start with real Registry definitions, then install private journal records. They cover ring wrap, old incarnations, accepted-ID order, historical snapshots, pins, released-receipt ordering, acknowledgment clocks, and deliberately inconsistent references/roots. A private read observer rejects any metadata request overlapping a large payload before allocation/I/O, while separate corruption fixtures still check its alignment padding. The [capability tests](../test/test_delivery_compatibility.cpp) qualify rejection before recovery. The [test reading guide](../test/README.md) separates these fixtures from runnable public API examples.
 
 Step 4.4 adds mapped payload storage and complete append planning. Step 4.5 extends progress replay and Task/Source cleanup. Public sending follows in step 4.6, receiving in step 4.7, and allowed loss in step 4.8. Application Binary payload admission belongs to the sending step; these history checks establish stored identity, reference, and progress relationships.
