@@ -75,3 +75,34 @@ The benchmark intentionally leaves production algorithms unchanged. Any future o
 ## Correctness checks in CI
 
 With `BUILD_TESTING=ON`, `native_benchmark_smoke` checks bounded serial/phased/profile cases, report invariants, payload counts, no-append draining, and rejected arguments/existing paths. It asserts correctness only. Automatic CI runs Linux x86_64, Linux ARM64, and macOS ARM64; macOS x86_64 remains request-only. Use `-DANGARIA_BUILD_BENCHMARKS=OFF` to omit the tool and its smoke check.
+
+## Recorded milestone-4 baseline
+
+The [raw reports, CSV, and manifest](../benchmarks/results/milestone-4-macos-arm64/) record **42 successful runs**, three repetitions of fourteen cases, measured on **2026-11-26**. The native executable is ARM64 on an Apple M4 with ten logical CPUs and 16 GiB memory, macOS 27.0.1, Apple clang 21.0.0, Release `-O3 -DNDEBUG`, with `-Wall -Wextra -Werror`. The measured source commit is [`d2c728c502fc2365711f21f0f34e6980548f5293`](https://github.com/smangano/angaria/commit/d2c728c502fc2365711f21f0f34e6980548f5293). The follow-up results commit changes documentation/data only. Source and executable SHA256 values are retained in the manifest.
+
+The runner's Python 3.10.15 process reports `x86_64`; it launches the separately verified ARM64 executable. Do not mistake that manifest `machine` field for the benchmark's architecture. The [dataset note](../benchmarks/results/milestone-4-macos-arm64/README.md) records verification and the distinction between tracked-clean source and unrelated untracked workspace files. CPU discovery was unavailable to that process; the host label records separately verified hardware. Execution used the managed Codex environment, with no CPU affinity, power controls, isolated-host, or cache-cold guarantee.
+
+All cases use **N=128, W=16**, four registered channels, eight-entry rings, and retained publication history **16 → 144**. The table reports medians across three runs; latency columns are medians of each run's quantile. Rates include ID issuance in publishing and acknowledgment in draining, plus harness work as defined above. They exclude Session setup and encoding.
+
+| Payload bytes | Public phased producers | Publish messages/s | Drain messages/s | Send p50 ms | Send p95 ms |
+| --- | --- | --- | --- | --- | --- |
+| 8 | 1 | 107.2 | 58.4 | 5.237 | 7.955 |
+| 8 | 2 | 107.3 | 56.8 | 9.541 | 15.299 |
+| 8 | 4 | 106.8 | 57.9 | 19.003 | 29.526 |
+| 256 | 1 | 108.9 | 59.5 | 5.111 | 7.670 |
+| 256 | 2 | 108.0 | 56.9 | 9.724 | 14.923 |
+| 256 | 4 | 109.9 | 58.3 | 18.676 | 29.040 |
+
+Serial send/receive/acknowledge cycles complete at **49.4/s** for eight-byte payloads and **50.1/s** for 256-byte payloads. Serial send p50 is **5.272 ms** and **5.156 ms** respectively. Each accepted publication appends **704 bytes** or **960 bytes** respectively, including native records/journal geometry. Draining adds zero file bytes in all 42 runs. All **5,376 measured messages** have verified headers, tokens, payloads, and acknowledgment; warmup messages are additional and excluded.
+
+The instrumented eight-byte send profile gives the following median-of-run p50 values. These are private engine measurements with observation overhead, not the public send values above.
+
+| Producers | Send gate wait µs | Gate held ms | Preparation ms | File growth µs | Materialization µs | Apply µs |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 12 | 5.024 | 4.902 | 78 | 17 | 12 |
+| 2 | 15 | 5.161 | 4.993 | 79 | 17 | 13 |
+| 4 | 15 | 5.069 | 4.959 | 77 | 17 | 12 |
+
+Across both payload sizes and all producer counts, preparation occupies **97.5–97.8%** of aggregate profiled gate-held time (median per-run ratio). Preparation includes history/recovery validation and append/journal planning; this coarse profile does not identify one function as the cause. The public ID-issuance p50 also rises with more producers, while the instrumented send-only gate wait stays small. Wait can occur during ID issuance and other calls; the small send-only sample does not establish little contention.
+
+In this workload, more producers raise call latency without improving aggregate throughput, consistent with serialized mutation. Changing payload size from 8 to 256 bytes has little effect relative to total operation cost. This is a substantial performance limitation for latency-sensitive applications, not a release-ready trading-system benchmark. The next useful investigation is finer profiling of history validation and preparation before proposing an optimization. Longer histories, streaming traffic, independent-process contention, and Linux measurements remain separate experiments; this dataset supports no claims about their rates.
