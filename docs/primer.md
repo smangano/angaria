@@ -1,12 +1,12 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md), framework **0.4.7**, shows the intended application and debugging surface through 1.0, including features still to be built. Its examples are compile-only proposals. The thirteen lessons here continue to use the implemented API.
+The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The fourteen lessons here use implemented APIs, including direct Queue publication in framework **0.4.8**, milestone 4 step 4.6.
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.6**, milestone 4 step 4.5, adds private delivery progress and claim cleanup after the mapped payload storage, append sizing, and native history checks. The thirteen examples and their output remain the public learning path; native Queue delivery remains planned. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Receiving and acknowledgment follow in step 4.7. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
-You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and exchange completed capture files across processes for generic inspection. Sending, publishing, receiving, and acknowledgment through Angaria Queues arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
+You can run every example in this guide today. Some additional public methods remain declarations for future steps; the separate full-interface review is compile-only. A declaration alone does not make an operation runnable.
 
 ## A few ideas before the code
 
@@ -34,7 +34,7 @@ For example, a feed and an order generator can each have their own queue in a ri
 
 Use Linux or macOS with a C++20 compiler, CMake 3.20 or later, and Boost 1.70 or later. The normal test build also needs GoogleTest and Python 3.9 or later. The [README build instructions](../README.md#build-and-test) give an Ubuntu package command. CMake fetches the pinned cpptoml headers for TOML loading; see the README for the offline override.
 
-All thirteen lessons are included in milestone-3 integration release `0.3.7` on `main`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
+Lessons 1–13 are included in milestone-3 integration release `0.3.7` on `main`; lesson 14 joins the milestone-4 staging branch at `0.4.8`. The [milestone review plan](milestones/milestone-3.md) records the six reviewed steps that added encoding, capture, and inspection to the earlier Registry lessons. Use the guide and examples from the same checkout so commands match the API you build.
 
 Run these commands from the repository root:
 
@@ -51,9 +51,9 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The thirteen targets are named `angaria_primer_01_session` through `angaria_primer_13_process_exchange`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The fourteen targets are named `angaria_primer_01_session` through `angaria_primer_14_direct_send`, matching their source filenames. The generic inspection tool is `angaria_inspect`.
 
-Examples 1–5, 9, and 11–13 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
+Examples 1–5, 9, and 11–14 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
 ```sh
 primer_workspace=$(mktemp -d "${TMPDIR:-/tmp}/angaria-primer.XXXXXX")
@@ -466,7 +466,7 @@ The 11 bytes are one Boolean byte, two flag bytes, one enum byte, six ASCII byte
 
 Field definitions remain immutable. Changing an enum mapping, width, or logical meaning requires a new Field ID and name, followed by a new message-schema version referencing it. A new message version alone cannot edit a Field used by earlier schemas. The existing base codes 0 through 25 retain their meanings; signed int8 adds code 26.
 
-New Sessions use mapped format 2.1 and advertise required logical-Field support at creation. This library also attaches to existing format-2.0 scalar Sessions, but adding logical Fields or int8 to them returns `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
+New Sessions use core mapped format 2.2, including required logical-Field and native-delivery support. Existing format 2.1 Sessions retain logical Fields; existing 2.0 Sessions retain scalar behavior and reject added logical Fields or int8 with `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
 
 This example constructs and validates payloads in application memory. Lesson 11 adds a portable message envelope; Queue delivery follows its roadmap milestones.
 
@@ -487,7 +487,7 @@ MessageHeader header;
 header._schema = schema;
 header._format = PayloadFormat::Binary;
 header._publication = primer::value(created._creator.next_publication_id());
-header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{42}};
+header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{42}};
 header._flags = 0x80000001u;
 header._payloadBytes = codec.payload_size();
 ```
@@ -636,27 +636,59 @@ The example reserves each workspace and phase directory exclusively. Repeating a
 
 This lesson tests claim replacement after process termination on a running system. The terminated producer's file was already complete. It does not demonstrate recovery of an interrupted capture write or power-loss durability. Ordinary files carry the encoded records between these applications; native Queue send/receive and Queue Set scheduling remain future milestone work.
 
-## What native transport will add
+## 14. Send directly and look up acceptance
 
-Milestone 4's [reviewed plan](milestones/milestone-4.md) builds on these thirteen programs. Its first step documents the [transport contract](native-transport.md); step 4.2 adds internal storage codecs. A **codec** translates values into specified bytes and checks bytes when reading them back. These new codecs check Publication headers, destination rows, delivery receipts, and ring entries. A **receipt** records one destination's delivery progress. The codecs also check the byte cost before building a record, including its reserved receipts and padding.
+Read [14_direct_send.cpp](../examples/primer/14_direct_send.cpp), then run:
 
-This is groundwork for sending through a Queue. Correctly encoding a record does not prove that its producer, schema, or destination belongs to a committed Session. Step 4.3 now checks these relationships when attaching a core delivery Session and inspecting its topology. It checks stored metadata without reading or copying the message payloads. It also checks that each received message has one matching Source pin, and that a ring entry points to the right retained message. A **pin** records which delivery is still borrowed by a consumer. These [history checks](native-validation.md) use private stored-message fixtures while the actual sending and receiving operations are being built. The [private codec tests](../test/README.md) explain the stored layout; today's thirteen programs continue using the implemented public APIs. New native delivery examples will become runnable as their API methods are implemented.
+```sh
+./build/angaria_primer_14_direct_send "$primer_workspace/14-direct-send"
+```
 
-Step 4.4 adds the private storage underneath those future views. A **mapping** lets a program read stored bytes through an address in its own process. Its owner keeps that address valid while other operations append to the file. The new payload owner maps only a committed message's application bytes, without copying them; an empty message needs no mapping. This owner does not establish a delivery pin or implement receiving. The future Source handle must own both the pin and the mapping before it can return a borrowed view.
+This program registers a Feed producer, a Strategy consumer, and their connection. It leaves Strategy offline and sends a Quote through Angaria's own mapped Session storage. **Acceptance** means the Queue has recorded its delivery obligation under Angaria's process-recovery contract. It does not mean Strategy has received or processed the Quote.
 
-Before building an append, Angaria also checks its complete stored size: the message, destinations, receipts, alignment padding, and the journal's batch description and updates. A message that fits by itself can still exceed the Session limit once that bookkeeping is included. These checks and mapping lifetimes have [private tests](../test/README.md); applications continue to use the public examples above until sending and receiving are enabled in steps 4.6 and 4.7.
+The send sequence uses the same message model as the approved public interface:
 
-Step 4.5 adds the private operations that change delivery progress. **Issuing** a delivery records which consumer borrowed it; acknowledging marks it complete, and releasing makes it available to receive again. These operations update space reserved when the Session and message were created, so they can finish even when there is no room to append another message. Releasing preserves the previous borrow's identity and time as history, while a new borrow gets a new issuance number. That number lets Angaria reject an old acknowledgment after redelivery.
+```cpp
+auto writer = primer::value(created._creator.open_writer("FeedToStrategy"));
+MessageHeader header;
+header._schema = schema;
+header._payloadBytes = bytes.size();
+MessageView message{header, bytes};
+auto id = primer::value(created._creator.next_publication_id());
+auto outcome = primer::value(writer.send(id, message));
+```
 
-If a consumer stops, replacement of its Task claim releases its unfinished deliveries and clears its old Source pins. Replacing a Process Task also cleans Thread claims tied to that old Process incarnation. Recovery can repeat this cleanup after stopping partway through it, without acknowledging the message or confusing it with a newer claim. These are [private progress and recovery tests](../test/README.md), not new application calls in this guide. Public Queue sending and receiving remain the next two implementation steps.
+A **MessageView** holds its header by value and borrows the payload vector. Keep that vector alive and unchanged while sending. Angaria copies accepted bytes into its stored Publication. The explicit issued ID and Angaria's clock establish the new stored identity and publication time; the caller's input header stays unchanged. Binary bytes must match the exact registered schema, including logical Field constraints.
 
-Instead of exchanging completed ordinary files, applications will send through Angaria's mapped Session storage. The **payload plane** retains the message bytes and their delivery history. A bounded **ring** keeps references to recent messages so a consumer can find them quickly. Replacing a ring entry does not acknowledge its message. A slow consumer using the default recovery policy can still follow the retained log.
+A **PublicationOutcome** owns the destination results, so the caller need not manage a separate output buffer. The lower-level buffer-taking overload remains available. It returns a PublicationReport that borrows the supplied buffer; always check its `_error` before reading `_status`.
 
-An acknowledgment ends a delivery obligation; it does not reclaim physical log space in milestone 4. When the bounded log is full, new sends can fail while acknowledgment, release, and owner replacement still work. Optional allowed-loss delivery can skip stale pending messages and report a gap, while preserving a message the application has already received.
+The program then repeats the same ID and bytes. This returns the original acceptance without creating a second delivery. Trying different bytes under that ID returns Conflict. A new message needs a new issued ID. Issuing an ID alone sends nothing: looking up an unused issued ID returns Rejected with no destinations.
 
-The planned receiving API returns a borrowed payload view: keep its Source and delivery alive while reading it. Acknowledging, releasing, or closing that Source ends the view's lifetime. The proposed explicit `close()` will report cleanup errors so a caller can retry instead of assuming cleanup succeeded. These operations and the separate initial-publication timestamp are design proposals in step 4.1, not new calls to add to today's programs.
+Finally the producer's handles close, and a replacement attaches to Feed by name. Its incarnation is 2, and it can still look up the first incarnation's acceptance. Keep the original ID when a send returns OutcomeUnknown: recovery lookup resolves whether it committed. Automatically sending a new ID could create a second delivery.
 
-Readers can now validate the core delivery format, but today's factories still create format 2.1 Sessions. Runnable native delivery will require a newly created Session with its delivery capability once sending is implemented. Older Sessions keep their existing meanings and are not silently upgraded. Milestone 4 first supports a Source with one Active Queue; milestone 5 will select among several Queues feeding that Source.
+Expected output:
+
+```text
+Accepted quote while Strategy is offline.
+Identical repeat: accepted once.
+Different bytes with the same ID: Conflict.
+Unused issued ID: rejected, no destinations.
+Replacement Feed incarnation: 2
+Earlier incarnation's acceptance remains queryable.
+Acceptance records Queue entry; consumer processing is a later step.
+```
+
+The shared **MessageHeader** exposes publication identity/time, schema, format, flags, and payload size. It also has optional destination fields: Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. A **Message** owns its bytes and header; a **MessageView** borrows bytes with the same header; a **Delivery** combines a MessageView with the token needed to acknowledge or release it. These declarations are in place for receive in the next step.
+
+A library-bound view can copy itself into a Message while preserving its entire header and exact decoding context. A raw header/span view like this example is outbound input without that context; its copy_message returns InvalidState. This avoids guessing which Session's same-numbered schema describes the bytes. The current portable 80-byte record stores publication fields only and rejects destination fields that it cannot represent; it does not silently drop them.
+
+## What native receive will add
+
+The [transport contract](native-transport.md) and [milestone plan](milestones/milestone-4.md) describe the next steps. The **payload plane** retains message bytes and their delivery history. A bounded **ring** caches references to recent messages. Overwriting a ring entry does not acknowledge the message or remove its retained history. Sending to a full ring is supported; a slow consumer using the default recovery policy will follow retained links.
+
+A **receipt** records one destination's delivery progress. A **pin** identifies the delivery currently borrowed by a consumer. Step 4.7 will expose receive, acknowledge, release, and explicit Source close. Acknowledging or releasing a delivery, closing its Source, or ending its claim will end that payload view's lifetime. Acknowledgment ends a delivery obligation; it does not reclaim physical log space. The existing private progress/recovery implementation reserves space so progress and owner replacement can finish even at a full log.
+
+New Sessions now use core format 2.2 with the native-delivery capability. Existing 2.0/2.1 Sessions remain readable for their supported operations and return UnsupportedPolicy for native send/status. They are not upgraded in place. Milestone 4 will receive from at most one Active Queue per Source; milestone 5 adds selection among several Queues. Optional allowed loss follows in step 4.8.
 
 ## Understand bounds and ordinary failures
 
@@ -673,7 +705,7 @@ The log stores persistent definitions and updates. Registry entries can fit with
 | Result | What to check |
 | --- | --- |
 | `OwnershipBusy` | Another live claim owns this Task, or this claim already has the Source open. Close the relevant owners before retrying. |
-| `Conflict` | A name or identity is already registered with a different definition. Inspect it; repeating the changed registration will not edit it. |
+| `Conflict` | A name or identity is already registered with a different definition, or a publication ID was reused for different content. Inspect it; repeating the changed registration will not edit it. |
 | `SchemaConflict` | An immutable message schema disagrees with the requested definition. Register an appropriate new version. |
 | `CapacityExceeded` | A reserved entity or membership count is exhausted. Review the bounds for a new Session. |
 | `LogFull` | The bounded log cannot hold the required append. Count capacity alone is insufficient. |
@@ -682,7 +714,7 @@ Exact registration retries are useful because they preserve the existing definit
 
 ## How this guide will grow
 
-The learning sequence now completes milestone 3: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The learning sequence completes milestone 3 and introduces direct sending in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 

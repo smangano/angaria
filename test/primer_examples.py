@@ -2,7 +2,8 @@
 """Run the primer programs and their independent-process ownership walkthrough."""
 
 # These are format-2 public API examples. They configure connections and open
-# endpoints, but deliberately do not call the not-yet-implemented delivery API.
+# endpoints. Lesson 14 adds direct Queue acceptance and retained outcome lookup;
+# receive and acknowledgment are introduced only after their implementation.
 import argparse
 import os
 from pathlib import Path
@@ -167,10 +168,31 @@ def configuration_example(executable, fixture, workspace):
     check(log.read_bytes() == original, "TOML lesson changed an existing Session")
 
 
+def direct_send_example(executable, workspace):
+    session = workspace / "direct-send"
+    output = command(executable, session)
+    for marker in (
+        "Accepted quote while Strategy is offline.",
+        "Identical repeat: accepted once.",
+        "Different bytes with the same ID: Conflict.",
+        "Unused issued ID: rejected, no destinations.",
+        "Replacement Feed incarnation: 2",
+        "Earlier incarnation's acceptance remains queryable.",
+        "Acceptance records Queue entry; consumer processing is a later step.",
+    ):
+        check(marker in output.splitlines(), f"Direct-send lesson omitted {marker!r}: {output!r}")
+    log = session / "session.ang"
+    original = log.read_bytes()
+    retry = command(executable, session, succeeds=False)
+    check("Conflict" in retry, f"Repeated direct-send creation did not report Conflict: {retry!r}")
+    check(log.read_bytes() == original, "Direct-send lesson changed an existing Session")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("examples", type=Path, nargs=7, help="primer executables in lesson order")
     parser.add_argument("configuration", type=Path, help="lesson 7 TOML fixture")
+    parser.add_argument("direct_send", type=Path, help="lesson 14 direct-send executable")
     arguments = parser.parse_args()
     executables = [path.resolve() for path in arguments.examples]
     try:
@@ -179,10 +201,11 @@ def main():
             simple_examples(executables[:5], workspace)
             process_example(executables[5], workspace / "processes")
             configuration_example(executables[6], arguments.configuration.resolve(), workspace)
+            direct_send_example(arguments.direct_send.resolve(), workspace)
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"primer_examples: {error}", file=sys.stderr)
         return 1
-    print("All seven primer examples passed, including process ownership, restart, and TOML configuration.")
+    print("Primer examples passed: setup, ownership, TOML, direct acceptance, and retained publication lookup.")
     return 0
 
 

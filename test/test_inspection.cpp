@@ -69,7 +69,7 @@ namespace
     MessageHeader result;
     result._schema = schema;
     result._publication = {{session, TaskId{1}, 1}, 1};
-    result._publicationTime = UtcTimestamp{std::chrono::nanoseconds{42}};
+    result._publishedAt = UtcTimestamp{std::chrono::nanoseconds{42}};
     result._payloadBytes = payloadBytes;
     return result;
   }

@@ -411,7 +411,7 @@ namespace angaria
       text.append(" sequence=");
       text.integer(header._publication._sequence);
       text.append(" time_ns=");
-      text.integer(header._publicationTime.time_since_epoch().count());
+      text.integer(header._publishedAt.time_since_epoch().count());
       text.append(" flags=0x");
       text.hex(header._flags, 8);
       text.append("\n");

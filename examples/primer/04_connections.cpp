@@ -58,7 +58,7 @@ int main(int argc, char** argv)
               << "Active Source: ConsumerInputs (ID " << static_cast<unsigned>(source.id()) << ")\n"
               << "Active Publishing set: FeedUpdates (ID " << static_cast<unsigned>(publisher.id()) << ")\n"
               << "Source member count: " << primer::value(registry.source_members(source_id)).size() << '\n'
-              << "Setup only: send/receive are not implemented yet.\n";
+              << "Setup only: no messages sent. Lesson 14 demonstrates direct send.\n";
     return 0;
   }
   catch (const std::exception& error)

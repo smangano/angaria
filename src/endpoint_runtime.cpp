@@ -1,5 +1,6 @@
 #include "topology_state.h"
 #include "registry_access.h"
+#include "publication_runtime.h"
 
 #include <memory>
 #include <mutex>
@@ -79,6 +80,42 @@ namespace angaria::detail
         throw std::logic_error(runtime_caught_error()._message);
       }
     }
+
+    PublicationReport publication_error(PublicationId publication, ErrorCode code)
+    {
+      PublicationReport report;
+      report._publication = publication;
+      report._status = code == ErrorCode::OutcomeUnknown ? PublicationStatus::OutcomeUnknown : PublicationStatus::Rejected;
+      report._error = code;
+      return report;
+    }
+
+    Result<PublicationOutcome> own_publication_report(const PublicationReport& report,
+                                                       std::vector<DestinationOutcome> destinations)
+    {
+      if (report._error != ErrorCode::None)
+      {
+        return Error{report._error, "Publication operation could not establish a usable outcome", "publication"};
+      }
+      AcceptanceStatus status;
+      switch (report._status)
+      {
+      case PublicationStatus::Accepted:
+        status = AcceptanceStatus::Accepted;
+        break;
+      case PublicationStatus::Partial:
+        status = AcceptanceStatus::Partial;
+        break;
+      case PublicationStatus::Rejected:
+        status = AcceptanceStatus::Rejected;
+        break;
+      case PublicationStatus::OutcomeUnknown:
+      default:
+        return Error{ErrorCode::OutcomeUnknown, "Publication outcome requires recovery and lookup", "publication"};
+      }
+      destinations.resize(report._destinations.size());
+      return PublicationOutcome{report._publication, status, report._topologyRevision, std::move(destinations)};
+    }
   } // namespace
 } // namespace angaria::detail
 
@@ -109,6 +146,112 @@ namespace angaria
   PublishingQueueSetId PublishingQueueSet::id() const
   {
     return detail::endpoint_id(_state);
+  }
+
+  Result<PublicationOutcome> QueueWriter::send(PublicationId publication, MessageView message)
+  {
+    try
+    {
+      auto access = detail::task_access(_state ? _state->_task : nullptr);
+      // Reserve the complete owning result before acceptance can commit. Moving
+      // it out after the journal succeeds requires no new destination storage.
+      std::vector<DestinationOutcome> outcomes(1);
+      const auto report = detail::runtime_send(access, _state->_task->_claim, _state->_id,
+                                                publication, message, outcomes);
+      return detail::own_publication_report(report, std::move(outcomes));
+    }
+    catch (...)
+    {
+      return detail::runtime_caught_error();
+    }
+  }
+
+  PublicationReport QueueWriter::send(PublicationId publication, MessageView message,
+                                        std::span<DestinationOutcome> outcomes)
+  {
+    try
+    {
+      auto access = detail::task_access(_state ? _state->_task : nullptr);
+      return detail::runtime_send(access, _state->_task->_claim, _state->_id, publication, message, outcomes);
+    }
+    catch (...)
+    {
+      return detail::publication_error(publication, detail::runtime_caught_error()._code);
+    }
+  }
+
+  Result<PublicationOutcome> Task::publication_status(PublicationId publication)
+  {
+    try
+    {
+      auto access = detail::task_access(_state);
+      auto report = detail::runtime_publication_status(access, _state->_claim, publication, {});
+      std::vector<DestinationOutcome> outcomes;
+      if (report._error == ErrorCode::OutputBufferTooSmall)
+      {
+        // Keep the same recovered snapshot and gate while sizing the owned
+        // result. Status never creates an acceptance or changes the ID.
+        outcomes.resize(report._requiredCapacity);
+        report = detail::runtime_publication_status(access, _state->_claim, publication, outcomes);
+      }
+      return detail::own_publication_report(report, std::move(outcomes));
+    }
+    catch (...)
+    {
+      return detail::runtime_caught_error();
+    }
+  }
+
+  PublicationReport Task::publication_status(PublicationId publication, std::span<DestinationOutcome> outcomes)
+  {
+    try
+    {
+      auto access = detail::task_access(_state);
+      return detail::runtime_publication_status(access, _state->_claim, publication, outcomes);
+    }
+    catch (...)
+    {
+      return detail::publication_error(publication, detail::runtime_caught_error()._code);
+    }
+  }
+
+  Result<QueueWriter> Task::open_writer(std::string_view name)
+  {
+    try
+    {
+      detail::runtime_check_task_owner(_state);
+      return open_writer(detail::runtime_value(Registry{_state->_session, _state}.find_queue(name)));
+    }
+    catch (...)
+    {
+      return detail::runtime_caught_error();
+    }
+  }
+
+  Result<SourceQueueSet> Task::open_source_set(std::string_view name)
+  {
+    try
+    {
+      detail::runtime_check_task_owner(_state);
+      return open_source_set(detail::runtime_value(Registry{_state->_session, _state}.find_source_set(name)));
+    }
+    catch (...)
+    {
+      return detail::runtime_caught_error();
+    }
+  }
+
+  Result<PublishingQueueSet> Task::open_publishing_set(std::string_view name)
+  {
+    try
+    {
+      detail::runtime_check_task_owner(_state);
+      return open_publishing_set(detail::runtime_value(Registry{_state->_session, _state}.find_publishing_set(name)));
+    }
+    catch (...)
+    {
+      return detail::runtime_caught_error();
+    }
   }
 
   Result<QueueWriter> Task::open_writer(QueueId queue)

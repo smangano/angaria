@@ -24,7 +24,7 @@ namespace angaria
 
   struct CreatedSession;
 
-  using ReceiveResult = std::variant<DeliveryView, DeliveryGap, ReceiveTimeout, Error>;
+  using ReceiveResult = std::variant<Delivery, DeliveryGap, ReceiveTimeout, Error>;
 
   class QueueWriter
   {
@@ -35,6 +35,9 @@ namespace angaria
     QueueWriter& operator=(const QueueWriter&) = delete;
 
     QueueId id() const;
+    // Reads schema/format/payloadBytes/flags and borrowed bytes. Explicit ID
+    // and runtime clocks establish stored provenance; input header is unchanged.
+    Result<PublicationOutcome> send(PublicationId publication, MessageView message);
     PublicationReport send(PublicationId publication, MessageView message,
                            std::span<DestinationOutcome> outcomes);
 
@@ -96,9 +99,13 @@ namespace angaria
     // Open identity/ownership handles for Active entities. Handles retain this
     // Task's claim; Source openings are exclusive within the claim.
     Result<QueueWriter> open_writer(QueueId queue);
+    Result<QueueWriter> open_writer(std::string_view queue);
     Result<SourceQueueSet> open_source_set(SourceQueueSetId source);
+    Result<SourceQueueSet> open_source_set(std::string_view source);
     Result<PublishingQueueSet> open_publishing_set(PublishingQueueSetId publisher);
+    Result<PublishingQueueSet> open_publishing_set(std::string_view publisher);
     Result<PublicationId> next_publication_id();
+    Result<PublicationOutcome> publication_status(PublicationId publication);
     PublicationReport publication_status(PublicationId publication, std::span<DestinationOutcome> outcomes);
 
   private:
@@ -126,6 +133,7 @@ namespace angaria
     Result<SessionOptions> options() const;
     Registry registry() const;
     Result<Task> attach_task(TaskId task);
+    Result<Task> attach_task(std::string_view task);
 
   private:
     static Result<CreatedSession> create_configured(const SessionOptions& options,

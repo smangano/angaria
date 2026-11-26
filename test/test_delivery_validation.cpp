@@ -188,8 +188,8 @@ namespace
         auto state = std::make_shared<runtime::SessionState>();
         state->_directory = fs::canonical(_directory);
         state->_controller = require_value(mapped::SessionController::open_existing(_directory));
-        EXPECT_EQ(state->_controller->configuration()._formatMinor, 1u);
-        EXPECT_EQ(state->_controller->configuration()._requiredFeatures, 3u);
+        EXPECT_EQ(state->_controller->configuration()._formatMinor, 2u);
+        EXPECT_EQ(state->_controller->configuration()._requiredFeatures, 7u);
         runtime::RuntimeAccess access(state);
         const auto topology = runtime::runtime_topology(access);
         const auto& storedQueue = topology._queues.front();
@@ -230,8 +230,8 @@ namespace
           }
         }
       }
-      // Test-only admission fixture. Production creation remains 2.1; the
-      // immutable header is edited only with every application owner closed.
+      // Deliberate private framing fixture, now matching the public core
+      // creation profile. Every application owner is closed before raw edits.
       auto file = require_value(mapped::NativeFile::open_existing(
           _directory / "session.ang", mapped::FileAccess::ReadWrite));
       require_value(file.write_exact(10, integer_bytes(2, 2)));

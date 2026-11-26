@@ -60,7 +60,7 @@ namespace
     // send a publication; the record codec itself checks only identity shape.
     header._publication = primer::value(created._creator.next_publication_id());
     // A fixed caller-supplied timestamp makes this lesson's output repeatable.
-    header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{42}};
+    header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{42}};
     header._flags = 0x80000001u;
     header._payloadBytes = codec.payload_size();
     return PreparedQuote{std::move(codec), header, created._session.identity()};
@@ -104,7 +104,7 @@ int main(int argc, char** argv)
                 << "Producer: Task=" << static_cast<unsigned>(header._publication._producer._task)
                 << " incarnation=" << header._publication._producer._incarnation
                 << " sequence=" << header._publication._sequence << '\n'
-                << "Publication time (demo): " << header._publicationTime.time_since_epoch().count() << " ns\n"
+                << "Publication time (demo): " << header._publishedAt.time_since_epoch().count() << " ns\n"
                 << "User flags: " << header._flags << '\n'
                 << "Decoded Quote: PriceTicks=" << std::get<std::int64_t>(values[0])
                 << " Quantity=" << std::get<std::uint64_t>(values[1]) << '\n';

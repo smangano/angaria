@@ -116,7 +116,7 @@ namespace
     header._publication = primer::value(producer.next_publication_id());
     // Fixed application-chosen timestamps make the walkthrough reproducible.
     // They do not establish native acceptance or delivery times.
-    header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{
+    header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
         static_cast<std::int64_t>(100 + header._publication._sequence)}};
     header._payloadBytes = payload.size();
     primer::value(writer.append(header, payload));

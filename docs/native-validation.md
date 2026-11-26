@@ -2,7 +2,7 @@
 
 Milestone 4, step 4.3, framework version **0.4.3**, validates the core native delivery reader profile. A [Publication](native-transport.md#storage-and-acceptance) retains one message and its destination; its receipt records delivery progress. A Source pin identifies the one delivery currently issued through that Source.
 
-The public Session factories still create format **2.1/`0x3`**. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); step 4.5 adds [reserved progress and claim cleanup](native-progress.md). Public native delivery views remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify the reader before sending can produce them. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
+The public Session factories now create format **2.2/`0x7`** for [direct publication](direct-publication.md) in step 4.6. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); step 4.5 adds [reserved progress and claim cleanup](native-progress.md). Public native delivery views remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify malformed histories and reader boundaries independently of the public sender. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
 
 ## Admission before recovery
 

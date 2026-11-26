@@ -107,8 +107,7 @@ namespace angaria
   struct RegistryMessageDef;
   struct RegistryField;
   class Registry;
-  class Message;
-  class MessageHdr;
+  struct Message;
 
   using TID_t = uint16_t;     // Task ID
   using QID_t = uint16_t;     // Queue ID

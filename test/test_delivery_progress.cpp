@@ -314,8 +314,10 @@ namespace
 
   TEST(DeliveryProgressTest, ValidLegacySessionRejectsProgressWithoutChangingItsBytes)
   {
-    // Only the fixture's temporary parent directory is reused. This separate
-    // Session uses the ordinary public factory, with no edited profile/header.
+    // Only the fixture's temporary parent directory is reused. A pristine
+    // Session with no delivery records is relabeled while every owner is closed
+    // to qualify the predecessor profile. This is private compatibility setup,
+    // never a supported migration or application initialization path.
     DeliveryProgressFixture workspace(0);
     SessionOptions options;
     options._name = "Legacy progress capability boundary";
@@ -324,8 +326,20 @@ namespace
     options._limits = CapacityLimits::empty().tasks(1);
     TaskDescriptor creator;
     creator._name = "Creator";
-    auto created = require_value(Session::create(options, creator));
-    const auto claim = created._creator.claim();
+    {
+      auto created = require_value(Session::create(options, creator));
+    }
+    {
+      auto file = require_value(mapped::NativeFile::open_existing(
+          options._directory / "session.ang", mapped::FileAccess::ReadWrite));
+      const std::array<std::byte, 2> minor{std::byte{1}};
+      const std::array<std::byte, 8> features{std::byte{3}};
+      require_value(file.write_exact(10, minor));
+      require_value(file.write_exact(56, features));
+    }
+    auto session = require_value(Session::attach(options._directory));
+    auto producer = require_value(session.attach_task(TaskId{1}));
+    const auto claim = producer.claim();
     auto state = angaria::test_support::open_runtime_state(options._directory);
     EXPECT_EQ(state->_controller->configuration()._formatMinor, 1u);
     EXPECT_EQ(state->_controller->configuration()._requiredFeatures, 3u);

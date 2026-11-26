@@ -16,8 +16,8 @@ namespace angaria::detail::mapped
   inline constexpr std::uint64_t basic_fields_feature = 2;
   inline constexpr std::uint64_t native_delivery_feature = 4;
   inline constexpr std::uint64_t allow_loss_feature = 8;
-  // Recognition/admission is distinct from the creation default format_minor.
-  // Factories keep creating 2.1 until the delivery mutation prerequisites land.
+  // Public Session factories select this core delivery profile explicitly.
+  // The framing configuration's older default remains useful for legacy readers.
   inline constexpr std::uint16_t delivery_format_minor = 2;
 
   // The superblock is the 4096-byte session control area at offset zero of

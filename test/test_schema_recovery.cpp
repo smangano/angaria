@@ -800,7 +800,9 @@ namespace
         }
         else
         {
-          const std::array<std::byte, 2> minor{std::byte{2}};
+          // Core creation now uses minor 2. Pick an unequivocally unsupported
+          // minor rather than relabeling the Session with a known profile.
+          const std::array<std::byte, 2> minor{std::byte{0xff}, std::byte{0xff}};
           require_value(file.write_exact(10, minor));
         }
       }

@@ -349,13 +349,14 @@ namespace angaria
       }
     }
 
-    PayloadValue read_field(const FieldDescriptor& field, std::span<const std::byte> input,
-                             std::size_t offset, std::size_t index)
+    void validate_wire_field(const FieldDescriptor& field, std::span<const std::byte> input,
+                               std::size_t offset, std::size_t index)
     {
       switch (field._logical._kind)
       {
       case FieldLogicalKind::None:
-        return read_scalar(field._base, input, offset);
+      case FieldLogicalKind::Bits:
+        return;
       case FieldLogicalKind::Boolean:
       {
         const auto byte = std::to_integer<unsigned>(input[offset]);
@@ -363,11 +364,7 @@ namespace angaria
         {
           invalid_value(field, index, "Boolean wire byte must be 00 or 01");
         }
-        return byte == 1;
-      }
-      case FieldLogicalKind::Bits:
-      {
-        return BitFieldValue{read_unsigned_le(input, offset, field._size)};
+        return;
       }
       case FieldLogicalKind::Enumeration:
       {
@@ -376,7 +373,7 @@ namespace angaria
         {
           invalid_value(field, index, "Enum wire number has no registered label");
         }
-        return EnumValue{std::move(number)};
+        return;
       }
       case FieldLogicalKind::FixedAscii:
       {
@@ -387,8 +384,28 @@ namespace angaria
             invalid_value(field, index, "Fixed ASCII wire byte is outside 00..7f");
           }
         }
-        return FixedAsciiValue{std::string{reinterpret_cast<const char*>(input.data() + offset), field._size}};
+        return;
       }
+      }
+      detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unknown logical Field kind");
+    }
+
+    PayloadValue read_field(const FieldDescriptor& field, std::span<const std::byte> input,
+                             std::size_t offset, std::size_t index)
+    {
+      validate_wire_field(field, input, offset, index);
+      switch (field._logical._kind)
+      {
+      case FieldLogicalKind::None:
+        return read_scalar(field._base, input, offset);
+      case FieldLogicalKind::Boolean:
+        return input[offset] == std::byte{1};
+      case FieldLogicalKind::Bits:
+        return BitFieldValue{read_unsigned_le(input, offset, field._size)};
+      case FieldLogicalKind::Enumeration:
+        return EnumValue{read_enum_integer(field._base, input, offset)};
+      case FieldLogicalKind::FixedAscii:
+        return FixedAsciiValue{std::string{reinterpret_cast<const char*>(input.data() + offset), field._size}};
       }
       detail::runtime_fail(ErrorCode::InvalidState, "payload.codec", "Codec contains an unknown logical Field kind");
     }
@@ -623,6 +640,29 @@ namespace angaria
       // storage. No failing later Field can leave an earlier prefix written.
       const auto encoded = detail::runtime_value(encode(values));
       std::copy(encoded.begin(), encoded.end(), output.begin());
+      return std::monostate{};
+    }
+    catch (...)
+    {
+      return payload_error();
+    }
+  }
+
+  OperationResult BinaryPayloadCodec::validate(std::span<const std::byte> payload) const
+  {
+    try
+    {
+      check_valid();
+      if (payload.size() != _payloadSize)
+      {
+        detail::runtime_fail(ErrorCode::InvalidArgument, "payload.size", "Payload byte count must exactly match the schema");
+      }
+      std::size_t offset{};
+      for (std::size_t index = 0; index < _fields.size(); ++index)
+      {
+        validate_wire_field(_fields[index], payload, offset, index);
+        offset += _fields[index]._size;
+      }
       return std::monostate{};
     }
     catch (...)

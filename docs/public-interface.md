@@ -1,6 +1,6 @@
 # Reviewing Angaria's complete public interface
 
-This is a proposal for the application interface through the **1.0.0 roadmap**, including features whose implementation has not started. It is intended for review before more runtime machinery is built. It does not change the behavior or guarantees of the implemented API.
+This is a proposal for the application interface through the **1.0.0 roadmap**, including features whose implementation has not started. It is intended for review before more runtime machinery is built. Step 4.6 now implements the approved direct-send path and shared message model; the status table below separates that subset from later work.
 
 The proposed declarations live in **`angaria::proposed`**, separately from the current `angaria` API:
 
@@ -11,7 +11,7 @@ The proposed declarations live in **`angaria::proposed`**, separately from the c
 
 These are review declarations and compile-only examples. They are not linked applications, runtime substitutes, or new runnable primer lessons. The [programmer primer](primer.md) remains the guide to features users can run today. The [existing API contract](api.md), [roadmap](../ROADMAP.md), and [original Wiki](https://github.com/smangano/angaria/wiki/Angaria) provide the background for this proposal.
 
-The unchanged implemented reference remains available alongside the proposal: [typed identities](../include/angaria/identities.h), [results](../include/angaria/results.h), [configuration/policy descriptors](../include/angaria/descriptors.h), [scalar/logical payload codec](../include/angaria/payload.h), [canonical record codec](../include/angaria/message_record.h), [ordinary capture streams](../include/angaria/capture.h), and [generic inspector](../include/angaria/inspection.h). The review header [api.h](../include/angaria/proposed/api.h) collects the proposed application/schema/log surface; it does not replace those implemented codecs or silently change their representations.
+The implemented reference remains available alongside the proposal: [typed identities](../include/angaria/identities.h), [results](../include/angaria/results.h), [configuration/policy descriptors](../include/angaria/descriptors.h), [scalar/logical payload codec](../include/angaria/payload.h), [canonical record codec](../include/angaria/message_record.h), [ordinary capture streams](../include/angaria/capture.h), and [generic inspector](../include/angaria/inspection.h). The review header [api.h](../include/angaria/proposed/api.h) collects the proposed application/schema/log surface; it does not replace those implemented codecs or silently change their representations.
 
 ## The ordinary application path
 
@@ -41,7 +41,7 @@ remember_request(id, message); // Application persists the ID and input as neede
 auto result = writer.send(id, message);
 ```
 
-Here `api` means `angaria::proposed`, `message` is a prepared `MessageView`, and `value` is the example's error-checking helper. The [complete example](../examples/api_review.cpp) includes schema encoding, all receive alternatives, explicit close, partial retry, uncertainty handling, diagnostics, log inspection, replay, and isolated republishing. This fragment illustrates the proposed call sequence; it cannot be linked or run today.
+Here `api` means `angaria::proposed`, `message` is a prepared `MessageView`, and `value` is the example's error-checking helper. The [complete example](../examples/api_review.cpp) includes schema encoding, all receive alternatives, explicit close, partial retry, uncertainty handling, diagnostics, log inspection, replay, and isolated republishing. The angaria::proposed example remains compile-only. The same direct-send sequence is now runnable in the production angaria namespace; see primer lesson 14 for complete message construction and setup.
 
 TOML is the common configuration format. YAML, JSON, and XML support is through converters into that same validated TOML model. Creating a Session remains distinct from attaching to one: a misspelled attachment path must not create a new, empty communication system.
 
@@ -51,9 +51,9 @@ A producer first obtains a `PublicationId`, then passes that identity and a `Mes
 
 A newly prepared header has an invalid default publication identity. `_publishedAt` is meaningful only when publication metadata is present; epoch zero alone never means absence. Sending uses the explicit request ID and the runtime clock to establish the new authoritative publication header. It reads schema, format, payload byte count, flags, and payload from the input view, without changing that view's header. If a stored message view is reused as new input, its old publication/delivery fields remain inspection data; they do not override the explicit new request identity or create destination metadata for the new publication.
 
-The proposed ordinary overload returns an **owning `PublicationOutcome`** through `Result<PublicationOutcome>`. Owning means that its destination results remain usable after the next operation or after the original output variables leave scope. The existing buffer-taking overload remains the path for callers that want to supply and reuse their own destination storage.
+The ordinary direct-send overload now returns an **owning `PublicationOutcome`** through `Result<PublicationOutcome>`. Owning means that its destination results remain usable after the next operation or after the original output variables leave scope. The existing buffer-taking overload remains the path for callers that want to supply and reuse their own destination storage.
 
-Its `AcceptanceStatus` contains only `Accepted`, `Partial`, or `Rejected`. Uncertainty uses `ErrorCode::OutcomeUnknown` in the outer `Result`, rather than a second unknown-status channel inside an owning result. The existing low-level report keeps its original representation.
+Its `AcceptanceStatus` contains only `Accepted`, `Partial`, or `Rejected`. Uncertainty uses `ErrorCode::OutcomeUnknown` in the outer `Result`, rather than a second unknown-status channel inside an owning result. The low-level report keeps its original representation.
 
 The publication identity stays explicit in both forms. The application can retain it before attempting the operation and use it to resolve an interrupted result. A convenience method must not hide the only identity needed after an uncertain send.
 
@@ -88,7 +88,7 @@ value(inputs.acknowledge(delivery._token));
 
 The ordinary receive path borrows the payload through the Source's in-flight ownership. Applications that need it after acknowledgment explicitly copy the `MessageView` into a `Message`. `copy_message` preserves the **entire header unchanged**, copies the payload, and retains source schema/pool context, so later reclamation cannot invalidate referenced values. `Message::view()` exposes that same header with a borrowed span over the owning payload. Copying a view alone does not extend the payload's lifetime.
 
-`EncodedPayload::view()` also carries decoding context for prepared output. A raw header/span view constructed by an application is suitable for sending but has no inferred Session/catalog binding; its `copy_message` returns `InvalidState` if that binding is absent. Every library-provided delivery, log, encoded-payload, or owning-message view retains the required decoding dependencies while its payload remains borrowed.
+`EncodedPayload::view()` also carries decoding context for prepared output. A raw header/span view constructed by an application is suitable for sending but has no inferred Session/catalog binding; its `copy_message` returns `InvalidState` if that binding is absent. In the proposed interface, library-provided delivery, log, and encoded-payload views carry the required decoding dependencies while their payload remains borrowed. `Message::view()` propagates its owner's existing binding; manually constructing a `Message` does not infer one. Current bound incoming views arrive with receive in step 4.7.
 
 The private retention helper keeps decoding dependencies alive; it neither keeps the delivery in flight nor copies an active acknowledgment token into the owning `Message`. Consumer and delivery fields retained in its header are historical information. The ordinary path avoids copying every payload solely to make its lifetime invisible.
 
@@ -106,7 +106,7 @@ The interface keeps three questions separate:
 | Did only some destinations accept? | Inspect the recorded destination outcomes. Use `PublishingQueueSet::retry` for the still-rejected destinations of that retained publication. Already accepted destinations receive no additional obligation. |
 | Is the result uncertain? | Retain the original `PublicationId` and query `Task::publication_status`. Do not assume that an error means rejection and send a second identity automatically. |
 
-Low-level `PublicationReport` keeps its existing independent `_error` and `_status` fields and borrows caller-provided output storage. Callers check `_error` first. The proposed owning overload should express the same facts without requiring a caller to manage a report's span lifetime.
+Low-level `PublicationReport` keeps its existing independent `_error` and `_status` fields and borrows caller-provided output storage. Callers check `_error` first. The implemented direct-send owning overload expresses the same facts without requiring a caller to manage a report's span lifetime.
 
 Lookup and retry can address a retained publication from an earlier incarnation of the same logical producer. Reclamation can make history unavailable; `HistoryUnavailable` must not be interpreted as proof that a publication was rejected. The API does not hide this distinction behind an automatic retry loop.
 
@@ -118,14 +118,14 @@ The headers are the full declaration reference. This table explains the applicat
 | --- | --- | --- |
 | Identities and results | Distinct Task/Queue/Queue Set/Field IDs, exact schema versions, Session identities, Task claims, publication IDs, delivery tokens, ordinary errors. | Existing public value types. The proposal reuses their meanings. |
 | Configuration | Session options and named capacities; TOML creation/attachment; configuration validation and diagnostics; format converters. | Options and TOML factories implemented. Standalone validation/conversion interfaces are proposed; alternate formats still converge on TOML. |
-| Session lifecycle | Exclusive creation, attachment, metadata/effective options, Task claims, capability/platform information. | Core lifecycle implemented. Name conveniences and a complete capability/diagnostic surface are proposed. |
+| Session lifecycle | Exclusive creation, attachment, metadata/effective options, Task claims, capability/platform information. | Core lifecycle and name conveniences implemented. A complete capability/diagnostic surface remains proposed. |
 | Registry | Register/find/describe definitions, activate topology, adopt drafts, assign Sources, replace Publishing destinations, inspect current/historical snapshots. | Typed Registry behavior largely implemented. The review keeps metadata independent of native storage layout. |
-| Task ownership | Process and Thread roles, parent retention, claim incarnation, publication-ID issuance, endpoint opening. | Claims, issuance, and endpoint identities implemented. Proposed name overloads simplify setup. |
-| Direct Queue output | Send an immutable message with an explicit publication ID; inspect acceptance. | Public declaration exists; native public sending remains to be implemented. Owning outcome convenience is proposed. |
+| Task ownership | Process and Thread roles, parent retention, claim incarnation, publication-ID issuance, endpoint opening. | Claims, issuance, endpoint identities, and name overloads implemented. |
+| Direct Queue output | Send an immutable message with an explicit publication ID; inspect acceptance. | Implemented in step 4.6: owned/buffered send and status, atomic acceptance, exact retries/conflicts, and retained earlier-incarnation lookup. |
 | Publishing Queue Sets | Publish to an ordered snapshot, all-destination/partial acceptance, status lookup, retry rejected destinations. | Public declarations exist; full Publishing behavior follows its roadmap milestone. |
 | Source Queue Sets | Receive, acknowledge/release exact tokens, report gaps/timeouts, close explicitly, preserve borrowed-view lifetime. | Opening/identity implemented; private delivery progress exists. Public delivery and close remain planned. |
 | Policies | Two-plane/segmented storage; strict/fair/weighted-random selection; spin/eventfd waiting; recover-from-log/allowed-loss delivery; all/partial acceptance. | Policy value types exist. Runtime support depends on the implementation milestone and platform; choosing a value does not enable an unsupported policy. |
-| Message construction | Schema-driven values and codecs; owning `Message` and borrowed `MessageView` with the same `MessageHeader`; `Delivery` carries a view and its token; owning/borrowed portable records. | Scalar/basic logical values and binary/record codecs implemented. The consistent proposed message/header model, complete Field families, and serializers remain review declarations. |
+| Message construction | Schema-driven values and codecs; owning `Message` and borrowed `MessageView` with the same `MessageHeader`; `Delivery` carries a view and its token; owning/borrowed portable records. | Scalar/basic logical values, binary/record codecs, and the consistent Message/MessageView/Delivery header model implemented. Bound-copy machinery retains current exact codecs; incoming bound views follow with receive in step 4.7. Complete Field families, pools, and serializers remain proposed. |
 | Complete Fields and pools | Wider bit fields, temporal values, durations, sequence/GUID values, arrays, tuples, repeating groups, constraints, symbols and UTF-8 strings. | Proposed full-roadmap schema/value surface. Pool lifetime, bounds, and portable representation remain explicit. |
 | Generic inspection | Decode messages without application-specific C++ types, retain exact catalogs, render structured/text output. | Existing capture inspector implements bounded text rendering for supported Binary values. Broader structured inspection and formats are proposed. |
 | Runtime diagnostics | Task liveness, Queue sequence/backlog/progress, Source pin/issuance/selection state, Publishing topology, storage use/extents. | Task diagnostics implemented. A coherent public runtime/storage inspection surface is proposed, separate from definition-only Registry snapshots. |

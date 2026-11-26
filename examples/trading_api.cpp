@@ -168,7 +168,10 @@ namespace angaria::examples
                                   std::span<DestinationOutcome> outcomes)
   {
     const auto publication = require_value(market._task.next_publication_id());
-    const MessageView message{market._quote, PayloadFormat::Binary, payload, 0};
+    MessageHeader header;
+    header._schema = market._quote;
+    header._payloadBytes = payload.size();
+    const MessageView message{header, payload};
     auto report = market._updates.publish(publication, message, outcomes);
     if (report._error == ErrorCode::OutcomeUnknown ||
         (report._error == ErrorCode::None && report._status == PublicationStatus::OutcomeUnknown))
@@ -203,12 +206,12 @@ namespace angaria::examples
     return {std::move(risk), std::move(inputs)};
   }
 
-  void process_risk_input(RiskEndpoints& risk, void (*process)(const DeliveryView&),
+  void process_risk_input(RiskEndpoints& risk, void (*process)(const Delivery&),
                           void (*report_gap)(const DeliveryGap&))
   {
     auto& inputs = risk._inputs;
     const auto received = inputs.receive(std::chrono::seconds{1});
-    if (const auto delivery = std::get_if<DeliveryView>(&received))
+    if (const auto delivery = std::get_if<Delivery>(&received))
     {
       process(*delivery);
       require_value(inputs.acknowledge(delivery->_token));
@@ -232,7 +235,7 @@ namespace angaria::examples
     auto inputs =
         require_value(strategy.open_source_set(require_value(registry.find_source_set("StrategyInputs"))));
     const auto received = inputs.receive();
-    if (const auto delivery = std::get_if<DeliveryView>(&received))
+    if (const auto delivery = std::get_if<Delivery>(&received))
     {
       return inputs.release(delivery->_token);
     }
@@ -261,6 +264,9 @@ namespace angaria::examples
   {
     auto writer = require_value(strategy.open_writer(queue));
     const auto publication = require_value(strategy.next_publication_id());
-    return writer.send(publication, MessageView{schema, PayloadFormat::Binary, encoded, 0}, {&outcome, 1});
+    MessageHeader header;
+    header._schema = schema;
+    header._payloadBytes = encoded.size();
+    return writer.send(publication, MessageView{header, encoded}, {&outcome, 1});
   }
 } // namespace angaria::examples

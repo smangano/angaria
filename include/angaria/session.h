@@ -37,7 +37,9 @@ namespace angaria
     std::uint64_t _pid;
   };
 
-  struct Delivery
+  // The legacy v0 integer-reading demo predates the native Message/Delivery
+  // model. Keep its value type distinct when both APIs are included together.
+  struct LegacyDelivery
   {
     std::uint64_t _sequence;
     std::int64_t _timestampNs;
@@ -70,13 +72,13 @@ namespace angaria
     Consumer& operator=(const Consumer&) = delete;
 
     RoleIdentity identity() const;
-    std::optional<Delivery> receive_reading(std::chrono::milliseconds timeout = std::chrono::milliseconds{0});
+    std::optional<LegacyDelivery> receive_reading(std::chrono::milliseconds timeout = std::chrono::milliseconds{0});
     void acknowledge(std::uint64_t sequence);
 
   private:
     std::filesystem::path _session;
     std::unique_ptr<detail::RoleLock> _role;
-    std::optional<Delivery> _inFlight;
+    std::optional<LegacyDelivery> _inFlight;
     std::uint64_t _inFlightOffset{};
   };
 

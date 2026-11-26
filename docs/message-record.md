@@ -6,20 +6,20 @@ These operations work in application memory. They do not send, publish, admit a 
 
 ## Header meaning and identity
 
-`MessageHeader` owns the following process-local values. Its C++ layout is not the byte format.
+`MessageHeader`, shared by `Message` and `MessageView` in [angaria/message.h](../include/angaria/message.h), owns process-local metadata. Encoding version 1 stores the publication values below. Its C++ layout is not the byte format.
 
 | Member | Meaning |
 | --- | --- |
 | `_schema` | Exact nonzero message type and schema version. There is no newest-version substitution. |
 | `_format` | A known `PayloadFormat`: Binary, Json, Xml, Csv, or Text. |
 | `_publication` | Full `PublicationId`: Session identity, producer Task, producer incarnation, and producer-local sequence. |
-| `_publicationTime` | Initial publication/enqueue UTC time, as signed nanoseconds since the Unix epoch. The caller supplies it to this codec. |
+| `_publishedAt` | Initial publication UTC time, as signed nanoseconds since the Unix epoch. The caller supplies it to this codec. |
 | `_flags` | All 32 application flag bits, uninterpreted by the codec. |
 | `_payloadBytes` | Exact application payload byte count, excluding the fixed header. |
 
-Message type, version, producer Task, incarnation, and sequence must be nonzero. The 128-bit Session identity must not be all zero; either half may individually be zero. All signed 64-bit UTC values, including epoch zero and negative times, are valid, as are all uint32 flag values.
+For a portable record, message type, version, producer Task, incarnation, and sequence must be nonzero. The 128-bit Session identity must not be all zero; either half may individually be zero. All signed 64-bit UTC values, including epoch zero and negative times, are valid, as are all uint32 flag values.
 
-An initial publication time is distinct from each destination's acceptance/enqueue time: a later partial retry can accept another destination later. `DeliveryView::_enqueuedAt` remains destination-specific. Dequeue, acknowledgment, release, and loss metadata belong to the destination [receipts](mapped-format.md#rings-publications-and-receipts), outside this immutable header. Future native publication operations establish their authoritative times under their own acceptance contract; serializing a caller-supplied timestamp does not establish those events.
+An initial publication time is distinct from each destination's acceptance/enqueue time: a later partial retry can accept another destination later. `MessageHeader::_enqueuedAt` remains destination-specific. Native destination progress belongs to the [receipts](mapped-format.md#rings-publications-and-receipts). The logical MessageHeader also has optional destination fields for inspection/copying; encoding version 1 cannot represent those fields and rejects a header containing any of them with UnsupportedPolicy. Explicitly select publication-only metadata when exporting to this older record format. Native send establishes its authoritative times under its own acceptance contract; serializing a caller-supplied timestamp does not establish those events.
 
 ## Encoding version 1
 
@@ -80,20 +80,20 @@ Neither this explicit context nor `from_snapshot` authenticates a caller-provide
 
 `MessageRecordView` owns its header and borrows only the payload bytes. Keep the encoded input alive and unchanged while reading the view. Moving, replacing, or destroying that backing storage can invalidate its span. `decode` produces an independent owning copy instead.
 
-`MessageRecord::view()` borrows its owning vector and copies its header; the record must outlive that view. Calling it on a temporary is disabled. `MessageRecordView::message()` returns the existing `MessageView` containing only schema, format, payload, and flags. Its payload remains borrowed. That adapter does not carry receipt state or establish a send; delivery APIs remain later work.
+`MessageRecord::view()` borrows its owning vector and copies its header; the record must outlive that view. Calling it on a temporary is disabled. `MessageRecordView::message()` returns a MessageView preserving the complete header by value. Its payload remains borrowed. It is an unbound adapter: no decoding catalog is inferred, and copy_message returns InvalidState without bound context. The adapter does not establish a send or a delivery obligation.
 
 ## Relationship to native Session storage
 
 This portable record is distinct from the native [64-byte arena record envelope](mapped-format.md#arena-records-and-definitions) and [128-byte Publication body](mapped-format.md#rings-publications-and-receipts). Those structures include native storage references, routing snapshots, and receipts. A portable message header contains no offsets into a Session and no destination state.
 
-Native formats **2.0 and 2.1, their feature masks, ABI/protocol versions, and Publication layout are unchanged by step 3.4**. Future native storage maps the same logical header values from the Publication body plus its Session identity. Export can reconstruct this self-contained record. The Publication's payload `ByteSlice` continues to point to application payload bytes alone; it must not nest this portable header inside the schema payload. Native storage/export implementation remains with its roadmap steps.
+Step 3.4 left native formats **2.0 and 2.1, their feature masks, ABI/protocol versions, and Publication layout unchanged**. Step 4.6 now stores native Publications in core format 2.2, representing the same logical header values through Publication fields plus Session context. Future native export can reconstruct this self-contained record. The Publication's payload `ByteSlice` continues to point to application payload bytes alone; it must not nest this portable header inside the schema payload. Native export remains with its milestone-10 tooling steps.
 
 ## Errors and qualification
 
 | Result | Meaning |
 | --- | --- |
 | `InvalidArgument` | Bad magic, wrong fixed header size, nonzero reserved bytes, unknown payload format, invalid identity/schema, declared-length overflow, incomplete/extra bytes, mismatched supplied payload/output sizes, or a zero expected schema Session. |
-| `UnsupportedPolicy` | Unsupported record encoding version, or asking the binary helper to interpret another known payload format. |
+| `UnsupportedPolicy` | Unsupported record encoding version, delivery metadata absent from encoding 1, or asking the binary helper to interpret another known payload format. |
 | `CapacityExceeded` | Declared header-plus-payload size exceeds the explicit/native bound, or process memory is insufficient. |
 | `SchemaConflict` | The binary helper's expected Session or exact schema differs from the record. |
 | `InvalidState` | The supplied payload codec has been moved from. |
