@@ -134,6 +134,14 @@ if(BUILD_TESTING)
   target_include_directories(angaria_native_loss_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_loss_worker PRIVATE angaria)
 
+  add_executable(angaria_native_transport_worker test/native_transport_worker.cpp)
+  target_include_directories(angaria_native_transport_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_transport_worker PRIVATE angaria)
+
+  add_executable(angaria_native_transport_io_worker test/native_transport_io_worker.cpp)
+  target_include_directories(angaria_native_transport_io_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_native_transport_io_worker PRIVATE angaria)
+
   add_executable(angaria_native_registration_worker test/native_registration_worker.cpp)
   target_include_directories(angaria_native_registration_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_registration_worker PRIVATE angaria)
@@ -178,6 +186,9 @@ if(BUILD_TESTING)
     test/test_loss_configuration.cpp
     test/test_loss_redo.cpp
     test/test_loss_recovery.cpp
+    test/test_transport_recovery.cpp
+    test/test_transport_exhaustion.cpp
+    test/test_transport_io.cpp
     test/test_mapped_payload.cpp
     test/test_payload_rollback.cpp
     test/test_delivery_state.cpp
@@ -234,6 +245,8 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_PUBLICATION_WORKER="$<TARGET_FILE:angaria_native_publication_worker>"
     ANGARIA_NATIVE_SOURCE_WORKER="$<TARGET_FILE:angaria_native_source_worker>"
     ANGARIA_NATIVE_LOSS_WORKER="$<TARGET_FILE:angaria_native_loss_worker>"
+    ANGARIA_NATIVE_TRANSPORT_WORKER="$<TARGET_FILE:angaria_native_transport_worker>"
+    ANGARIA_NATIVE_TRANSPORT_IO_WORKER="$<TARGET_FILE:angaria_native_transport_io_worker>"
     ANGARIA_NATIVE_REGISTRATION_WORKER="$<TARGET_FILE:angaria_native_registration_worker>"
     ANGARIA_NATIVE_SCHEMA_WORKER="$<TARGET_FILE:angaria_native_schema_worker>"
     ANGARIA_NATIVE_TOPOLOGY_WORKER="$<TARGET_FILE:angaria_native_topology_worker>"
@@ -244,6 +257,7 @@ if(BUILD_TESTING)
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
   add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_delivery_progress_worker angaria_native_publication_worker angaria_native_source_worker angaria_native_loss_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
+  add_dependencies(angaria_tests angaria_native_transport_worker angaria_native_transport_io_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 10)

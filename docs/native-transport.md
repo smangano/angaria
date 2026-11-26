@@ -14,6 +14,8 @@ Recover-from-log delivery follows retained links when a ring entry has been over
 
 ## Native compatibility and required capabilities
 
+Step 4.9, framework **0.4.11**, adds [combined failure and exhaustion qualification](native-qualification.md) for this implemented path. It leaves the native format, public API, and synchronization protocol unchanged; the matrix distinguishes real process/OS failures, private fault checkpoints, and counter-boundary fixtures.
+
 A **required capability** is a bit in the immutable superblock required-feature mask. A live binary must understand every required bit before it acquires a usable controller or performs journal recovery. It is distinct from a framework version string and from the Session definition's policy metadata, which is read later.
 
 The native profiles are:

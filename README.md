@@ -129,6 +129,8 @@ Step **4.7**, framework **`0.4.9`**, implements [basic Source delivery](docs/nat
 
 Step **4.8**, framework **`0.4.10`**, enables configured `AllowLoss` delivery in both public descriptors and TOML. An idle consumer can skip stale pending messages outside the ring window and receive a `DeliveryGap`; an in-flight message stays protected. Recovery from the log remains the default. New Sessions select format **2.2/`0xf`**, while existing core Sessions remain usable without an in-place upgrade. [Lesson 16](examples/primer/16_allowed_loss.cpp) demonstrates the policy, gaps, and protected borrowing. Loss changes delivery obligations; it does not free physical log space.
 
+Step **4.9**, framework **`0.4.11`**, adds [combined failure and exhaustion qualification](docs/native-qualification.md): independent producer/consumer death, repeated recovery, wrapped rings, full logs, final counter values, and actual OS refusal to grow the file. The primer explains [interrupted operations and safe recovery](docs/primer.md#when-an-operation-is-interrupted). The native multi-process primer application follows in step 4.10.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

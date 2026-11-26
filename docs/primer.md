@@ -1,6 +1,6 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The sixteen lessons here use implemented APIs, including configured allowed loss in framework **0.4.10**, milestone 4 step 4.8.
+The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The sixteen lessons here use implemented APIs, including configured allowed loss from step 4.8. Framework **0.4.11**, step 4.9, adds [combined failure and exhaustion qualification](native-qualification.md) and the failure-handling guidance below.
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
@@ -962,10 +962,27 @@ The log stores persistent definitions and updates. Registry entries can fit with
 | `OwnershipBusy` | Another live claim owns this Task, or this claim already has the Source open. Close the relevant owners before retrying. |
 | `Conflict` | A name or identity is already registered with a different definition, or a publication ID was reused for different content. Inspect it; repeating the changed registration will not edit it. |
 | `SchemaConflict` | An immutable message schema disagrees with the requested definition. Register an appropriate new version. |
-| `CapacityExceeded` | A reserved entity or membership count is exhausted. Review the bounds for a new Session. |
+| `CapacityExceeded` | A reserved entity/membership count or a sequence/operation counter is exhausted. Use the error path/message to distinguish them. |
 | `LogFull` | The bounded log cannot hold the required append. Count capacity alone is insufficient. |
+| `IoError` | A native file operation or stored-state check failed. Inspect its path and message; an OS growth limit can fail even when the Session's byte budget has room. |
+| `OutcomeUnknown` | The caller could not establish the operation's final outcome. Keep the original publication identity or delivery-cleanup context and resolve recovery before deciding what to do next. |
+| `StaleDelivery` | A token no longer names the current borrow. An older token cannot acknowledge a new issuance or a replacement consumer's message. |
 
 Exact registration retries are useful because they preserve the existing definition without appending another copy. In contrast, repeated topology edits can consume log space. Claims and incarnation replacement use reserved state, allowing Task replacement even when append space is exhausted.
+
+### When an operation is interrupted
+
+A process can stop after Angaria commits a change but before the application sees its result. **Recovery** finishes or rolls back that interrupted operation before another participant starts new work. A failed call therefore needs more care than allocating another identity and trying again.
+
+For sending, save the `PublicationId` returned by `next_publication_id()` before calling `send`. If send returns `OutcomeUnknown`, look up that same ID with `Task::publication_status`. An Accepted result means the original message is already recorded; sending another ID would create another publication. A proven absent result lets the application decide whether to retry. An unchanged repeat under the still-current producer claim uses the original ID. A replacement producer can inspect older incarnations but must use its own current claim for new sending. If lookup itself fails, retain the ID and the error for later resolution. Lessons 14 and 16 show the public Result/Error checks for this path.
+
+For receiving, keep the `DeliveryToken` for the current borrow and acknowledge after processing completes. If a consumer dies after doing its application work but before acknowledgment commits, recovery delivery can offer that message again. Applications that must avoid repeating an external side effect need their own record of completed work, often keyed by the original publication identity. Angaria's recorded acceptance and acknowledgment are separate from a database write or another application action.
+
+After an uncertain acknowledgment or release, stop reading the earlier borrowed payload. Settle the Source through receive or explicit close/retry before borrowing again. Do not use an old token to finish a replacement's issuance. If independent storage is needed, copy the Message while its view is still valid, as lesson 15 demonstrates.
+
+`LogFull` stops a fresh append; it does not stop reserved acknowledgment, release, loss, or claim replacement. Those operations can still fail for I/O or counter exhaustion. In particular, the Session-wide operation generation must have room even for a mutation that appends no bytes. Consumer replacement can reset its Source issuance context; it does not reset the Session's operation generation or free log bytes.
+
+The [qualification guide](native-qualification.md) shows how tests combine ring wrap, producer/consumer death, repeated recovery, full logs, final counter values, and an actual OS refusal to grow the file. Its private crash hooks and boundary edits are test techniques. Continue using the public setup and error handling shown by the runnable lessons.
 
 ## How this guide will grow
 

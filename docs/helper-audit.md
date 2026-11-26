@@ -46,6 +46,7 @@ Test support remains separate from production encoding so expected bytes cannot 
 | [source_fixture.h](../test/source_fixture.h), [native_log_budget.h](../test/native_log_budget.h) | Public Source setup shared by delivery/lifecycle/deadline tests, plus a separately labeled private exact-log-budget fixture reused by public and private progress qualification. |
 | [native_fixture.h](../test/native_fixture.h) | Private native observation, snapshots, claim-name capture, and deliberate atomic corruption setup. |
 | [process_support.h](../test/process_support.h) | Test pipe reports, continuation, bounded reads/waits, SIGPIPE handling, and status/descriptor mechanics. Worker ownership stays in the fixture. |
+| [native_process.h](../test/native_process.h) | RAII ownership of a separately executed qualification worker and its bidirectional pipes. Reuses bounded process-support reads/waits and SIGPIPE handling; scenario protocols remain in each test/worker. |
 
 The runnable primer intentionally spells out public configuration and result checks in each lesson. Its former generic result/configuration wrappers and shared presentation header have been removed. Application-specific functions may propagate an `Error` through `Result<T>` or `OperationResult`; output-only formatting uses the standard library locally. This keeps each teaching program self-contained without depending on Angaria's private helpers.
 
