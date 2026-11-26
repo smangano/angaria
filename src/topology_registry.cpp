@@ -1,4 +1,6 @@
 #include "topology_append.h"
+
+#include "registry_access.h"
 #include "topology_policy.h"
 
 #include <algorithm>
@@ -99,7 +101,7 @@ namespace angaria::detail
   {
     try
     {
-      check_actor(session, actor);
+      check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_source_set_descriptor(descriptor));
@@ -158,7 +160,7 @@ namespace angaria::detail
   {
     try
     {
-      check_actor(session, actor);
+      check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_queue_descriptor(descriptor));
@@ -268,7 +270,7 @@ namespace angaria::detail
   {
     try
     {
-      check_actor(session, actor);
+      check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_publishing_set_descriptor(descriptor));

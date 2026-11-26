@@ -1,5 +1,8 @@
 #include "angaria/inspection.h"
 
+#include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/error_support.h"
+#include "angaria/detail/text_escaping.h"
 #include "angaria/runtime.h"
 #include "schema_metadata.h"
 
@@ -38,16 +41,6 @@ namespace angaria
       throw InspectionFailure{Error{code, message, path}};
     }
 
-    template <typename T>
-    T take(Result<T> result)
-    {
-      if (auto* error = std::get_if<Error>(&result))
-      {
-        throw InspectionFailure{std::move(*error)};
-      }
-      return std::get<T>(std::move(result));
-    }
-
     Error caught_error()
     {
       try
@@ -74,20 +67,22 @@ namespace angaria
 
     std::uint64_t add_bytes(std::uint64_t left, std::uint64_t right)
     {
-      if (right > std::numeric_limits<std::uint64_t>::max() - left)
+      const auto total = detail::checked_add(left, right);
+      if (!total)
       {
         fail(ErrorCode::CapacityExceeded, "inspection.catalog", "Catalog byte count overflows");
       }
-      return left + right;
+      return *total;
     }
 
     std::uint64_t multiply_bytes(std::uint64_t count, std::uint64_t width)
     {
-      if (count > std::numeric_limits<std::uint64_t>::max() / width)
+      const auto total = detail::checked_multiply(count, width);
+      if (!total)
       {
         fail(ErrorCode::CapacityExceeded, "inspection.catalog", "Catalog array byte count overflows");
       }
-      return count * width;
+      return *total;
     }
 
     // This pass borrows the caller's strings/lists. It bounds subsequent deep
@@ -150,7 +145,7 @@ namespace angaria
       for (const auto& entry : snapshot._fields)
       {
         const auto& field = entry._descriptor;
-        take(detail::mapped::validate_field_descriptor(field));
+        detail::value_or_throw<InspectionFailure>(detail::mapped::validate_field_descriptor(field));
         if (!fields.emplace(field._id, &field).second || !fieldNames.insert(field._name).second)
         {
           fail(ErrorCode::InvalidArgument, "inspection.catalog.fields", "Field IDs and names must uniquely identify definitions");
@@ -162,7 +157,7 @@ namespace angaria
       for (const auto& entry : snapshot._messages)
       {
         const auto& message = entry._descriptor;
-        take(detail::mapped::validate_message_descriptor(message));
+        detail::value_or_throw<InspectionFailure>(detail::mapped::validate_message_descriptor(message));
         const auto [type, newType] = typeNames.emplace(message._schema._type, message._name);
         const auto [name, newName] = nameTypes.emplace(message._name, message._schema._type);
         if (!identities.emplace(message._schema._type, message._schema._version).second ||
@@ -211,11 +206,10 @@ namespace angaria
 
       void hex(std::uint64_t value, std::size_t digits)
       {
-        constexpr std::string_view alphabet = "0123456789abcdef";
         std::array<char, 16> bytes{};
         for (std::size_t index = 0; index < digits; ++index)
         {
-          bytes[digits - index - 1] = alphabet[(value >> (4 * index)) & 15];
+          bytes[digits - index - 1] = detail::hex_digit(static_cast<unsigned>((value >> (4 * index)) & 15));
         }
         append(std::string_view{bytes.data(), digits});
       }
@@ -225,22 +219,8 @@ namespace angaria
         append("\"");
         for (const auto raw : value)
         {
-          const auto byte = static_cast<unsigned char>(raw);
-          if (byte == '"' || byte == '\\')
-          {
-            const std::array<char, 2> escaped{'\\', static_cast<char>(byte)};
-            append(std::string_view{escaped.data(), escaped.size()});
-          }
-          else if (byte >= 0x20 && byte <= 0x7e)
-          {
-            const char character = static_cast<char>(byte);
-            append(std::string_view{&character, 1});
-          }
-          else
-          {
-            append("\\x");
-            hex(byte, 2);
-          }
+          const auto escaped = detail::escape_ascii_byte(static_cast<unsigned char>(raw), true);
+          append(std::string_view{escaped._bytes.data(), escaped._size});
         }
         append("\"");
       }
@@ -500,7 +480,7 @@ namespace angaria
       {
         fail(ErrorCode::InvalidState, "inspection.session", "Inspector needs a live Session handle");
       }
-      const auto catalog = take(session.registry().snapshot());
+      const auto catalog = detail::value_or_throw<InspectionFailure>(session.registry().snapshot());
       return from_snapshot(identity, catalog, limits);
     }
     catch (...)
@@ -527,7 +507,7 @@ namespace angaria
       catalog._fields.reserve(snapshot._fields.size());
       for (const auto& field : snapshot._fields)
       {
-        catalog._fields.push_back({take(detail::mapped::canonicalize_field_descriptor(field._descriptor)),
+        catalog._fields.push_back({detail::value_or_throw<InspectionFailure>(detail::mapped::canonicalize_field_descriptor(field._descriptor)),
                                     field._registration});
       }
       catalog._messages = snapshot._messages;
@@ -547,7 +527,7 @@ namespace angaria
       {
         fail(ErrorCode::InvalidState, "inspection.state", "Inspector has been moved from");
       }
-      return inspect(take(MessageRecordCodec::decode_view(record, _limits._maxRecordBytes)));
+      return inspect(detail::value_or_throw<InspectionFailure>(MessageRecordCodec::decode_view(record, _limits._maxRecordBytes)));
     }
     catch (...)
     {
@@ -563,7 +543,7 @@ namespace angaria
       {
         fail(ErrorCode::InvalidState, "inspection.state", "Inspector has been moved from");
       }
-      take(MessageRecordCodec::encode_header(record._header, _limits._maxRecordBytes));
+      detail::value_or_throw<InspectionFailure>(MessageRecordCodec::encode_header(record._header, _limits._maxRecordBytes));
       if (record._header._payloadBytes != record._payload.size())
       {
         fail(ErrorCode::InvalidArgument, "message_record.payload_size", "Declared payload length differs from the supplied view");
@@ -603,9 +583,9 @@ namespace angaria
           fail(ErrorCode::CapacityExceeded, "inspection.layout", "Expanded Field layout exceeds the catalog byte budget");
         }
       }
-      const auto codec = take(BinaryPayloadCodec::from_snapshot(
+      const auto codec = detail::value_or_throw<InspectionFailure>(BinaryPayloadCodec::from_snapshot(
           _catalog, selected->_schema, _limits._maxRecordBytes - MessageRecordCodec::header_bytes));
-      const auto values = take(MessageRecordCodec::decode_binary(record, codec, _session));
+      const auto values = detail::value_or_throw<InspectionFailure>(MessageRecordCodec::decode_binary(record, codec, _session));
       return render_message(record, *selected, codec, values, _limits._maxTextBytes);
     }
     catch (...)

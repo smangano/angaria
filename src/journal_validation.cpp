@@ -1,5 +1,7 @@
 #include "journal_validation.h"
 
+#include "angaria/detail/byte_operations.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -22,16 +24,6 @@ namespace angaria::detail::mapped
     ErrorCode unsupported_code(ErrorCode code)
     {
       return code == ErrorCode::InvalidArgument ? ErrorCode::UnsupportedPolicy : code;
-    }
-
-    std::uint64_t read_word(std::span<const std::byte> bytes, std::size_t offset)
-    {
-      std::uint64_t value{};
-      for (std::size_t index = 0; index < 8; ++index)
-      {
-        value |= std::uint64_t{std::to_integer<std::uint8_t>(bytes[offset + index])} << (index * 8);
-      }
-      return value;
     }
 
     struct WordAccess
@@ -183,8 +175,8 @@ namespace angaria::detail::mapped
     }
     else if (envelope._kind == 9)
     {
-      const auto receiptBegin = read_word(immutableBody, 96);
-      const auto receiptCount = read_word(immutableBody, 104);
+      const auto receiptBegin = read_unsigned_le<std::uint64_t>(immutableBody, 96);
+      const auto receiptCount = read_unsigned_le<std::uint64_t>(immutableBody, 104);
       const auto receiptBytes = checked_multiply(receiptCount, 128);
       const auto mutableBegin = offset + record_envelope_bytes + envelope._immutableBytes;
       if (receiptBegin != mutableBegin || receiptCount == 0 || !receiptBytes ||
@@ -235,7 +227,7 @@ namespace angaria::detail::mapped
         {
           return target_error(errorCode, "WriteRange target is not a declared mutable word");
         }
-        if (access._reservedUpperHalf && (read_word(command._payload, index) >> 32) != 0)
+        if (access._reservedUpperHalf && (read_unsigned_le<std::uint64_t>(command._payload, index) >> 32) != 0)
         {
           return target_error(errorCode, "WriteRange sets reserved bits in a packed state word");
         }

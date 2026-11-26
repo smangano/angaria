@@ -9,6 +9,13 @@
 
 Boost and Intel TBB are permitted dependencies when warranted by the implementation.
 
+## Shared helpers
+
+- Reuse the focused helper headers listed in `docs/helper-audit.md` before adding a local utility. Keep related helpers together; avoid a general-purpose catch-all header.
+- Pure byte operations, arithmetic, identity checks, wire-code mappings, and result unwrapping belong in their shared inline/constexpr headers. Keep operation-specific limits, diagnostics, and ownership/recovery policy with the operation.
+- Ordinary byte helpers operate on local copies. Live mapped synchronization words still require the native atomic adapter.
+- Test plumbing may share test-only headers. Keep golden-byte construction independent of production encoders, with expected fields/codes/values explicit in each scenario.
+
 ## Documentation
 
 - Define specialized and project-specific terms at first use, or link to their canonical definition.

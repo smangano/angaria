@@ -3,6 +3,8 @@
 // hooks so the parent can stop at a real resource, journal, or recovery boundary.
 // Stdout carries one-byte markers followed by native u64 values on this same host.
 
+#include "result_helpers.h"
+#include "process_support.h"
 #include "angaria/runtime.h"
 #include "topology_state.h"
 
@@ -29,97 +31,11 @@ namespace
   namespace runtime = angaria::detail;
   namespace mapped = angaria::detail::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
-
-  void report(const void* data, std::size_t length)
-  {
-    const auto* bytes = static_cast<const char*>(data);
-    while (length != 0)
-    {
-      const auto count = ::write(STDOUT_FILENO, bytes, length);
-      if (count > 0)
-      {
-        bytes += count;
-        length -= static_cast<std::size_t>(count);
-      }
-      else if (count != -1 || errno != EINTR)
-      {
-        throw std::runtime_error("registration worker report failed");
-      }
-    }
-  }
-
-  void report(char value)
-  {
-    report(&value, 1);
-  }
-
-  void report(std::uint64_t value)
-  {
-    report(&value, sizeof(value));
-  }
-
-  template <typename T>
-  std::uint64_t identity(T id)
-  {
-    return static_cast<std::uint64_t>(id);
-  }
-
-  template <typename T>
-  void report_result(const Result<T>& result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      report('E');
-      report(static_cast<std::uint64_t>(error->_code));
-    }
-    else
-    {
-      report('A');
-      report(identity(std::get<T>(result)));
-    }
-  }
-
-  void wait_for_parent()
-  {
-    pollfd event{STDIN_FILENO, POLLIN, 0};
-    int ready;
-    do
-    {
-      ready = ::poll(&event, 1, 5000);
-    } while (ready == -1 && errno == EINTR);
-    if (ready <= 0)
-    {
-      throw std::runtime_error("registration worker continuation deadline expired");
-    }
-    char value{};
-    ssize_t count;
-    do
-    {
-      count = ::read(STDIN_FILENO, &value, 1);
-    } while (count == -1 && errno == EINTR);
-    if (count == -1)
-    {
-      throw std::runtime_error("registration worker continuation failed");
-    }
-  }
-
-  [[noreturn]] void stop_for_kill()
-  {
-    report('R');
-    for (;;)
-    {
-      ::pause();
-    }
-  }
+  using angaria::test_support::require_value;
+  using angaria::test_support::report;
+  using angaria::test_support::report_result;
+  using angaria::test_support::wait_for_parent;
+  using angaria::test_support::stop_for_kill;
 
   class StopAt : public mapped::JournalFaultInjector
   {
@@ -240,7 +156,7 @@ int main(int argc, char** argv)
         {
           throw std::runtime_error("independent Source inspection disagrees");
         }
-        id = identity(found);
+        id = angaria::test_support::reported_identity(found);
         count = require_value(registry.source_members(found)).size();
         metadata = require_value(registry.metadata(found));
       }
@@ -257,7 +173,7 @@ int main(int argc, char** argv)
         {
           throw std::runtime_error("independent Queue/membership inspection disagrees");
         }
-        id = identity(found);
+        id = angaria::test_support::reported_identity(found);
         count = members.size();
         metadata = require_value(registry.metadata(found));
       }
@@ -271,7 +187,7 @@ int main(int argc, char** argv)
         {
           throw std::runtime_error("independent Publishing inspection disagrees");
         }
-        id = identity(found);
+        id = angaria::test_support::reported_identity(found);
         count = descriptor._destinations.size();
         metadata = require_value(registry.metadata(found));
       }

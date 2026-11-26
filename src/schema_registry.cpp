@@ -1,5 +1,8 @@
 #include "runtime_state.h"
 
+#include "angaria/detail/identity_helpers.h"
+#include "angaria/detail/record_layout.h"
+#include "registry_access.h"
 #include "schema_metadata.h"
 
 #include <algorithm>
@@ -20,23 +23,6 @@ namespace angaria::detail
 {
   namespace
   {
-    void check_registry_actor(const std::shared_ptr<SessionState>& session,
-                               const std::shared_ptr<TaskState>& actor)
-    {
-      if (!session || !session->_controller)
-      {
-        runtime_fail(ErrorCode::InvalidState, "session", "Registry has no live Session state");
-      }
-      // Check inherited native ownership before entering any process-local
-      // mutex, including for Session views that cannot mutate the Registry.
-      runtime_value(session->_controller->check_owner());
-      if (!actor)
-      {
-        runtime_fail(ErrorCode::ReadOnlyRegistry, "registry", "Registration requires an actor-bound Registry");
-      }
-      runtime_check_task_owner(actor);
-    }
-
     bool same_descriptor(const FieldDescriptor& left, const FieldDescriptor& right)
     {
       if (left._id != right._id || left._name != right._name || left._base != right._base ||
@@ -87,11 +73,8 @@ namespace angaria::detail
 
     std::uint64_t record_bytes(std::uint64_t bodyBytes)
     {
-      const auto alignedBody = mapped::checked_align(bodyBytes, mapped::record_alignment);
-      const auto required = alignedBody ? mapped::checked_add(mapped::record_envelope_bytes, *alignedBody) :
-                                         std::nullopt;
-      const auto total = required ? mapped::checked_align(*required, mapped::section_alignment) : std::nullopt;
-      if (!total || *total > mapped::max_log_bytes)
+      const auto total = mapped::record_storage_bytes(bodyBytes);
+      if (!total)
       {
         runtime_fail(ErrorCode::LogFull, "registry.definition", "Definition allocation exceeds format byte bounds");
       }
@@ -175,11 +158,6 @@ namespace angaria::detail
       return RegistrationMetadata{plan._actor,
           UtcTimestamp{std::chrono::nanoseconds{runtime_now_ns()}}, plan._newRevision};
     }
-
-    std::uint64_t schema_key(SchemaId schema)
-    {
-      return (std::uint64_t{static_cast<std::uint16_t>(schema._type)} << 32) | schema._version;
-    }
   } // namespace
 
   Result<FieldId> runtime_register_field(std::shared_ptr<SessionState> session,
@@ -189,7 +167,7 @@ namespace angaria::detail
   {
     try
     {
-      check_registry_actor(session, actor);
+      check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_field_descriptor(descriptor));
@@ -237,7 +215,7 @@ namespace angaria::detail
   {
     try
     {
-      check_registry_actor(session, actor);
+      check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_message_descriptor(descriptor));

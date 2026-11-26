@@ -3,6 +3,7 @@
 // would clear intent, and Committed would apply its word before clearing intent.
 // Unsupported immutable profiles must reject before either action can happen.
 
+#include "result_helpers.h"
 #include "angaria/runtime.h"
 #include "mutation_journal.h"
 #include "native_atomic.h"
@@ -29,15 +30,7 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   void put_integer(std::span<std::byte> bytes, std::size_t offset,
                    std::uint64_t value, std::size_t width = 8)

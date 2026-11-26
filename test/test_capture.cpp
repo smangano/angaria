@@ -1,6 +1,7 @@
 // These examples use ordinary memory streams and independent canonical bytes.
 // A capture records application bytes; it is not a native journal, publication,
 // delivery acknowledgment, or promise of an atomic/durable file append.
+#include "result_helpers.h"
 #include "angaria/capture.h"
 
 #include <gtest/gtest.h>
@@ -33,15 +34,7 @@ namespace
   static_assert(std::is_nothrow_move_constructible_v<MessageCaptureWriter>);
   static_assert(std::is_nothrow_move_constructible_v<MessageCaptureReader>);
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   template <typename T>
   void expect_error(const Result<T>& result, ErrorCode code, std::string_view path = {})

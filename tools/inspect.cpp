@@ -1,4 +1,6 @@
 #include "angaria/capture.h"
+#include "angaria/detail/error_support.h"
+#include "angaria/detail/text_escaping.h"
 #include "angaria/inspection.h"
 #include "angaria/runtime.h"
 
@@ -22,87 +24,14 @@
 namespace
 {
   using namespace angaria;
+  using angaria::detail::error_name;
 
   struct ToolFailure
   {
     Error _error;
   };
 
-  template <typename T>
-  T value(Result<T> result)
-  {
-    if (auto* error = std::get_if<Error>(&result))
-    {
-      throw ToolFailure{std::move(*error)};
-    }
-    return std::get<T>(std::move(result));
-  }
-
-  const char* error_name(ErrorCode code)
-  {
-    switch (code)
-    {
-    case ErrorCode::None: return "None";
-    case ErrorCode::InvalidArgument: return "InvalidArgument";
-    case ErrorCode::InvalidState: return "InvalidState";
-    case ErrorCode::InvalidConfiguration: return "InvalidConfiguration";
-    case ErrorCode::ConfigurationMismatch: return "ConfigurationMismatch";
-    case ErrorCode::NotFound: return "NotFound";
-    case ErrorCode::Conflict: return "Conflict";
-    case ErrorCode::CapacityExceeded: return "CapacityExceeded";
-    case ErrorCode::OwnershipBusy: return "OwnershipBusy";
-    case ErrorCode::WrongOwner: return "WrongOwner";
-    case ErrorCode::ReadOnlyRegistry: return "ReadOnlyRegistry";
-    case ErrorCode::NotActive: return "NotActive";
-    case ErrorCode::UnsupportedPolicy: return "UnsupportedPolicy";
-    case ErrorCode::SchemaConflict: return "SchemaConflict";
-    case ErrorCode::LogFull: return "LogFull";
-    case ErrorCode::StaleDelivery: return "StaleDelivery";
-    case ErrorCode::OutputBufferTooSmall: return "OutputBufferTooSmall";
-    case ErrorCode::HistoryUnavailable: return "HistoryUnavailable";
-    case ErrorCode::IoError: return "IoError";
-    case ErrorCode::OutcomeUnknown: return "OutcomeUnknown";
-    }
-    return "UnknownError";
-  }
-
-  // Error paths/messages can contain Registry names or caller pathnames.
-  // Escape at the terminal boundary without allocating another error string,
-  // including when reporting an allocation failure from a delegated operation.
-  void write_diagnostic_text(std::ostream& output, std::string_view text)
-  {
-    constexpr std::string_view digits{"0123456789abcdef"};
-    std::array<char, 1024> buffer{};
-    std::size_t used{};
-    for (const auto character : text)
-    {
-      // Reserve enough room for one escaped byte. Chunking avoids flushing
-      // stderr for every character of a long Registry name or pathname.
-      if (buffer.size() - used < 4)
-      {
-        output.write(buffer.data(), static_cast<std::streamsize>(used));
-        used = 0;
-      }
-      const auto byte = static_cast<unsigned char>(character);
-      if (byte == '\\')
-      {
-        buffer[used++] = '\\';
-        buffer[used++] = '\\';
-      }
-      else if (byte >= 0x20 && byte <= 0x7e)
-      {
-        buffer[used++] = character;
-      }
-      else
-      {
-        buffer[used++] = '\\';
-        buffer[used++] = 'x';
-        buffer[used++] = digits[byte >> 4];
-        buffer[used++] = digits[byte & 0x0f];
-      }
-    }
-    output.write(buffer.data(), static_cast<std::streamsize>(used));
-  }
+  using angaria::detail::write_diagnostic_text;
 
   [[noreturn]] void fail(ErrorCode code, std::string path, std::string message)
   {
@@ -191,8 +120,8 @@ namespace
 
   MessageInspector open_inspector(const Options& options)
   {
-    auto session = value(Session::attach(options._session));
-    return value(MessageInspector::from_session(session, options._inspection));
+    auto session = angaria::detail::value_or_throw<ToolFailure>(Session::attach(options._session));
+    return angaria::detail::value_or_throw<ToolFailure>(MessageInspector::from_session(session, options._inspection));
     // The inspector owns its Field/schema definitions. Session attachment and
     // any required recovery finish before capture reading begins.
   }
@@ -205,14 +134,14 @@ namespace
     {
       fail(ErrorCode::IoError, options._capture.string(), "Cannot open capture for reading");
     }
-    auto reader = value(MessageCaptureReader::create(input, options._inspection._maxRecordBytes,
+    auto reader = angaria::detail::value_or_throw<ToolFailure>(MessageCaptureReader::create(input, options._inspection._maxRecordBytes,
                                                      options._captureBytes));
     std::uint64_t outputBytes{};
     for (;;)
     {
       const auto offset = reader.bytes_read();
       const auto index = reader.records_read();
-      auto next = value(reader.read_next());
+      auto next = angaria::detail::value_or_throw<ToolFailure>(reader.read_next());
       if (!next)
       {
         break;
@@ -223,7 +152,7 @@ namespace
         error->_path = "capture.records[" + std::to_string(index) + "]@" +
             std::to_string(offset) + "." + error->_path;
       }
-      const auto text = value(std::move(rendered));
+      const auto text = angaria::detail::value_or_throw<ToolFailure>(std::move(rendered));
       if (text.size() > options._outputBytes - outputBytes ||
           text.size() > static_cast<std::uint64_t>(std::numeric_limits<std::streamsize>::max()))
       {

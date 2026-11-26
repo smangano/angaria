@@ -4,6 +4,7 @@
 // Public Session attachment and Registry inspection must validate that history
 // without changing a quiescent valid or rejected fixture.
 
+#include "result_assertions.h"
 #include "angaria/runtime.h"
 #include "delivery_state.h"
 #include "native_atomic.h"
@@ -36,25 +37,9 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code) << error._path << ": " << error._message;
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   std::vector<std::byte> integer_bytes(std::uint64_t value, std::size_t width = 8)
   {

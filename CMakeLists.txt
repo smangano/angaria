@@ -129,6 +129,7 @@ if(BUILD_TESTING)
 
   add_executable(angaria_tests
     test/test.cpp
+    test/test_shared_helpers.cpp
     test/test_field.cpp
     test/test_payload.cpp
     test/test_message_record.cpp

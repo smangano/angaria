@@ -2,6 +2,8 @@
 // to mutate its target. The allowlist protects immutable history, reserved bytes, and
 // engine-owned roots; application code submits operations through Session/Task instead.
 
+#include "wire_fixture.h"
+#include "result_helpers.h"
 #include "journal_validation.h"
 
 #include <gtest/gtest.h>
@@ -20,15 +22,7 @@ namespace
   using namespace angaria;
   namespace mapped = angaria::detail::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   void expect_error(const OperationResult& result, ErrorCode code = ErrorCode::IoError)
   {
@@ -41,10 +35,7 @@ namespace
 
   void put_word(std::span<std::byte> bytes, std::size_t offset, std::uint64_t value)
   {
-    for (unsigned index = 0; index < 8; ++index)
-    {
-      bytes[offset + index] = static_cast<std::byte>((value >> (8 * index)) & 0xff);
-    }
+    angaria::test_support::put_integer(bytes, offset, value);
   }
 
   mapped::RedoCommand write_range(std::uint64_t target, std::size_t bytes = 8)

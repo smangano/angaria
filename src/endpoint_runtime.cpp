@@ -1,4 +1,5 @@
 #include "topology_state.h"
+#include "registry_access.h"
 
 #include <memory>
 #include <mutex>
@@ -48,18 +49,8 @@ namespace angaria::detail
     template <typename Loaded, typename Id>
     const Loaded& find_endpoint(const std::vector<Loaded>& entries, Id id)
     {
-      if (static_cast<std::uint16_t>(id) == 0)
-      {
-        runtime_fail(ErrorCode::InvalidArgument, "endpoint.id", "Endpoint identity must be nonzero");
-      }
-      for (const auto& entry : entries)
-      {
-        if (entry._definition._id == id)
-        {
-          return entry;
-        }
-      }
-      runtime_fail(ErrorCode::NotFound, "endpoint.id", "Endpoint identity is not registered with this kind");
+      return require_registered_entity(entries, id, "endpoint.id", "Endpoint identity must be nonzero",
+                                         "Endpoint identity is not registered with this kind");
     }
 
     template <typename Loaded>
@@ -124,9 +115,7 @@ namespace angaria
   {
     try
     {
-      detail::runtime_check_task_owner(_state);
-      detail::RuntimeAccess access(_state->_session);
-      detail::runtime_check_task(access, _state);
+      auto access = detail::task_access(_state);
       const auto topology = detail::runtime_topology(access);
       const auto& loaded = detail::find_endpoint(topology._queues, queue);
       detail::check_endpoint(loaded, loaded._definition._descriptor._producer, _state);
@@ -145,9 +134,7 @@ namespace angaria
   {
     try
     {
-      detail::runtime_check_task_owner(_state);
-      detail::RuntimeAccess access(_state->_session);
-      detail::runtime_check_task(access, _state);
+      auto access = detail::task_access(_state);
       const auto topology = detail::runtime_topology(access);
       const auto& loaded = detail::find_endpoint(topology._sources, source);
       detail::check_endpoint(loaded, loaded._definition._descriptor._owner, _state);
@@ -174,9 +161,7 @@ namespace angaria
   {
     try
     {
-      detail::runtime_check_task_owner(_state);
-      detail::RuntimeAccess access(_state->_session);
-      detail::runtime_check_task(access, _state);
+      auto access = detail::task_access(_state);
       const auto topology = detail::runtime_topology(access);
       const auto& loaded = detail::find_endpoint(topology._publishing, publisher);
       detail::check_endpoint(loaded, loaded._definition._descriptor._owner, _state);

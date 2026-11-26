@@ -1,3 +1,5 @@
+#include "wire_fixture.h"
+#include "result_assertions.h"
 #include "session_metadata.h"
 
 #include <gtest/gtest.h>
@@ -34,33 +36,11 @@ namespace
     }
   }
 
-  void append_text(std::vector<std::byte>& bytes, const std::string& text)
-  {
-    for (const auto character : text)
-    {
-      bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(character)));
-    }
-  }
+  using angaria::test_support::append_text;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code);
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   mapped::SuperblockConfiguration configuration()
   {

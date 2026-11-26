@@ -4,6 +4,8 @@ Milestone 3 and the manual Intel CI change reached `main` through [PR #30](https
 
 Steps 4.1 and 4.2 used framework versions **`0.4.1`** and **`0.4.2`**; step 4.3 uses **`0.4.3`**. The build number increases for each new PR under the [versioning policy](../../ROADMAP.md#versioning). It does not automatically change native format or protocol versions.
 
+The focused [helper consolidation](../helper-audit.md) after step 4.3 uses **`0.4.4`**, on `milestone-4-3-cleanup`, with a PR into `milestone-4`. It leaves the review-step numbering below unchanged; the next development step remains 4.4 and receives the next unused framework build number.
+
 ## Review steps
 
 | Step | Branch | Scope | Completion criterion |

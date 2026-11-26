@@ -1,6 +1,8 @@
 // Canonical record tests use public value snapshots and hand-authored bytes.
 // A framed record preserves immutable message metadata; it neither authenticates
 // its producer nor establishes Queue acceptance, delivery, or acknowledgment.
+#include "wire_fixture.h"
+#include "result_helpers.h"
 #include "angaria/message_record.h"
 #include "angaria/runtime.h"
 
@@ -31,15 +33,7 @@ namespace
   constexpr SessionId sample_session{0x0807060504030201, 0x8877665544332211};
   constexpr SchemaId sample_schema{static_cast<MessageType>(0xabcd), 0x89abcdef};
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   template <typename T>
   void expect_error(const Result<T>& result, ErrorCode code, std::string_view path = {})
@@ -55,19 +49,7 @@ namespace
     }
   }
 
-  std::vector<std::byte> octets(std::initializer_list<unsigned> values)
-  {
-    std::vector<std::byte> result;
-    for (const auto value : values)
-    {
-      if (value > 255)
-      {
-        throw std::runtime_error("Invalid hand-authored golden byte");
-      }
-      result.push_back(static_cast<std::byte>(value));
-    }
-    return result;
-  }
+  using angaria::test_support::octets;
 
   MessageHeader sample_header(std::uint64_t payloadBytes = 3)
   {

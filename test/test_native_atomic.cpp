@@ -2,6 +2,7 @@
 // These tests exercise actual shared mappings and independent processes on this
 // host; they do not establish power-loss durability or every possible schedule.
 
+#include "result_assertions.h"
 #include "native_atomic.h"
 #include "native_file.h"
 
@@ -44,25 +45,9 @@ namespace
 
   static_assert(!std::is_default_constructible_v<mapped::AtomicWord>);
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  void expect_error(const Result<T>& result, ErrorCode code)
-  {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    const auto& error = std::get<Error>(result);
-    EXPECT_EQ(error._code, code);
-    EXPECT_FALSE(error._path.empty());
-    EXPECT_FALSE(error._message.empty());
-  }
+  using angaria::test_support::expect_error;
 
   class Worker
   {

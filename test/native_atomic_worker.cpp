@@ -2,6 +2,7 @@
 // the atomic tests a separate process/mapping without inherited C++ state.
 // Publication mode handshakes each generation; crash mode runs until SIGKILL.
 
+#include "result_helpers.h"
 #include "native_atomic.h"
 #include "native_file.h"
 
@@ -22,15 +23,7 @@ namespace
   namespace mapped = angaria::detail::mapped;
   using Clock = std::chrono::steady_clock;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   void wait_for(mapped::AtomicWord word, std::uint64_t expected, Clock::time_point deadline)
   {

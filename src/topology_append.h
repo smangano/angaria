@@ -17,7 +17,6 @@ namespace angaria::detail
     std::vector<std::uint64_t> _references;
   };
 
-  void check_actor(const std::shared_ptr<SessionState>& session, const std::shared_ptr<TaskState>& actor);
   void check_task(TaskId id, const TopologySnapshot& topology, const char* path);
   std::uint64_t add_bytes(std::uint64_t left, std::uint64_t right);
   std::uint64_t multiply_bytes(std::uint64_t count, std::uint64_t width);

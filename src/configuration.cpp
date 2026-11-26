@@ -1,6 +1,9 @@
 #include "configuration.h"
 
 #include "angaria/detail/cpptoml.h"
+#include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/field_representation.h"
+#include "angaria/detail/identity_helpers.h"
 #include "runtime_state.h"
 #include "schema_metadata.h"
 #include "topology_append.h"
@@ -271,43 +274,13 @@ namespace angaria::detail
            {"symbol", EFieldBase::BASE_SYMBOL}, {"string", EFieldBase::BASE_STRING}}, EFieldBase::BASE_NONE);
     }
 
-    std::uint32_t scalar_bytes(EFieldBase base)
-    {
-      switch (base)
-      {
-      case EFieldBase::BASE_CHAR:
-      case EFieldBase::BASE_BYTE:
-      case EFieldBase::BASE_INT8: return 1;
-      case EFieldBase::BASE_INT16:
-      case EFieldBase::BASE_UINT16: return 2;
-      case EFieldBase::BASE_INT32:
-      case EFieldBase::BASE_UINT32:
-      case EFieldBase::BASE_FLOAT32: return 4;
-      case EFieldBase::BASE_INT64:
-      case EFieldBase::BASE_UINT64:
-      case EFieldBase::BASE_FLOAT64: return 8;
-      default: return 0;
-      }
-    }
-
-    bool signed_integer(EFieldBase base)
-    {
-      return base == EFieldBase::BASE_INT8 || base == EFieldBase::BASE_INT16 ||
-             base == EFieldBase::BASE_INT32 || base == EFieldBase::BASE_INT64;
-    }
-
-    bool unsigned_integer(EFieldBase base)
-    {
-      return base == EFieldBase::BASE_BYTE || base == EFieldBase::BASE_UINT16 ||
-             base == EFieldBase::BASE_UINT32 || base == EFieldBase::BASE_UINT64;
-    }
-
     EnumerationNumber enumeration_value(const Table& table, EFieldBase base, const std::string& path)
     {
       const auto node = required_node(table, "value", path);
       const auto valuePath = path + ".value";
-      const auto bits = scalar_bytes(base) * 8;
-      const auto isSigned = signed_integer(base);
+      const auto bits = scalar_width(base).value_or(0) * 8;
+      const auto integer = integer_shape(base);
+      const auto isSigned = integer && integer->_signed;
       std::int64_t signedValue{};
       std::uint64_t unsignedValue{};
       if (const auto value = node->as<std::int64_t>())
@@ -805,8 +778,7 @@ namespace angaria::detail
           (void)enumeration_value(entryTable, descriptor._base, entryPath);
           bodyBytes = add_metadata_bytes(bodyBytes, label.size());
         }
-        if (bodyBytes > std::vector<std::byte>{}.max_size() ||
-            bodyBytes > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+        if (bodyBytes > std::vector<std::byte>{}.max_size() || !fits_host_size(bodyBytes))
         {
           runtime_fail(ErrorCode::CapacityExceeded, path + ".enumerators",
                        "Enumeration metadata exceeds the native allocation range");
@@ -903,7 +875,7 @@ namespace angaria::detail
           check_text(fieldDoc, path + ".doc", false, false);
           descriptor._id = static_cast<FieldId>(unsigned_value(table, "id", path, 0,
                                                                  std::numeric_limits<std::uint32_t>::max()));
-          if ((static_cast<std::uint32_t>(descriptor._id) & 0xff000000u) != 0xee000000u)
+          if (!valid_field_id(descriptor._id))
           {
             invalid(path + ".id", "Field identity " + std::to_string(static_cast<std::uint32_t>(descriptor._id)) +
                     " must retain the 0xEE high byte");
@@ -931,11 +903,11 @@ namespace angaria::detail
           else if (type == "enum")
           {
             descriptor._base = field_base(table, "underlying", path);
-            if (!signed_integer(descriptor._base) && !unsigned_integer(descriptor._base))
+            if (!integer_shape(descriptor._base))
             {
               invalid(path + ".underlying", "Enum storage must be byte, int8, int16, uint16, int32, uint32, int64, or uint64");
             }
-            descriptor._size = scalar_bytes(descriptor._base);
+            descriptor._size = scalar_width(descriptor._base).value_or(0);
             descriptor._logical._kind = FieldLogicalKind::Enumeration;
             parse_enumerators(table, descriptor, path, fieldName, fieldDoc);
           }
@@ -949,7 +921,7 @@ namespace angaria::detail
           else
           {
             descriptor._base = field_base(table, "type", path);
-            descriptor._size = scalar_bytes(descriptor._base);
+            descriptor._size = scalar_width(descriptor._base).value_or(0);
           }
           descriptor._name = fieldName;
           descriptor._doc = fieldDoc;

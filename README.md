@@ -115,6 +115,8 @@ Pass `--workspace` with a new directory to keep the captures and native catalog 
 
 Milestone 4, step 4.3, framework version **`0.4.3`**, adds [Session and delivery-history validation](docs/native-validation.md) after the checked record codecs. Core format 2.2 readers validate exact schemas, acceptance transactions, Queue history, receipts, Source pins, and ring windows; incompatible capabilities fail before recovery. New Sessions still use format 2.1, and public native send/receive remains planned. The thirteen existing primer programs remain the runnable learning path.
 
+Framework **`0.4.4`** consolidates repeated helpers after step 4.3. The [helper audit and header map](docs/helper-audit.md) records what is shared and why some operation-specific adapters remain. This cleanup adds no public delivery behavior or format changes.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

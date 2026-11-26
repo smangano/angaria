@@ -5,6 +5,8 @@
 // S=status reader ready, E/G=unexpected errors; some modes then send native u64s.
 // Closing the stdin pipe lets a held owner exit normally; SIGKILL tests omit it.
 
+#include "process_support.h"
+#include "result_helpers.h"
 #include "angaria/runtime.h"
 #include "runtime_state.h"
 
@@ -28,39 +30,13 @@ namespace
 {
   using namespace angaria;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  bool has_error(const Result<T>& result, ErrorCode code)
-  {
-    const auto* error = std::get_if<Error>(&result);
-    return error != nullptr && error->_code == code;
-  }
+  using angaria::test_support::has_error;
 
   void report(const void* data, std::size_t length)
   {
-    const auto* bytes = static_cast<const char*>(data);
-    while (length != 0)
-    {
-      const auto count = ::write(STDOUT_FILENO, bytes, length);
-      if (count > 0)
-      {
-        bytes += count;
-        length -= static_cast<std::size_t>(count);
-      }
-      else if (count != -1 || errno != EINTR)
-      {
-        throw std::runtime_error("session worker report failed");
-      }
-    }
+    angaria::test_support::write_all(STDOUT_FILENO, data, length, "session worker report failed");
   }
 
   void report(char value)

@@ -59,7 +59,7 @@ namespace angaria::detail::mapped
     {
       return *error;
     }
-    if (offset > bytes.size() || bytes.size() - offset < sizeof(std::uint64_t))
+    if (!contains_range(bytes.size(), offset, sizeof(std::uint64_t)))
     {
       return Error{ErrorCode::InvalidArgument, "Atomic word is outside the supplied range", "native_atomic.word"};
     }

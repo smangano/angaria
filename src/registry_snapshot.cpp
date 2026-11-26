@@ -1,4 +1,5 @@
 #include "runtime_state.h"
+#include "registry_access.h"
 #include "topology_state.h"
 
 #include <algorithm>
@@ -74,15 +75,7 @@ namespace angaria
     {
       // Match typed Registry reads: reject inherited or wrong-thread actor use
       // before acquiring a process-local mutex, then verify its live claim.
-      if (_actor)
-      {
-        detail::runtime_check_task_owner(_actor);
-      }
-      detail::RuntimeAccess access(_state);
-      if (_actor)
-      {
-        detail::runtime_check_task(access, _actor);
-      }
+      auto access = detail::registry_access(_state, _actor);
       (void)detail::runtime_session_definition(access);
       const auto fields = detail::runtime_fields(access);
       const auto schemas = detail::runtime_schemas(access, fields);

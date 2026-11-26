@@ -1,5 +1,9 @@
 #include "delivery_state.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/error_support.h"
+
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -16,20 +20,13 @@ namespace angaria::detail::mapped
 {
   namespace
   {
+    using angaria::detail::CodecFailure;
+    using angaria::detail::all_zero;
+    using angaria::detail::codec_require;
+    using angaria::detail::read_unsigned_le;
+    using angaria::detail::write_unsigned_le;
+
     constexpr std::uint64_t envelope_bytes = 64;
-
-    struct CodecFailure
-    {
-      Error _error;
-    };
-
-    void require(bool condition, ErrorCode code, std::string_view path, std::string_view message)
-    {
-      if (!condition)
-      {
-        throw CodecFailure{Error{code, std::string{message}, std::string{path}}};
-      }
-    }
 
     template <typename T, typename Function>
     Result<T> checked_codec(Function&& function)
@@ -52,36 +49,6 @@ namespace angaria::detail::mapped
       }
     }
 
-    template <typename T>
-    T read_integer(std::span<const std::byte> bytes, std::size_t offset)
-    {
-      static_assert(std::is_unsigned_v<T> && sizeof(T) <= 8);
-      std::uint64_t value{};
-      for (std::size_t byte = 0; byte < sizeof(T); ++byte)
-      {
-        value |= std::uint64_t{std::to_integer<unsigned char>(bytes[offset + byte])} << (8 * byte);
-      }
-      return static_cast<T>(value);
-    }
-
-    template <typename T>
-    void write_integer(std::span<std::byte> bytes, std::size_t offset, T value)
-    {
-      static_assert(std::is_unsigned_v<T> && sizeof(T) <= 8);
-      for (std::size_t byte = 0; byte < sizeof(T); ++byte)
-      {
-        bytes[offset + byte] = static_cast<std::byte>((std::uint64_t{value} >> (8 * byte)) & 0xff);
-      }
-    }
-
-    bool zero(std::span<const std::byte> bytes)
-    {
-      return std::all_of(bytes.begin(), bytes.end(), [](std::byte value)
-      {
-        return value == std::byte{};
-      });
-    }
-
     std::uint64_t state_code(ReceiptState state, ErrorCode code)
     {
       switch (state)
@@ -92,7 +59,7 @@ namespace angaria::detail::mapped
       case ReceiptState::Acknowledged: return 3;
       case ReceiptState::Lost: return 4;
       }
-      require(false, code, "receipt.state", "Unknown receipt state");
+      codec_require(false, code, "receipt.state", "Unknown receipt state");
       return 0;
     }
 
@@ -106,58 +73,58 @@ namespace angaria::detail::mapped
       case 3: return ReceiptState::Acknowledged;
       case 4: return ReceiptState::Lost;
       }
-      require(false, code, "receipt.state", "Unknown receipt state code");
+      codec_require(false, code, "receipt.state", "Unknown receipt state code");
       return ReceiptState::Unused;
     }
 
     void check_receipt(const Receipt& receipt, ReceiptProfile profile, ErrorCode code)
     {
-      require(profile == ReceiptProfile::Core || profile == ReceiptProfile::AllowLoss,
+      codec_require(profile == ReceiptProfile::Core || profile == ReceiptProfile::AllowLoss,
               code, "receipt.profile", "Unknown receipt codec profile");
       state_code(receipt._state, code);
-      require((receipt._presence & ~std::uint32_t{7}) == 0,
+      codec_require((receipt._presence & ~std::uint32_t{7}) == 0,
               code, "receipt.presence", "Unknown receipt presence bits");
 
       const auto history = (receipt._presence & 1) != 0;
       if (history)
       {
-        require(receipt._consumerTask != TaskId::Invalid &&
+        codec_require(receipt._consumerTask != TaskId::Invalid &&
                     receipt._sourceSet != SourceQueueSetId::Invalid &&
                     receipt._consumerIncarnation != 0 && receipt._issuance != 0,
                 code, "receipt.consumer", "Present dequeue metadata requires complete consumer tags");
       }
       else
       {
-        require(receipt._consumerTask == TaskId::Invalid &&
+        codec_require(receipt._consumerTask == TaskId::Invalid &&
                     receipt._sourceSet == SourceQueueSetId::Invalid &&
                     receipt._consumerIncarnation == 0 && receipt._issuance == 0 &&
                     receipt._dequeuedAt == UtcTimestamp{},
                 code, "receipt.consumer", "Absent dequeue metadata must be zero");
       }
-      require((receipt._presence & 2) != 0 || receipt._acknowledgedAt == UtcTimestamp{},
+      codec_require((receipt._presence & 2) != 0 || receipt._acknowledgedAt == UtcTimestamp{},
               code, "receipt.acknowledged_at", "Absent acknowledgment time must be zero");
-      require((receipt._presence & 4) != 0 || receipt._terminalAt == UtcTimestamp{},
+      codec_require((receipt._presence & 4) != 0 || receipt._terminalAt == UtcTimestamp{},
               code, "receipt.terminal_at", "Absent terminal time must be zero");
 
       switch (receipt._state)
       {
       case ReceiptState::Unused:
-        require(receipt._presence == 0, code, "receipt.presence", "Unused receipt must be entirely zero");
+        codec_require(receipt._presence == 0, code, "receipt.presence", "Unused receipt must be entirely zero");
         break;
       case ReceiptState::Pending:
-        require(receipt._presence == 0 || receipt._presence == 1,
+        codec_require(receipt._presence == 0 || receipt._presence == 1,
                 code, "receipt.presence", "Pending receipt may retain dequeue metadata only");
         break;
       case ReceiptState::Issued:
-        require(receipt._presence == 1, code, "receipt.presence", "Issued receipt requires dequeue metadata only");
+        codec_require(receipt._presence == 1, code, "receipt.presence", "Issued receipt requires dequeue metadata only");
         break;
       case ReceiptState::Acknowledged:
-        require(receipt._presence == 7 && receipt._acknowledgedAt == receipt._terminalAt,
+        codec_require(receipt._presence == 7 && receipt._acknowledgedAt == receipt._terminalAt,
                 code, "receipt.presence", "Acknowledged receipt requires matching acknowledgment and terminal times");
         break;
       case ReceiptState::Lost:
-        require(profile == ReceiptProfile::AllowLoss, code, "receipt.profile", "Lost receipt requires the allowed-loss profile");
-        require(receipt._presence == 4 || receipt._presence == 5,
+        codec_require(profile == ReceiptProfile::AllowLoss, code, "receipt.profile", "Lost receipt requires the allowed-loss profile");
+        codec_require(receipt._presence == 4 || receipt._presence == 5,
                 code, "receipt.presence", "Lost receipt requires terminal time and optional dequeue metadata");
         break;
       }
@@ -166,53 +133,51 @@ namespace angaria::detail::mapped
     void check_slot(const RingSlot& slot, std::uint64_t capacity, std::uint64_t index,
                     ErrorCode code)
     {
-      require(capacity != 0 && index < capacity, code, "ring.slot", "Invalid ring capacity or slot index");
+      codec_require(capacity != 0 && index < capacity, code, "ring.slot", "Invalid ring capacity or slot index");
       if (slot._queueSequence == 0)
       {
-        require(slot._deliveryLink == 0 && slot._publicationReference == 0 && slot._generation == 0,
+        codec_require(slot._deliveryLink == 0 && slot._publicationReference == 0 && slot._generation == 0,
                 code, "ring.slot", "Empty ring slot must be entirely zero");
         return;
       }
-      require(slot._publicationReference >= superblock_bytes &&
+      codec_require(slot._publicationReference >= superblock_bytes &&
                   slot._publicationReference % section_alignment == 0 &&
                   contains_range(max_log_bytes, slot._publicationReference, envelope_bytes),
               code, "ring.publication_reference", "Invalid Publication record reference");
-      require(slot._deliveryLink >= superblock_bytes && slot._deliveryLink % record_alignment == 0 &&
+      codec_require(slot._deliveryLink >= superblock_bytes && slot._deliveryLink % record_alignment == 0 &&
                   contains_range(max_log_bytes, slot._deliveryLink, 48),
               code, "ring.delivery_link", "Invalid destination row reference");
       const auto sequenceIndex = slot._queueSequence - 1;
-      require(sequenceIndex % capacity == index && slot._generation == 1 + sequenceIndex / capacity,
+      codec_require(sequenceIndex % capacity == index && slot._generation == 1 + sequenceIndex / capacity,
               code, "ring.generation", "Ring sequence, index, and generation disagree");
     }
 
     std::uint64_t record_bytes(std::uint64_t capacity, std::uint64_t limit, ErrorCode code)
     {
-      require(capacity != 0 && valid_log_limit(limit), code, "ring.capacity", "Invalid ring capacity or record ceiling");
+      codec_require(capacity != 0 && valid_log_limit(limit), code, "ring.capacity", "Invalid ring capacity or record ceiling");
       const auto slotBytes = checked_multiply(capacity, ring_slot_bytes);
       const auto suffixBytes = slotBytes ? checked_align(*slotBytes, section_alignment) : std::nullopt;
       const auto total = suffixBytes ? checked_add(envelope_bytes, *suffixBytes) : std::nullopt;
-      require(total && *total <= limit && *total <= max_log_bytes,
+      codec_require(total && *total <= limit && *total <= max_log_bytes,
               code, "ring.length", "Ring allocation exceeds its record ceiling");
-      require(capacity <= std::numeric_limits<std::size_t>::max() / sizeof(RingSlot) &&
-                  capacity <= static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()) / sizeof(RingSlot) &&
-                  *suffixBytes <= std::numeric_limits<std::size_t>::max() &&
-                  *suffixBytes <= static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()),
+      const auto hostBytes = checked_multiply(capacity, sizeof(RingSlot));
+      codec_require(hostBytes && fits_host_size(*hostBytes) && fits_host_size(*suffixBytes),
               code, "ring.length", "Ring allocation exceeds host bounds");
       return *total;
     }
 
     RingSlot read_slot(std::span<const std::byte> bytes)
     {
-      return RingSlot{read_integer<std::uint64_t>(bytes, 0), read_integer<std::uint64_t>(bytes, 8),
-                      read_integer<std::uint64_t>(bytes, 16), read_integer<std::uint64_t>(bytes, 24)};
+      return RingSlot{read_unsigned_le<std::uint64_t>(bytes, 0), read_unsigned_le<std::uint64_t>(bytes, 8),
+                      read_unsigned_le<std::uint64_t>(bytes, 16), read_unsigned_le<std::uint64_t>(bytes, 24)};
     }
 
     void write_slot(std::span<std::byte> bytes, const RingSlot& slot)
     {
-      write_integer(bytes, 0, slot._queueSequence);
-      write_integer(bytes, 8, slot._deliveryLink);
-      write_integer(bytes, 16, slot._publicationReference);
-      write_integer(bytes, 24, slot._generation);
+      write_unsigned_le(bytes, 0, slot._queueSequence);
+      write_unsigned_le(bytes, 8, slot._deliveryLink);
+      write_unsigned_le(bytes, 16, slot._publicationReference);
+      write_unsigned_le(bytes, 24, slot._generation);
     }
 
     void check_window_slot(const RingSlot& slot, std::uint64_t capacity,
@@ -222,13 +187,13 @@ namespace angaria::detail::mapped
       // Until the first wrap, indices at or after N have never been assigned.
       if (lastAssigned < capacity && index >= lastAssigned)
       {
-        require(slot._queueSequence == 0, code, "ring.window", "Unassigned ring slot must be empty");
+        codec_require(slot._queueSequence == 0, code, "ring.window", "Unassigned ring slot must be empty");
         return;
       }
       const auto lastIndex = (lastAssigned - 1) % capacity;
       const auto distance = lastIndex >= index ? lastIndex - index : capacity - (index - lastIndex);
       const auto expected = lastAssigned - distance;
-      require(slot._queueSequence == expected, code, "ring.window", "Ring slot is outside the authoritative latest window");
+      codec_require(slot._queueSequence == expected, code, "ring.window", "Ring slot is outside the authoritative latest window");
     }
   } // namespace
 
@@ -238,15 +203,15 @@ namespace angaria::detail::mapped
     {
       check_receipt(receipt, profile, ErrorCode::InvalidArgument);
       ReceiptBytes bytes{};
-      write_integer(bytes, 0, state_code(receipt._state, ErrorCode::InvalidArgument));
-      write_integer(bytes, 8, static_cast<std::uint16_t>(receipt._consumerTask));
-      write_integer(bytes, 10, static_cast<std::uint16_t>(receipt._sourceSet));
-      write_integer(bytes, 12, receipt._presence);
-      write_integer(bytes, 16, receipt._consumerIncarnation);
-      write_integer(bytes, 24, receipt._issuance);
-      write_integer(bytes, 32, std::bit_cast<std::uint64_t>(receipt._dequeuedAt.time_since_epoch().count()));
-      write_integer(bytes, 40, std::bit_cast<std::uint64_t>(receipt._acknowledgedAt.time_since_epoch().count()));
-      write_integer(bytes, 48, std::bit_cast<std::uint64_t>(receipt._terminalAt.time_since_epoch().count()));
+      write_unsigned_le(bytes, 0, state_code(receipt._state, ErrorCode::InvalidArgument));
+      write_unsigned_le(bytes, 8, static_cast<std::uint16_t>(receipt._consumerTask));
+      write_unsigned_le(bytes, 10, static_cast<std::uint16_t>(receipt._sourceSet));
+      write_unsigned_le(bytes, 12, receipt._presence);
+      write_unsigned_le(bytes, 16, receipt._consumerIncarnation);
+      write_unsigned_le(bytes, 24, receipt._issuance);
+      write_unsigned_le(bytes, 32, std::bit_cast<std::uint64_t>(receipt._dequeuedAt.time_since_epoch().count()));
+      write_unsigned_le(bytes, 40, std::bit_cast<std::uint64_t>(receipt._acknowledgedAt.time_since_epoch().count()));
+      write_unsigned_le(bytes, 48, std::bit_cast<std::uint64_t>(receipt._terminalAt.time_since_epoch().count()));
       return bytes;
     });
   }
@@ -256,18 +221,18 @@ namespace angaria::detail::mapped
     return checked_codec<Receipt>([&]
     {
       constexpr auto code = ErrorCode::IoError;
-      require(bytes.size() == receipt_bytes, code, "receipt.length", "Receipt must contain exactly 128 bytes");
-      require(zero(bytes.subspan(56)), code, "receipt.reserved", "Reserved receipt bytes must be zero");
+      codec_require(bytes.size() == receipt_bytes, code, "receipt.length", "Receipt must contain exactly 128 bytes");
+      codec_require(all_zero(bytes.subspan(56)), code, "receipt.reserved", "Reserved receipt bytes must be zero");
       Receipt receipt;
-      receipt._state = read_state(read_integer<std::uint64_t>(bytes, 0), code);
-      receipt._consumerTask = TaskId{read_integer<std::uint16_t>(bytes, 8)};
-      receipt._sourceSet = SourceQueueSetId{read_integer<std::uint16_t>(bytes, 10)};
-      receipt._presence = read_integer<std::uint32_t>(bytes, 12);
-      receipt._consumerIncarnation = read_integer<std::uint64_t>(bytes, 16);
-      receipt._issuance = read_integer<std::uint64_t>(bytes, 24);
-      receipt._dequeuedAt = UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(read_integer<std::uint64_t>(bytes, 32))}};
-      receipt._acknowledgedAt = UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(read_integer<std::uint64_t>(bytes, 40))}};
-      receipt._terminalAt = UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(read_integer<std::uint64_t>(bytes, 48))}};
+      receipt._state = read_state(read_unsigned_le<std::uint64_t>(bytes, 0), code);
+      receipt._consumerTask = TaskId{read_unsigned_le<std::uint16_t>(bytes, 8)};
+      receipt._sourceSet = SourceQueueSetId{read_unsigned_le<std::uint16_t>(bytes, 10)};
+      receipt._presence = read_unsigned_le<std::uint32_t>(bytes, 12);
+      receipt._consumerIncarnation = read_unsigned_le<std::uint64_t>(bytes, 16);
+      receipt._issuance = read_unsigned_le<std::uint64_t>(bytes, 24);
+      receipt._dequeuedAt = UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(read_unsigned_le<std::uint64_t>(bytes, 32))}};
+      receipt._acknowledgedAt = UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(read_unsigned_le<std::uint64_t>(bytes, 40))}};
+      receipt._terminalAt = UtcTimestamp{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(read_unsigned_le<std::uint64_t>(bytes, 48))}};
       check_receipt(receipt, profile, code);
       return receipt;
     });
@@ -290,7 +255,7 @@ namespace angaria::detail::mapped
   {
     return checked_codec<RingSlot>([&]
     {
-      require(bytes.size() == ring_slot_bytes, ErrorCode::IoError, "ring.slot.length", "Ring slot must contain exactly 32 bytes");
+      codec_require(bytes.size() == ring_slot_bytes, ErrorCode::IoError, "ring.slot.length", "Ring slot must contain exactly 32 bytes");
       const auto slot = read_slot(bytes);
       check_slot(slot, capacity, index, ErrorCode::IoError);
       return slot;
@@ -335,9 +300,9 @@ namespace angaria::detail::mapped
     {
       constexpr auto code = ErrorCode::IoError;
       const auto total = record_bytes(capacity, maxRecordBytes, code);
-      require(bytes.size() == total - envelope_bytes, code, "ring.length", "Ring suffix length disagrees with capacity");
+      codec_require(bytes.size() == total - envelope_bytes, code, "ring.length", "Ring suffix length disagrees with capacity");
       const auto slotBytes = static_cast<std::size_t>(capacity * ring_slot_bytes);
-      require(zero(bytes.subspan(slotBytes)), code, "ring.padding", "Ring allocation padding must be zero");
+      codec_require(all_zero(bytes.subspan(slotBytes)), code, "ring.padding", "Ring allocation padding must be zero");
       // Validate all untrusted words before allocating the returned owning copy.
       for (std::size_t index = 0; index < static_cast<std::size_t>(capacity); ++index)
       {

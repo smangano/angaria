@@ -1,5 +1,10 @@
 #include "runtime_state.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/field_representation.h"
+#include "angaria/detail/identity_helpers.h"
+#include "registry_access.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -13,16 +18,6 @@ namespace angaria::detail
 {
   namespace
   {
-    std::uint64_t schema_key(SchemaId schema)
-    {
-      return (std::uint64_t{static_cast<std::uint16_t>(schema._type)} << 32) | schema._version;
-    }
-
-    bool valid_field_id(FieldId id)
-    {
-      return (static_cast<std::uint32_t>(id) >> 24) == 0xee;
-    }
-
     struct DefinitionIndex
     {
       std::uint64_t _offset{};
@@ -43,20 +38,14 @@ namespace angaria::detail
         const auto row = std::span{words}.subspan(slot * 8, 8);
         if (row[0] == 0)
         {
-          if (std::any_of(row.begin(), row.end(), [](auto value)
-              {
-                return value != 0;
-              }))
+          if (!all_zero(row))
           {
             runtime_fail(ErrorCode::IoError, "registry.index", "Empty definition index contains data");
           }
           continue;
         }
         if (row[1] == 0 || row[2] == 0 || row[2] > access._snapshot._revision ||
-            std::any_of(row.begin() + 3, row.end(), [](auto value)
-            {
-              return value != 0;
-            }))
+            !all_zero(std::span{row}.subspan(3)))
         {
           runtime_fail(ErrorCode::IoError, "registry.index", "Invalid definition reference, revision, or reserved data");
         }
@@ -106,52 +95,40 @@ namespace angaria::detail
   void runtime_validate_field_policy(const FieldDescriptor& descriptor, ErrorCode invalidCode)
   {
     std::uint32_t width{};
-    switch (descriptor._base)
+    if (const auto scalar = scalar_width(descriptor._base))
     {
-    case EFieldBase::BASE_CHAR:
-    case EFieldBase::BASE_BYTE:
-    case EFieldBase::BASE_INT8:
-      width = 1;
-      break;
-    case EFieldBase::BASE_INT16:
-    case EFieldBase::BASE_UINT16:
-      width = 2;
-      break;
-    case EFieldBase::BASE_INT32:
-    case EFieldBase::BASE_UINT32:
-    case EFieldBase::BASE_FLOAT32:
-      width = 4;
-      break;
-    case EFieldBase::BASE_INT64:
-    case EFieldBase::BASE_UINT64:
-    case EFieldBase::BASE_FLOAT64:
-      width = 8;
-      break;
-    case EFieldBase::BASE_CHARS:
-      if (descriptor._logical._kind == FieldLogicalKind::FixedAscii)
+      width = *scalar;
+    }
+    else
+    {
+      switch (descriptor._base)
       {
-        width = descriptor._size;
-        break;
+      case EFieldBase::BASE_CHARS:
+        if (descriptor._logical._kind == FieldLogicalKind::FixedAscii)
+        {
+          width = descriptor._size;
+          break;
+        }
+        runtime_fail(ErrorCode::UnsupportedPolicy, "field.base", "Untagged character arrays have no implemented logical representation");
+      case EFieldBase::BASE_NONE:
+      case EFieldBase::BASE_DATE:
+      case EFieldBase::BASE_TIMESTAMP:
+      case EFieldBase::BASE_YEARS:
+      case EFieldBase::BASE_MONTHS:
+      case EFieldBase::BASE_DAYS:
+      case EFieldBase::BASE_HOURS:
+      case EFieldBase::BASE_MINS:
+      case EFieldBase::BASE_SECS:
+      case EFieldBase::BASE_MILLISECS:
+      case EFieldBase::BASE_MICROSECS:
+      case EFieldBase::BASE_NANOSECS:
+      case EFieldBase::BASE_BYTES:
+      case EFieldBase::BASE_SYMBOL:
+      case EFieldBase::BASE_STRING:
+        runtime_fail(ErrorCode::UnsupportedPolicy, "field.base", "Field representation is not implemented by this native profile");
+      default:
+        runtime_fail(invalidCode, "field.base", "Unknown Field base type");
       }
-      runtime_fail(ErrorCode::UnsupportedPolicy, "field.base", "Untagged character arrays have no implemented logical representation");
-    case EFieldBase::BASE_NONE:
-    case EFieldBase::BASE_DATE:
-    case EFieldBase::BASE_TIMESTAMP:
-    case EFieldBase::BASE_YEARS:
-    case EFieldBase::BASE_MONTHS:
-    case EFieldBase::BASE_DAYS:
-    case EFieldBase::BASE_HOURS:
-    case EFieldBase::BASE_MINS:
-    case EFieldBase::BASE_SECS:
-    case EFieldBase::BASE_MILLISECS:
-    case EFieldBase::BASE_MICROSECS:
-    case EFieldBase::BASE_NANOSECS:
-    case EFieldBase::BASE_BYTES:
-    case EFieldBase::BASE_SYMBOL:
-    case EFieldBase::BASE_STRING:
-      runtime_fail(ErrorCode::UnsupportedPolicy, "field.base", "Field representation is not implemented by this native profile");
-    default:
-      runtime_fail(invalidCode, "field.base", "Unknown Field base type");
     }
     if (descriptor._size != width)
     {
@@ -297,29 +274,11 @@ namespace angaria::detail
 
 namespace angaria
 {
-  namespace
-  {
-    detail::RuntimeAccess schema_access(const std::shared_ptr<detail::SessionState>& state,
-                                         const std::shared_ptr<detail::TaskState>& actor)
-    {
-      if (actor)
-      {
-        detail::runtime_check_task_owner(actor);
-      }
-      detail::RuntimeAccess access(state);
-      if (actor)
-      {
-        detail::runtime_check_task(access, actor);
-      }
-      return access;
-    }
-  } // namespace
-
   Result<FieldId> Registry::find_field(std::string_view name) const
   {
     try
     {
-      auto access = schema_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       detail::runtime_value(detail::mapped::validate_metadata_text(name, true, true, "field.name"));
       for (const auto& field : detail::runtime_fields(access))
       {
@@ -340,7 +299,7 @@ namespace angaria
   {
     try
     {
-      auto access = schema_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       detail::runtime_value(detail::mapped::validate_metadata_text(name, true, true, "message.name"));
       if (version == 0)
       {
@@ -366,7 +325,7 @@ namespace angaria
   {
     try
     {
-      auto access = schema_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return detail::runtime_field(access, id)._definition._descriptor;
     }
     catch (...)
@@ -379,7 +338,7 @@ namespace angaria
   {
     try
     {
-      auto access = schema_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return detail::runtime_schema(access, id)._definition._descriptor;
     }
     catch (...)
@@ -392,7 +351,7 @@ namespace angaria
   {
     try
     {
-      auto access = schema_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return detail::runtime_field(access, id)._definition._registration;
     }
     catch (...)
@@ -405,7 +364,7 @@ namespace angaria
   {
     try
     {
-      auto access = schema_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return detail::runtime_schema(access, id)._definition._registration;
     }
     catch (...)

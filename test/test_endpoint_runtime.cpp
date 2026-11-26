@@ -2,6 +2,7 @@
 // this step opens handles and retains ownership, without sending or receiving.
 // Raw snapshots and fork checks below are private qualification infrastructure.
 
+#include "result_helpers.h"
 #include "angaria/runtime.h"
 #include "native_atomic.h"
 #include "runtime_state.h"
@@ -31,15 +32,7 @@ namespace
   namespace runtime = angaria::detail;
   namespace fs = std::filesystem;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   template <typename T>
   void expect_error(const Result<T>& result, ErrorCode code)

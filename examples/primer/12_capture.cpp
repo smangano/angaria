@@ -1,6 +1,7 @@
 // An application writes four portable records. A separate generic inspector
 // learns their names, versions, types, and enum labels from the retained Registry.
 #include "example_support.h"
+#include "example_formatting.h"
 #include "angaria/capture.h"
 
 #include <chrono>
@@ -55,15 +56,6 @@ namespace
     header._flags = flags;
     header._payloadBytes = payload.size();
     primer::value(writer.append(header, payload));
-  }
-
-  std::string session_text(SessionId session)
-  {
-    std::ostringstream output;
-    output.imbue(std::locale::classic());
-    output << std::hex << std::setfill('0') << std::setw(16) << session._high
-           << std::setw(16) << session._low;
-    return output.str();
   }
 
   struct CaptureSummary
@@ -152,7 +144,7 @@ int main(int argc, char** argv)
   try
   {
     const auto captured = create_capture(argv[1]);
-    std::cout << "Source Session: " << session_text(captured._session) << '\n'
+    std::cout << "Source Session: " << primer::session_text(captured._session) << '\n'
               << "Captured records: " << captured._records << '\n'
               << "Capture bytes: " << captured._bytes << '\n'
               << "Retained schemas: Quote v1, Quote v2, Order v1, Heartbeat v1\n"

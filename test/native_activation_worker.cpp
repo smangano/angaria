@@ -3,6 +3,8 @@
 // hooks so the parent can stop at a real resource, journal, or recovery boundary.
 // Stdout carries one-byte markers followed by native u64 values on this same host.
 
+#include "process_support.h"
+#include "result_helpers.h"
 #include "angaria/runtime.h"
 #include "topology_mutations.h"
 
@@ -30,32 +32,11 @@ namespace
   namespace runtime = angaria::detail;
   namespace mapped = angaria::detail::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
   void report(const void* data, std::size_t length)
   {
-    const auto* bytes = static_cast<const char*>(data);
-    while (length != 0)
-    {
-      const auto count = ::write(STDOUT_FILENO, bytes, length);
-      if (count > 0)
-      {
-        bytes += count;
-        length -= static_cast<std::size_t>(count);
-      }
-      else if (count != -1 || errno != EINTR)
-      {
-        throw std::runtime_error("activation worker report failed");
-      }
-    }
+    angaria::test_support::write_all(STDOUT_FILENO, data, length, "activation worker report failed");
   }
 
   void report(char value)

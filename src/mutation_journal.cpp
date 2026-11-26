@@ -1,5 +1,8 @@
 #include "mutation_journal.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/error_support.h"
 #include "journal_validation.h"
 #include "native_atomic.h"
 #include "task_claim_redo.h"
@@ -32,16 +35,6 @@ namespace angaria::detail::mapped
       throw JournalFailure{Error{code, std::move(message), "journal"}};
     }
 
-    template <typename T>
-    T take(Result<T> result)
-    {
-      if (const auto error = std::get_if<Error>(&result))
-      {
-        throw JournalFailure{*error};
-      }
-      return std::get<T>(std::move(result));
-    }
-
     Error caught_error()
     {
       try
@@ -62,28 +55,9 @@ namespace angaria::detail::mapped
       }
     }
 
-    std::uint64_t read_u64(std::span<const std::byte> bytes, std::size_t offset)
-    {
-      std::uint64_t value{};
-      for (std::size_t index = 0; index != 8; ++index)
-      {
-        value |= std::uint64_t{std::to_integer<unsigned char>(bytes[offset + index])} << (8 * index);
-      }
-      return value;
-    }
-
-    void write_u64(std::span<std::byte> bytes, std::size_t offset, std::uint64_t value)
-    {
-      for (std::size_t index = 0; index != 8; ++index)
-      {
-        bytes[offset + index] = static_cast<std::byte>((value >> (8 * index)) & 0xff);
-      }
-    }
-
     std::size_t host_size(std::uint64_t bytes)
     {
-      if (bytes > std::numeric_limits<std::size_t>::max() ||
-          bytes > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()))
+      if (!fits_host_size(bytes))
       {
         fail(ErrorCode::IoError, "Journal range exceeds the host address space");
       }
@@ -102,35 +76,35 @@ namespace angaria::detail::mapped
 
     std::vector<std::byte> read_bytes(NativeFile& file, std::uint64_t offset, std::uint64_t length)
     {
-      if (!contains_range(take(file.size()), offset, length))
+      if (!contains_range(value_or_throw<JournalFailure>(file.size()), offset, length))
       {
         fail(ErrorCode::IoError, "Journal read extends beyond the file");
       }
       std::vector<std::byte> bytes(host_size(length));
-      take(file.read_exact(offset, bytes));
+      value_or_throw<JournalFailure>(file.read_exact(offset, bytes));
       return bytes;
     }
 
     std::uint64_t load_at(NativeFile& file, std::uint64_t offset)
     {
-      auto mapping = take(file.map_read_write(offset, 8));
-      return take(AtomicWord::bind(take(mapping.writable_bytes()), 0)).load_acquire();
+      auto mapping = value_or_throw<JournalFailure>(file.map_read_write(offset, 8));
+      return value_or_throw<JournalFailure>(AtomicWord::bind(value_or_throw<JournalFailure>(mapping.writable_bytes()), 0)).load_acquire();
     }
 
     void store_at(NativeFile& file, std::uint64_t offset, std::uint64_t value)
     {
-      auto mapping = take(file.map_read_write(offset, 8));
-      take(AtomicWord::bind(take(mapping.writable_bytes()), 0)).store_release(value);
+      auto mapping = value_or_throw<JournalFailure>(file.map_read_write(offset, 8));
+      value_or_throw<JournalFailure>(AtomicWord::bind(value_or_throw<JournalFailure>(mapping.writable_bytes()), 0)).store_release(value);
     }
 
     RecordEnvelope read_envelope(NativeFile& file, std::uint64_t offset)
     {
       RecordEnvelopeBytes bytes{};
       // Readiness is always atomic, including when assembling a local decoder input.
-      take(file.read_exact(offset, std::span{bytes}.first(48)));
-      write_u64(bytes, 48, load_at(file, add(offset, 48, ErrorCode::IoError)));
-      take(file.read_exact(add(offset, 56, ErrorCode::IoError), std::span{bytes}.subspan(56)));
-      return take(decode_record_envelope(bytes));
+      value_or_throw<JournalFailure>(file.read_exact(offset, std::span{bytes}.first(48)));
+      write_unsigned_le(bytes, 48, load_at(file, add(offset, 48, ErrorCode::IoError)));
+      value_or_throw<JournalFailure>(file.read_exact(add(offset, 56, ErrorCode::IoError), std::span{bytes}.subspan(56)));
+      return value_or_throw<JournalFailure>(decode_record_envelope(bytes));
     }
 
     struct PrefixRecords
@@ -175,12 +149,12 @@ namespace angaria::detail::mapped
       }
       const auto body = read_bytes(file, offset + record_envelope_bytes,
                                    std::min<std::uint64_t>(128, envelope._immutableBytes));
-      return take(validate_journal_record(offset, envelope, body, arena));
+      return value_or_throw<JournalFailure>(validate_journal_record(offset, envelope, body, arena));
     }
 
     Manifest read_manifest(NativeFile& file, const JournalRecordRange& record)
     {
-      return take(decode_manifest_body(read_bytes(file, record._offset + record_envelope_bytes,
+      return value_or_throw<JournalFailure>(decode_manifest_body(read_bytes(file, record._offset + record_envelope_bytes,
                                                   record._envelope._immutableBytes), record._offset));
     }
 
@@ -203,7 +177,7 @@ namespace angaria::detail::mapped
                                std::uint64_t generation)
     {
       PrefixRecords prefix;
-      if (tail < arena || tail % section_alignment != 0 || tail > take(file.size()))
+      if (tail < arena || tail % section_alignment != 0 || tail > value_or_throw<JournalFailure>(file.size()))
       {
         fail(ErrorCode::IoError, "Committed allocation tail is invalid");
       }
@@ -277,18 +251,18 @@ namespace angaria::detail::mapped
     {
       if (state._injector != nullptr)
       {
-        take(state._injector->checkpoint(point, index));
+        value_or_throw<JournalFailure>(state._injector->checkpoint(point, index));
       }
     }
 
     std::span<std::byte> prefix_bytes(MutationJournalState& state)
     {
-      return take(state._prefix.writable_bytes());
+      return value_or_throw<JournalFailure>(state._prefix.writable_bytes());
     }
 
     std::uint64_t prefix_word(MutationJournalState& state, std::size_t offset)
     {
-      return take(AtomicWord::bind(prefix_bytes(state), offset)).load_acquire();
+      return value_or_throw<JournalFailure>(AtomicWord::bind(prefix_bytes(state), offset)).load_acquire();
     }
 
     JournalControl control(MutationJournalState& state)
@@ -303,7 +277,7 @@ namespace angaria::detail::mapped
 
     void publish(MutationJournalState& state, JournalControl value, JournalCheckpoint point)
     {
-      take(AtomicWord::bind(prefix_bytes(state), journal_offset)).publish_control(static_cast<std::uint64_t>(value));
+      value_or_throw<JournalFailure>(AtomicWord::bind(prefix_bytes(state), journal_offset)).publish_control(static_cast<std::uint64_t>(value));
       checkpoint(state, point);
     }
 
@@ -314,7 +288,7 @@ namespace angaria::detail::mapped
                              ._accounted = prefix_word(state, 176),
                              ._revision = prefix_word(state, 80),
                              ._manifest = prefix_word(state, 96),
-                             ._fileBytes = take(file.size())};
+                             ._fileBytes = value_or_throw<JournalFailure>(file.size())};
     }
 
     FixedLayout fixed_layout(const MutationJournalState& state)
@@ -348,15 +322,11 @@ namespace angaria::detail::mapped
       JournalHeaderBytes bytes{};
       const auto prefix = prefix_bytes(state);
       std::copy_n(prefix.begin() + journal_offset + 8, journal_header_bytes - 8, bytes.begin() + 8);
-      write_u64(bytes, 0, static_cast<std::uint64_t>(observed));
-      const auto header = take(decode_journal_header(bytes));
+      write_unsigned_le(bytes, 0, static_cast<std::uint64_t>(observed));
+      const auto header = value_or_throw<JournalFailure>(decode_journal_header(bytes));
       const auto unused = prefix.subspan(journal_offset + journal_header_bytes + header._inlineBytes,
                                          inline_command_bytes - header._inlineBytes);
-      if (!std::all_of(unused.begin(), unused.end(),
-                       [](std::byte value)
-                       {
-                         return value == std::byte{};
-                       }))
+      if (!all_zero(unused))
       {
         fail(ErrorCode::IoError, "Unused journal command bytes are not zero");
       }
@@ -469,12 +439,12 @@ namespace angaria::detail::mapped
       require_fixed_compacts(commands, kind, code);
       if (has_compact(commands))
       {
-        const auto expanded = take(expand_task_claim_commands(file, layout, records, commands, code));
-        take(validate_redo_targets(expanded, layout, records, code));
+        const auto expanded = value_or_throw<JournalFailure>(expand_task_claim_commands(file, layout, records, commands, code));
+        value_or_throw<JournalFailure>(validate_redo_targets(expanded, layout, records, code));
       }
       else
       {
-        take(validate_redo_targets(commands, layout, records, code));
+        value_or_throw<JournalFailure>(validate_redo_targets(commands, layout, records, code));
       }
     }
 
@@ -486,7 +456,7 @@ namespace angaria::detail::mapped
       if (header._kind == JournalKind::FixedState)
       {
         const auto bytes = prefix_bytes(state).subspan(journal_offset + journal_header_bytes, header._inlineBytes);
-        batch._commands = take(decode_commands(bytes));
+        batch._commands = value_or_throw<JournalFailure>(decode_commands(bytes));
       }
       else
       {
@@ -523,9 +493,9 @@ namespace angaria::detail::mapped
       require_fixed_compacts(batch._commands, header._kind, ErrorCode::IoError);
       if (has_compact(batch._commands))
       {
-        batch._commands = take(expand_task_claim_commands(file, fixed_layout(state), allRecords, batch._commands));
+        batch._commands = value_or_throw<JournalFailure>(expand_task_claim_commands(file, fixed_layout(state), allRecords, batch._commands));
       }
-      take(validate_redo_targets(batch._commands, fixed_layout(state), allRecords));
+      value_or_throw<JournalFailure>(validate_redo_targets(batch._commands, fixed_layout(state), allRecords));
       return batch;
     }
 
@@ -537,11 +507,11 @@ namespace angaria::detail::mapped
       {
         // Retain one checked mapping for the command, including across fault
         // checkpoints, rather than mapping and unmapping every eight-byte word.
-        auto mapping = take(file.map_read_write(command._target, command._payload.size()));
-        const auto bytes = take(mapping.writable_bytes());
+        auto mapping = value_or_throw<JournalFailure>(file.map_read_write(command._target, command._payload.size()));
+        const auto bytes = value_or_throw<JournalFailure>(mapping.writable_bytes());
         for (std::size_t offset = 0; offset < command._payload.size(); offset += 8)
         {
-          take(AtomicWord::bind(bytes, offset)).store_release(read_u64(command._payload, offset));
+          value_or_throw<JournalFailure>(AtomicWord::bind(bytes, offset)).store_release(read_unsigned_le<std::uint64_t>(command._payload, offset));
           checkpoint(state, JournalCheckpoint::RedoWord, word++);
         }
       }
@@ -557,7 +527,7 @@ namespace angaria::detail::mapped
       }};
       for (std::size_t index = 0; index != epilogue.size(); ++index)
       {
-        take(AtomicWord::bind(prefix_bytes(state), epilogue[index].first)).store_release(epilogue[index].second);
+        value_or_throw<JournalFailure>(AtomicWord::bind(prefix_bytes(state), epilogue[index].first)).store_release(epilogue[index].second);
         checkpoint(state, JournalCheckpoint::EpilogueWord, index);
       }
       publish(state, JournalControl::Applied, JournalCheckpoint::Applied);
@@ -579,11 +549,11 @@ namespace angaria::detail::mapped
       {
         if (header._kind == JournalKind::Append)
         {
-          take(file.resize(header._originalFileBytes));
+          value_or_throw<JournalFailure>(file.resize(header._originalFileBytes));
         }
         else
         {
-          const auto commands = take(decode_commands(prefix_bytes(state).subspan(
+          const auto commands = value_or_throw<JournalFailure>(decode_commands(prefix_bytes(state).subspan(
               journal_offset + journal_header_bytes, header._inlineBytes)));
           validate_domain_targets(file, fixed_layout(state), prefix._ranges, commands, header._kind);
         }
@@ -613,18 +583,14 @@ namespace angaria::detail::mapped
       if (draft._kind == 9)
       {
         const auto receipts = draft._immutable.size() >= 128 ?
-            checked_multiply(read_u64(draft._immutable, 104), 128) : std::nullopt;
+            checked_multiply(read_unsigned_le<std::uint64_t>(draft._immutable, 104), 128) : std::nullopt;
         if (!receipts || *receipts == 0 || *receipts != draft._mutable.size())
         {
           fail(ErrorCode::InvalidArgument, "Publication initialization must contain its complete receipt array");
         }
         for (std::size_t slot = 0; slot < draft._mutable.size(); slot += 128)
         {
-          if (!std::all_of(draft._mutable.begin() + slot + 56, draft._mutable.begin() + slot + 128,
-                           [](std::byte value)
-                           {
-                             return value == std::byte{};
-                           }))
+          if (!all_zero(std::span{draft._mutable}.subspan(slot + 56, 72)))
           {
             fail(ErrorCode::InvalidArgument, "Publication initialization sets reserved receipt bytes");
           }
@@ -650,10 +616,10 @@ namespace angaria::detail::mapped
       envelope._generation = generation;
       envelope._previous = draft._previous;
       envelope._registryRevision = revision;
-      const auto encoded = take(encode_record_envelope(envelope));
+      const auto encoded = value_or_throw<JournalFailure>(encode_record_envelope(envelope));
       RecordImage image;
       image._offset = offset;
-      image._range = take(validate_journal_record(offset, envelope, draft._immutable,
+      image._range = value_or_throw<JournalFailure>(validate_journal_record(offset, envelope, draft._immutable,
                                                  arena, ErrorCode::InvalidArgument));
       image._bytes.resize(host_size(*total));
       std::copy(encoded.begin(), encoded.end(), image._bytes.begin());
@@ -713,7 +679,7 @@ namespace angaria::detail::mapped
       }
       PreparedOperation operation;
       operation._prefix = scan_prefix(file, fixed_layout(state)._arenaBegin, current._tail, current._generation);
-      operation._commands = take(encode_commands(plan._commands));
+      operation._commands = value_or_throw<JournalFailure>(encode_commands(plan._commands));
       auto& header = operation._header;
       header._control = JournalControl::Prepared;
       header._generation = current._generation + 1;
@@ -776,7 +742,7 @@ namespace angaria::detail::mapped
         JournalRecord draft;
         draft._kind = 11;
         draft._previous = current._manifest;
-        draft._immutable = take(encode_manifest_body(manifest, offset));
+        draft._immutable = value_or_throw<JournalFailure>(encode_manifest_body(manifest, offset));
         auto image = make_image(draft, offset, header._generation, header._newRevision, arena,
                                  state._controller->configuration()._maxLogBytes);
         allRecords.push_back(image._range);
@@ -798,7 +764,7 @@ namespace angaria::detail::mapped
       }
       validate_domain_targets(file, fixed_layout(state), allRecords, plan._commands,
                               plan._kind, ErrorCode::InvalidArgument);
-      operation._headerBytes = take(encode_journal_header(header));
+      operation._headerBytes = value_or_throw<JournalFailure>(encode_journal_header(header));
       operation._result._generation = header._generation;
       operation._result._tail = header._newTail;
       operation._result._manifest = header._kind == JournalKind::Append ? header._manifest : current._manifest;
@@ -822,18 +788,18 @@ namespace angaria::detail::mapped
       publish(state, JournalControl::Prepared, JournalCheckpoint::Prepared);
       if (operation._header._kind == JournalKind::Append)
       {
-        take(file.resize(operation._header._newFileBytes));
+        value_or_throw<JournalFailure>(file.resize(operation._header._newFileBytes));
         checkpoint(state, JournalCheckpoint::FileGrowth);
         // This mapping is released on every return/unwind before rollback can shrink.
-        auto mapping = take(file.map_read_write(operation._header._baseTail,
+        auto mapping = value_or_throw<JournalFailure>(file.map_read_write(operation._header._baseTail,
                                                 operation._header._newTail - operation._header._baseTail));
-        const auto appendBytes = take(mapping.writable_bytes());
+        const auto appendBytes = value_or_throw<JournalFailure>(mapping.writable_bytes());
         std::uint64_t word{};
         for (std::size_t index = 0; index != operation._images.size(); ++index)
         {
           const auto& image = operation._images[index];
           const auto start = host_size(image._offset - operation._header._baseTail);
-          auto readiness = take(AtomicWord::bind(appendBytes, start + 48));
+          auto readiness = value_or_throw<JournalFailure>(AtomicWord::bind(appendBytes, start + 48));
           readiness.store_release(0);
           for (std::size_t offset = 0; offset != image._bytes.size(); offset += 8)
           {
@@ -873,9 +839,9 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidArgument, "Journal requires a controller");
       }
-      auto* file = take(controller->file(guard));
+      auto* file = value_or_throw<JournalFailure>(controller->file(guard));
       auto state = std::make_unique<MutationJournalState>();
-      state->_prefix = take(file->map_read_write(0, superblock_bytes));
+      state->_prefix = value_or_throw<JournalFailure>(file->map_read_write(0, superblock_bytes));
       state->_controller = std::move(controller);
       state->_injector = injector;
       return MutationJournal(std::move(state));
@@ -894,7 +860,7 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidState, "Journal is moved-from");
       }
-      recover_journal(*_state, *take(_state->_controller->file(guard)));
+      recover_journal(*_state, *value_or_throw<JournalFailure>(_state->_controller->file(guard)));
       return std::monostate{};
     }
     catch (...)
@@ -911,7 +877,7 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidState, "Journal is moved-from");
       }
-      auto& file = *take(_state->_controller->file(guard));
+      auto& file = *value_or_throw<JournalFailure>(_state->_controller->file(guard));
       recover_journal(*_state, file);
       return clean_snapshot(*_state, file);
     }
@@ -929,7 +895,7 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidState, "Journal is moved-from");
       }
-      auto& file = *take(_state->_controller->file(guard));
+      auto& file = *value_or_throw<JournalFailure>(_state->_controller->file(guard));
       recover_journal(*_state, file);
       auto operation = preflight(*_state, file, plan);
       try

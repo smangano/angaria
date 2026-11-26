@@ -1,5 +1,7 @@
 #include "angaria/capture.h"
 
+#include "angaria/detail/error_support.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -26,16 +28,6 @@ namespace angaria
     [[noreturn]] void fail(ErrorCode code, const char* path, const char* message)
     {
       throw CaptureFailure{Error{code, message, path}};
-    }
-
-    template <typename T>
-    T take(Result<T> result)
-    {
-      if (auto* error = std::get_if<Error>(&result))
-      {
-        throw CaptureFailure{std::move(*error)};
-      }
-      return std::get<T>(std::move(result));
     }
 
     Error capture_error(std::uint64_t record, std::uint64_t offset)
@@ -227,14 +219,14 @@ namespace angaria
       }
       // Header encoding allocates no payload bytes. Establish every byte
       // budget before the owning record encoder copies the caller's payload.
-      static_cast<void>(take(MessageRecordCodec::encode_header(header, _recordLimit)));
+      static_cast<void>(detail::value_or_throw<CaptureFailure>(MessageRecordCodec::encode_header(header, _recordLimit)));
       if (header._payloadBytes != payload.size())
       {
         fail(ErrorCode::InvalidArgument, "payload_size", "Declared payload length differs from the supplied bytes");
       }
       const auto total = std::uint64_t{MessageRecordCodec::header_bytes} + header._payloadBytes;
       check_capture_capacity(total, _bytes, _records, _captureLimit);
-      const auto bytes = take(MessageRecordCodec::encode(header, payload, _recordLimit));
+      const auto bytes = detail::value_or_throw<CaptureFailure>(MessageRecordCodec::encode(header, payload, _recordLimit));
       return append(bytes);
     }
     catch (...)
@@ -251,7 +243,7 @@ namespace angaria
       {
         fail(ErrorCode::InvalidState, "state", "Capture writer is moved from or terminal after I/O failure");
       }
-      static_cast<void>(take(MessageRecordCodec::decode_view(record, _recordLimit)));
+      static_cast<void>(detail::value_or_throw<CaptureFailure>(MessageRecordCodec::decode_view(record, _recordLimit)));
       check_capture_capacity(record.size(), _bytes, _records, _captureLimit);
       bool threw{};
       try
@@ -352,7 +344,7 @@ namespace angaria
       check_capture_capacity(MessageRecordCodec::header_bytes, _bytes, _records, _captureLimit);
       MessageRecordCodec::HeaderBytes bytes{};
       read_exact(*_input, bytes, "header");
-      auto header = take(MessageRecordCodec::decode_header(bytes, _recordLimit));
+      auto header = detail::value_or_throw<CaptureFailure>(MessageRecordCodec::decode_header(bytes, _recordLimit));
       const auto total = std::uint64_t{MessageRecordCodec::header_bytes} + header._payloadBytes;
       check_capture_capacity(total, _bytes, _records, _captureLimit);
       // decode_header already established native allocation bounds. The full

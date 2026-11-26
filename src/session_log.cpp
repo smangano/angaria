@@ -1,5 +1,7 @@
 #include "session_log.h"
 
+#include "angaria/detail/byte_operations.h"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -10,7 +12,6 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
-
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -39,27 +40,6 @@ namespace angaria::detail
     {
       constexpr std::string_view allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
       return !name.empty() && name.size() <= MAX_NAME_SIZE && name.find_first_not_of(allowed) == name.npos;
-    }
-
-    template <typename UInt>
-    void put_le(std::span<std::uint8_t> bytes, std::size_t offset, UInt value)
-    {
-      for (std::size_t index = 0; index < sizeof(value); ++index)
-      {
-        bytes[offset + index] = static_cast<std::uint8_t>(value & 0xff);
-        value >>= 8;
-      }
-    }
-
-    template <typename UInt>
-    UInt get_le(std::span<const std::uint8_t> bytes, std::size_t offset)
-    {
-      UInt value{};
-      for (std::size_t index = sizeof(value); index > 0; --index)
-      {
-        value = static_cast<UInt>((value << 8) | bytes[offset + index - 1]);
-      }
-      return value;
     }
 
     int open_log(const std::filesystem::path& path, LogMode mode)
@@ -174,10 +154,10 @@ namespace angaria::detail
     }
     std::array<std::uint8_t, HEADER_PREFIX_SIZE + MAX_TEXT_SIZE> bytes{};
     std::ranges::copy(MAGIC, bytes.begin());
-    put_le(bytes, 8, VERSION);
-    put_le(bytes, 10, static_cast<std::uint16_t>(size));
-    put_le(bytes, 12, maxLogBytes);
-    put_le(bytes, 20, READING_SCHEMA_ID);
+    write_unsigned_le(bytes, 8, VERSION);
+    write_unsigned_le(bytes, 10, static_cast<std::uint16_t>(size));
+    write_unsigned_le(bytes, 12, maxLogBytes);
+    write_unsigned_le(bytes, 20, READING_SCHEMA_ID);
     bytes[22] = INT32_KIND;
     bytes[23] = static_cast<std::uint8_t>(queueName.size());
     bytes[24] = static_cast<std::uint8_t>(messageName.size());
@@ -197,13 +177,13 @@ namespace angaria::detail
     {
       throw std::runtime_error("invalid session log magic");
     }
-    if (get_le<std::uint16_t>(prefix, 8) != VERSION || prefix[22] != INT32_KIND)
+    if (read_unsigned_le<std::uint16_t>(prefix, 8) != VERSION || prefix[22] != INT32_KIND)
     {
       throw std::runtime_error("unsupported session log format");
     }
-    const auto size = get_le<std::uint16_t>(prefix, 10);
-    const auto maxLogBytes = get_le<std::uint64_t>(prefix, 12);
-    const auto schemaId = get_le<std::uint16_t>(prefix, 20);
+    const auto size = read_unsigned_le<std::uint16_t>(prefix, 10);
+    const auto maxLogBytes = read_unsigned_le<std::uint64_t>(prefix, 12);
+    const auto schemaId = read_unsigned_le<std::uint16_t>(prefix, 20);
     const std::size_t textSize = prefix[23] + prefix[24] + prefix[25];
     if (size != HEADER_PREFIX_SIZE + textSize || textSize > MAX_TEXT_SIZE || size > fileSize ||
         fileSize > maxLogBytes || maxLogBytes > MAX_FILE_SIZE || schemaId == 0)
@@ -238,19 +218,19 @@ namespace angaria::detail
     }
     std::array<std::uint8_t, SESSION_RECORD_SIZE> bytes{};
     read_bytes(offset, bytes);
-    const auto sequence = get_le<std::uint64_t>(bytes, 4);
-    if (get_le<std::uint32_t>(bytes, 0) != SESSION_RECORD_SIZE ||
+    const auto sequence = read_unsigned_le<std::uint64_t>(bytes, 4);
+    if (read_unsigned_le<std::uint32_t>(bytes, 0) != SESSION_RECORD_SIZE ||
         sequence != 1 + (offset - header._size) / SESSION_RECORD_SIZE ||
-        get_le<std::uint16_t>(bytes, 20) != header._schemaId ||
-        get_le<std::uint32_t>(bytes, 26) != COMMIT_MARKER)
+        read_unsigned_le<std::uint16_t>(bytes, 20) != header._schemaId ||
+        read_unsigned_le<std::uint32_t>(bytes, 26) != COMMIT_MARKER)
     {
       throw std::runtime_error("invalid session log record");
     }
 
     return {
         sequence,
-        std::bit_cast<std::int64_t>(get_le<std::uint64_t>(bytes, 12)),
-        std::bit_cast<std::int32_t>(get_le<std::uint32_t>(bytes, 22)),
+        std::bit_cast<std::int64_t>(read_unsigned_le<std::uint64_t>(bytes, 12)),
+        std::bit_cast<std::int32_t>(read_unsigned_le<std::uint32_t>(bytes, 22)),
     };
   }
 
@@ -269,12 +249,12 @@ namespace angaria::detail
     const auto now = std::chrono::system_clock::now().time_since_epoch();
     const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
     std::array<std::uint8_t, SESSION_RECORD_SIZE> bytes{};
-    put_le(bytes, 0, static_cast<std::uint32_t>(SESSION_RECORD_SIZE));
-    put_le(bytes, 4, 1 + (offset - header._size) / SESSION_RECORD_SIZE);
-    put_le(bytes, 12, std::bit_cast<std::uint64_t>(static_cast<std::int64_t>(timestamp)));
-    put_le(bytes, 20, header._schemaId);
-    put_le(bytes, 22, std::bit_cast<std::uint32_t>(value));
-    put_le(bytes, 26, COMMIT_MARKER);
+    write_unsigned_le(bytes, 0, static_cast<std::uint32_t>(SESSION_RECORD_SIZE));
+    write_unsigned_le(bytes, 4, 1 + (offset - header._size) / SESSION_RECORD_SIZE);
+    write_unsigned_le(bytes, 12, std::bit_cast<std::uint64_t>(static_cast<std::int64_t>(timestamp)));
+    write_unsigned_le(bytes, 20, header._schemaId);
+    write_unsigned_le(bytes, 22, std::bit_cast<std::uint32_t>(value));
+    write_unsigned_le(bytes, 26, COMMIT_MARKER);
     // A previous partial write occupies fewer bytes than this record. Rewrite it
     // from its start and write the commit marker only after the body.
     const auto record = std::span(bytes);

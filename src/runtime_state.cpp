@@ -1,5 +1,7 @@
 #include "runtime_state.h"
 
+#include "angaria/detail/byte_operations.h"
+#include "angaria/detail/checked_arithmetic.h"
 #include "journal_validation.h"
 #include "native_atomic.h"
 
@@ -12,9 +14,9 @@
 #include <set>
 #include <stdexcept>
 #include <system_error>
-
 #include <pthread.h>
 #include <time.h>
+
 #if defined(__linux__)
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -95,10 +97,7 @@ namespace angaria::detail
     command._payload.resize(values.size() * 8);
     for (std::size_t index = 0; index < values.size(); ++index)
     {
-      for (unsigned byte = 0; byte < 8; ++byte)
-      {
-        command._payload[index * 8 + byte] = static_cast<std::byte>(values[index] >> (byte * 8));
-      }
+      write_unsigned_le(command._payload, index * 8, values[index]);
     }
     return command;
   }
@@ -157,7 +156,7 @@ namespace angaria::detail
 
   std::vector<std::byte> RuntimeAccess::read_bytes(std::uint64_t offset, std::uint64_t length) const
   {
-    if (length > std::numeric_limits<std::size_t>::max() ||
+    if (!fits_size_t(length) ||
         !mapped::contains_range(_snapshot._tail, offset, length))
     {
       runtime_fail(ErrorCode::IoError, "runtime.bytes", "Immutable range exceeds committed history");
@@ -191,10 +190,7 @@ namespace angaria::detail
       mapped::RecordEnvelopeBytes bytes{};
       runtime_value(_file->read_exact(offset, std::span{bytes}.first(48)));
       const auto readiness = read_words(offset + 48, 1)[0];
-      for (unsigned byte = 0; byte < 8; ++byte)
-      {
-        bytes[48 + byte] = static_cast<std::byte>(readiness >> (byte * 8));
-      }
+      write_unsigned_le(bytes, 48, readiness);
       runtime_value(_file->read_exact(offset + 56, std::span{bytes}.subspan(56)));
       const auto envelope = runtime_value(mapped::decode_record_envelope(bytes));
       if (envelope._readiness != 2 || envelope._generation > _snapshot._generation ||
@@ -271,19 +267,13 @@ namespace angaria::detail
   void runtime_validate_task_state(std::span<const std::uint64_t> words, TaskKind kind)
   {
     if (words.size() != 32 || (words[6] & ~std::uint64_t{7}) != 0 || words[8] > words[1] ||
-        std::any_of(words.begin() + 10, words.end(), [](auto word)
-        {
-          return word != 0;
-        }))
+        !all_zero(std::span{words}.subspan(10)))
     {
       runtime_fail(ErrorCode::IoError, "task.state", "Task state has invalid flags, retirement floor, or reserved data");
     }
     if (words[0] == 0)
     {
-      if (std::any_of(words.begin(), words.end(), [](auto word)
-          {
-            return word != 0;
-          }))
+      if (!all_zero(words))
       {
         runtime_fail(ErrorCode::IoError, "task.state", "Never-attached Task contains claim state");
       }
@@ -312,24 +302,15 @@ namespace angaria::detail
       const auto state = std::span{stateWords}.subspan(slot * 32, 32);
       if (row[0] == 0)
       {
-        if (std::any_of(row.begin(), row.end(), [](auto value)
-            {
-              return value != 0;
-            }) ||
-            std::any_of(state.begin(), state.end(), [](auto value)
-            {
-              return value != 0;
-            }))
+        if (!all_zero(row) ||
+            !all_zero(state))
         {
           runtime_fail(ErrorCode::IoError, "task.index", "Empty Task index row contains data");
         }
         continue;
       }
       if (row[0] > capacity || row[1] == 0 || row[2] == 0 || row[2] > access._snapshot._revision ||
-          std::any_of(row.begin() + 3, row.end(), [](auto value)
-          {
-            return value != 0;
-          }))
+          !all_zero(std::span{row}.subspan(3)))
       {
         runtime_fail(ErrorCode::IoError, "task.index", "Task index has invalid identity, revision, or reserved data");
       }

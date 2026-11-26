@@ -1,5 +1,6 @@
 #include "delivery_runtime.h"
 
+#include "angaria/detail/byte_operations.h"
 #include "delivery_state.h"
 #include "publication_metadata.h"
 
@@ -29,14 +30,6 @@ namespace angaria::detail
       }
     }
 
-    bool zero(std::span<const std::uint64_t> words)
-    {
-      return std::all_of(words.begin(), words.end(), [](auto word)
-      {
-        return word == 0;
-      });
-    }
-
     std::vector<std::byte> atomic_bytes(RuntimeAccess& access, std::uint64_t offset,
                                         std::size_t words)
     {
@@ -44,10 +37,7 @@ namespace angaria::detail
       std::vector<std::byte> bytes(words * 8);
       for (std::size_t index = 0; index < words; ++index)
       {
-        for (unsigned byte = 0; byte < 8; ++byte)
-        {
-          bytes[index * 8 + byte] = static_cast<std::byte>(values[index] >> (8 * byte));
-        }
+        write_unsigned_le(bytes, index * 8, values[index]);
       }
       return bytes;
     }
@@ -199,10 +189,7 @@ namespace angaria::detail
           const auto slotBytes = std::span{bytes}.subspan(word * 8, mapped::ring_slot_bytes);
           if (index >= capacity)
           {
-            require(std::all_of(slotBytes.begin(), slotBytes.end(), [](auto byte)
-            {
-              return byte == std::byte{};
-            }), "queue.ring", "Ring allocation padding must be zero");
+            require(all_zero(slotBytes), "queue.ring", "Ring allocation padding must be zero");
             continue;
           }
           const auto slot = runtime_value(mapped::decode_ring_slot(slotBytes, capacity, index));
@@ -228,7 +215,7 @@ namespace angaria::detail
       require(state[0] == deliveries.size(), "queue.history", "Queue sequence root disagrees with complete retained history");
       if (deliveries.empty())
       {
-        require(state[1] == 0 && zero(std::span{state}.subspan(4)), "queue.history",
+        require(state[1] == 0 && all_zero(std::span{state}.subspan(4)), "queue.history",
                 "Queue without Publications contains delivery progress");
       }
       else
@@ -366,7 +353,7 @@ namespace angaria::detail
           reference + mapped::record_envelope_bytes + mapped::publication_fixed_bytes,
           destination._receiptReference, publication._producerIncarnation, receipt});
       const auto padding = reference + envelope._totalBytes - destination._receiptReference - mapped::receipt_bytes;
-      require(padding < mapped::section_alignment && zero(access.read_words(destination._receiptReference + mapped::receipt_bytes,
+      require(padding < mapped::section_alignment && all_zero(access.read_words(destination._receiptReference + mapped::receipt_bytes,
                                                                              static_cast<std::size_t>(padding / 8))),
               "publication.padding", "Publication allocation padding must be zero");
     }
@@ -387,7 +374,7 @@ namespace angaria::detail
       const auto pin = pins.find(id);
       if (pin == pins.end())
       {
-        require(zero(std::span{state}.subspan(2, 6)), "source_set.pin", "Source slot has no matching Issued receipt");
+        require(all_zero(std::span{state}.subspan(2, 6)), "source_set.pin", "Source slot has no matching Issued receipt");
         continue;
       }
       const auto& delivery = deliveries.at(pin->second.first)[pin->second.second];

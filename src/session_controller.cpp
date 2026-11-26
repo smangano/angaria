@@ -122,11 +122,6 @@ namespace angaria::detail::mapped
       }
     }
 
-    FileIdentity stat_identity(const struct stat& info)
-    {
-      return {static_cast<std::uint64_t>(info.st_dev), static_cast<std::uint64_t>(info.st_ino)};
-    }
-
     Result<std::unique_ptr<CoordinationDescriptor>> open_coordination(
         int directory, const std::filesystem::path& name, const std::filesystem::path& diagnostic,
         bool isDirectory, bool create = false)

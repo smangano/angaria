@@ -1,6 +1,7 @@
 // Describe logical values in TOML, then encode them with their exact meanings.
 // No Queue is needed for these local payload and validation operations.
 #include "example_support.h"
+#include "example_formatting.h"
 #include "angaria/payload.h"
 
 #include <array>
@@ -28,19 +29,6 @@ namespace
     // owns the exact schema and its logical metadata, including enum labels.
   }
 
-  void print_hex(std::span<const std::byte> bytes)
-  {
-    for (std::size_t index = 0; index < bytes.size(); ++index)
-    {
-      if (index != 0)
-      {
-        std::cout << ' ';
-      }
-      std::cout << std::hex << std::setfill('0') << std::setw(2)
-                << std::to_integer<unsigned>(bytes[index]);
-    }
-    std::cout << std::dec << std::setfill(' ') << '\n';
-  }
 }
 
 int main(int argc, char** argv)
@@ -75,7 +63,7 @@ int main(int argc, char** argv)
     const auto decoded = primer::value(codec.decode(payload));
     std::cout << "OrderSettings payload bytes: " << payload.size() << '\n'
               << "OrderSettings hex: ";
-    print_hex(payload);
+    primer::print_hex(payload);
     std::cout << "Decoded: Enabled=" << (std::get<bool>(decoded[0]) ? "true" : "false")
               << " Flags=" << std::get<BitFieldValue>(decoded[1])._value
               << " Side=" << static_cast<unsigned>(std::get<std::uint8_t>(std::get<EnumValue>(decoded[2])._value))

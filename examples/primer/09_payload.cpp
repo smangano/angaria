@@ -1,6 +1,7 @@
 // Turn registered scalar Fields into portable bytes, then decode those bytes.
 // These are local payload operations; no Queue or publication is involved.
 #include "example_support.h"
+#include "example_formatting.h"
 #include "angaria/payload.h"
 
 #include <array>
@@ -70,19 +71,6 @@ namespace
     // Session and Task handles close here. Each codec owns its definitions.
   }
 
-  void print_hex(std::span<const std::byte> bytes)
-  {
-    for (std::size_t index = 0; index < bytes.size(); ++index)
-    {
-      if (index != 0)
-      {
-        std::cout << ' ';
-      }
-      std::cout << std::hex << std::setfill('0') << std::setw(2)
-                << std::to_integer<unsigned>(bytes[index]);
-    }
-    std::cout << std::dec << std::setfill(' ') << '\n';
-  }
 }
 
 int main(int argc, char** argv)
@@ -103,7 +91,7 @@ int main(int argc, char** argv)
     const auto first_decoded = primer::value(codecs._versionOne.decode(first_payload));
     std::cout << "Quote v1 bytes: " << first_payload.size() << '\n'
               << "Quote v1 hex: ";
-    print_hex(first_payload);
+    primer::print_hex(first_payload);
     std::cout << "Decoded v1: PriceTicks=" << std::get<std::int64_t>(first_decoded[0])
               << " Quantity=" << std::get<std::uint64_t>(first_decoded[1]) << '\n';
 

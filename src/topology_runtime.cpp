@@ -1,6 +1,8 @@
 #include "topology_state.h"
 
+#include "angaria/detail/byte_operations.h"
 #include "delivery_runtime.h"
+#include "registry_access.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -20,14 +22,6 @@ namespace angaria::detail
 {
   namespace
   {
-    bool all_zero(std::span<const std::uint64_t> words)
-    {
-      return std::all_of(words.begin(), words.end(), [](auto value)
-      {
-        return value == 0;
-      });
-    }
-
     bool has_native_delivery(RuntimeAccess& access)
     {
       return (access._session->_controller->configuration()._requiredFeatures &
@@ -725,39 +719,6 @@ namespace angaria
 {
   namespace
   {
-    detail::RuntimeAccess topology_access(const std::shared_ptr<detail::SessionState>& state,
-                                           const std::shared_ptr<detail::TaskState>& actor)
-    {
-      if (actor)
-      {
-        detail::runtime_check_task_owner(actor);
-      }
-      detail::RuntimeAccess access(state);
-      if (actor)
-      {
-        detail::runtime_check_task(access, actor);
-      }
-      return access;
-    }
-
-    template <typename Id, typename Loaded>
-    const Loaded& by_id(const std::vector<Loaded>& entries, Id id, const char* path)
-    {
-      if (static_cast<std::uint16_t>(id) == 0)
-      {
-        detail::runtime_fail(ErrorCode::InvalidArgument, path, "Entity identity is zero");
-      }
-      const auto found = std::find_if(entries.begin(), entries.end(), [id](const auto& entry)
-      {
-        return entry._definition._id == id;
-      });
-      if (found == entries.end())
-      {
-        detail::runtime_fail(ErrorCode::NotFound, path, "Entity is not registered with this kind");
-      }
-      return *found;
-    }
-
     template <typename Loaded>
     auto by_name(const std::vector<Loaded>& entries, std::string_view name, const char* path)
     {
@@ -777,7 +738,7 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return by_name(detail::runtime_topology(access)._queues, name, "queue.name");
     }
     catch (...)
@@ -790,7 +751,7 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return by_name(detail::runtime_topology(access)._sources, name, "source_set.name");
     }
     catch (...)
@@ -803,7 +764,7 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       return by_name(detail::runtime_topology(access)._publishing, name, "publishing_set.name");
     }
     catch (...)
@@ -816,9 +777,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._queues, id, "queue.id")._definition._descriptor;
+      return detail::require_registered_entity(topology._queues, id, "queue.id")._definition._descriptor;
     }
     catch (...)
     {
@@ -830,9 +791,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._sources, id, "source_set.id")._definition._descriptor;
+      return detail::require_registered_entity(topology._sources, id, "source_set.id")._definition._descriptor;
     }
     catch (...)
     {
@@ -844,9 +805,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._publishing, id, "publishing_set.id")._definition._descriptor;
+      return detail::require_registered_entity(topology._publishing, id, "publishing_set.id")._definition._descriptor;
     }
     catch (...)
     {
@@ -858,9 +819,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._sources, id, "source_set.id")._definition._members;
+      return detail::require_registered_entity(topology._sources, id, "source_set.id")._definition._members;
     }
     catch (...)
     {
@@ -872,9 +833,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._queues, id, "queue.id")._definition._registration;
+      return detail::require_registered_entity(topology._queues, id, "queue.id")._definition._registration;
     }
     catch (...)
     {
@@ -886,9 +847,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._sources, id, "source_set.id")._definition._registration;
+      return detail::require_registered_entity(topology._sources, id, "source_set.id")._definition._registration;
     }
     catch (...)
     {
@@ -900,9 +861,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._publishing, id, "publishing_set.id")._definition._registration;
+      return detail::require_registered_entity(topology._publishing, id, "publishing_set.id")._definition._registration;
     }
     catch (...)
     {
@@ -914,9 +875,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._queues, id, "queue.id")._definition._state;
+      return detail::require_registered_entity(topology._queues, id, "queue.id")._definition._state;
     }
     catch (...)
     {
@@ -928,9 +889,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._sources, id, "source_set.id")._definition._state;
+      return detail::require_registered_entity(topology._sources, id, "source_set.id")._definition._state;
     }
     catch (...)
     {
@@ -942,9 +903,9 @@ namespace angaria
   {
     try
     {
-      auto access = topology_access(_state, _actor);
+      auto access = detail::registry_access(_state, _actor);
       const auto topology = detail::runtime_topology(access);
-      return by_id(topology._publishing, id, "publishing_set.id")._definition._state;
+      return detail::require_registered_entity(topology._publishing, id, "publishing_set.id")._definition._state;
     }
     catch (...)
     {

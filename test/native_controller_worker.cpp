@@ -4,6 +4,8 @@
 // complete, and C = fork child is alive. Closing the release pipe permits orderly
 // exit; crash cases kill an owner instead. This is a private test protocol.
 
+#include "process_support.h"
+#include "result_helpers.h"
 #include "session_controller.h"
 
 #include <cerrno>
@@ -30,43 +32,13 @@ namespace
   using namespace angaria;
   namespace mapped = angaria::detail::mapped;
 
-  template <typename T>
-  T require_value(Result<T> result)
-  {
-    if (const auto* error = std::get_if<Error>(&result))
-    {
-      throw std::runtime_error(error->_path + ": " + error->_message);
-    }
-    return std::get<T>(std::move(result));
-  }
+  using angaria::test_support::require_value;
 
-  template <typename T>
-  bool has_error(const Result<T>& result, ErrorCode code)
-  {
-    const auto* error = std::get_if<Error>(&result);
-    return error != nullptr && error->_code == code;
-  }
+  using angaria::test_support::has_error;
 
   void write_exact(int fd, const void* data, std::size_t length)
   {
-    const auto* bytes = static_cast<const char*>(data);
-    while (length != 0)
-    {
-      const auto count = ::write(fd, bytes, length);
-      if (count > 0)
-      {
-        bytes += count;
-        length -= static_cast<std::size_t>(count);
-      }
-      else if (count == -1 && errno == EINTR)
-      {
-        continue;
-      }
-      else
-      {
-        throw std::runtime_error("worker pipe write failed");
-      }
-    }
+    angaria::test_support::write_all(fd, data, length, "worker pipe write failed");
   }
 
   void report(int fd, char value)

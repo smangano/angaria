@@ -1,4 +1,5 @@
 #include "runtime_state.h"
+
 #include "task_claim_redo.h"
 #include "topology_state.h"
 
@@ -19,7 +20,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-
 #include <unistd.h>
 
 namespace angaria::detail
@@ -198,7 +198,6 @@ namespace angaria::detail
       plan._newRevision = access._snapshot._revision;
       return plan;
     }
-
   } // namespace
 
   TaskState::~TaskState()
