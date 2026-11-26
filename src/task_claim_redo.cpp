@@ -3,7 +3,9 @@
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/error_support.h"
+#include "delivery_words.h"
 #include "native_atomic.h"
+#include "publication_metadata.h"
 #include "session_metadata.h"
 #include "topology_metadata.h"
 
@@ -317,6 +319,179 @@ namespace angaria::detail::mapped
       }
       return tasks;
     }
+
+    struct SourceRow
+    {
+      SourceDefinition _definition;
+      std::uint64_t _offset{};
+      std::vector<std::uint64_t> _words;
+    };
+
+    std::vector<SourceRow> read_sources(NativeFile& file, const FixedLayout& layout,
+                                       std::span<const JournalRecordRange> records,
+                                       std::span<const TaskRow> tasks, ErrorCode code)
+    {
+      const auto& index = section(layout, SectionKind::SourceIndex, code);
+      const auto& state = section(layout, SectionKind::SourceState, code);
+      if (index._stride != index_entry_bytes || state._stride != source_state_bytes || index._count != state._count)
+      {
+        fail(code, "Source cleanup requires parallel Source index and state tables");
+      }
+      std::vector<SourceRow> sources;
+      std::set<std::uint64_t> ids;
+      for (std::uint64_t slot = 0; slot < index._count; ++slot)
+      {
+        const auto entry = read_words(file, index._offset + slot * index._stride, 8);
+        auto words = read_words(file, state._offset + slot * state._stride, 32);
+        if (entry[0] == 0)
+        {
+          if (!all_zero(entry) || !all_zero(words))
+          {
+            fail(code, "Empty Source cleanup slot contains state");
+          }
+          continue;
+        }
+        const auto record = std::find_if(records.begin(), records.end(), [&](const auto& candidate)
+        {
+          return candidate._offset == entry[1];
+        });
+        if (entry[0] > max_entity_id || !ids.insert(entry[0]).second || entry[2] == 0 ||
+            (entry[3] != 1 && entry[3] != 2) || !all_zero(std::span{entry}.subspan(4)) ||
+            record == records.end() || record->_envelope._kind != 4 || record->_envelope._readiness != 2 ||
+            record->_envelope._registryRevision != entry[2] || !fits_host_size(record->_envelope._immutableBytes))
+        {
+          fail(code, "Source cleanup index does not name its committed definition");
+        }
+        std::vector<std::byte> body(static_cast<std::size_t>(record->_envelope._immutableBytes));
+        value_or_throw<Failure>(file.read_exact(record->_offset + record_envelope_bytes, body));
+        auto definition = value_or_throw<Failure>(decode_source_definition(body, record->_offset));
+        if (static_cast<std::uint64_t>(definition._id) != entry[0] || definition._registration._revision != entry[2] ||
+            (definition._state == EntityState::Draft ? 1u : 2u) != entry[3] || !all_zero(std::span{words}.subspan(8)) ||
+            (words[1] == 0 && words[0] != 0))
+        {
+          fail(code, "Source cleanup definition or reserved state is inconsistent");
+        }
+        const auto owner = std::find_if(tasks.begin(), tasks.end(), [&](const auto& task)
+        {
+          return task._definition._id == definition._descriptor._owner;
+        });
+        if ((definition._descriptor._owner != TaskId::Invalid && owner == tasks.end()) ||
+            (owner != tasks.end() && words[1] > owner->_words[0]) ||
+            (owner == tasks.end() && !all_zero(words)))
+        {
+          fail(code, "Source cleanup owner or issuance context is invalid");
+        }
+        sources.push_back(SourceRow{std::move(definition), state._offset + slot * state._stride, std::move(words)});
+      }
+      return sources;
+    }
+
+    void append_delivery_cleanup(NativeFile& file, const FixedLayout& layout,
+                                   std::span<const JournalRecordRange> records,
+                                   std::span<const TaskRow> tasks,
+                                   const std::map<TaskId, std::uint64_t>& endingClaims,
+                                   std::vector<RedoCommand>& expanded, ErrorCode code)
+    {
+      const auto sources = read_sources(file, layout, records, tasks, code);
+      std::set<SourceQueueSetId> issuedSources;
+      for (const auto& record : records)
+      {
+        if (record._envelope._kind == 10)
+        {
+          fail(code, "Retry receipt cleanup requires a later capability");
+        }
+        if (record._envelope._kind != 9)
+        {
+          continue;
+        }
+        // Core direct acceptance has one row. Read bounded metadata and one
+        // atomic receipt, never the application payload or its containing body.
+        std::array<std::byte, publication_fixed_bytes> fixed{};
+        value_or_throw<Failure>(file.read_exact(record._offset + record_envelope_bytes, fixed));
+        const auto prefix = value_or_throw<Failure>(decode_publication_prefix(
+            fixed, record._envelope._immutableBytes, record._offset, max_log_bytes));
+        if (prefix._header._publishingSet != PublishingQueueSetId::Invalid || prefix._destinationCount != 1 ||
+            prefix._layout._totalBytes != record._envelope._totalBytes)
+        {
+          fail(code, "Core claim cleanup requires canonical direct Publications");
+        }
+        DestinationRowBytes row{};
+        value_or_throw<Failure>(file.read_exact(prefix._layout._destinationsOffset, row));
+        const auto payloadEnd = prefix._layout._destinationsOffset + destination_row_bytes + prefix._payloadBytes;
+        std::array<std::byte, 7> padding{};
+        const auto paddingBytes = prefix._layout._receiptsOffset - payloadEnd;
+        if (paddingBytes > padding.size())
+        {
+          fail(code, "Publication padding exceeds its word boundary");
+        }
+        value_or_throw<Failure>(file.read_exact(payloadEnd, std::span{padding}.first(static_cast<std::size_t>(paddingBytes))));
+        const auto metadata = value_or_throw<Failure>(decode_publication_metadata(
+            fixed, row, std::span{padding}.first(static_cast<std::size_t>(paddingBytes)),
+            record._envelope._immutableBytes, record._offset, max_log_bytes));
+        const auto receiptOffset = metadata._layout._receiptsOffset;
+        const auto receipt = value_or_throw<Failure>(decode_receipt_words(read_words(file, receiptOffset, 16)));
+        if (receipt._state == ReceiptState::Unused)
+        {
+          fail(code, "Accepted direct destination has no receipt obligation");
+        }
+        if ((receipt._presence & 1) == 0)
+        {
+          continue;
+        }
+        const auto source = std::find_if(sources.begin(), sources.end(), [&](const auto& candidate)
+        {
+          return candidate._definition._id == receipt._sourceSet;
+        });
+        const auto task = std::find_if(tasks.begin(), tasks.end(), [&](const auto& candidate)
+        {
+          return candidate._definition._id == receipt._consumerTask;
+        });
+        if (source == sources.end() || source->_definition._descriptor._owner != receipt._consumerTask ||
+            task == tasks.end() || receipt._consumerIncarnation > task->_words[0] ||
+            receipt._consumerIncarnation > source->_words[1] ||
+            (receipt._consumerIncarnation == source->_words[1] && receipt._issuance > source->_words[0]))
+        {
+          fail(code, "Receipt cleanup tags disagree with retained ownership or issuance context");
+        }
+        const auto ending = endingClaims.find(receipt._consumerTask);
+        if (receipt._state == ReceiptState::Issued)
+        {
+          if (!issuedSources.insert(receipt._sourceSet).second)
+          {
+            fail(code, "Source has more than one Issued receipt during cleanup");
+          }
+          if (ending != endingClaims.end() && receipt._consumerIncarnation == ending->second)
+          {
+            // State is the only changed receipt word. Preserved tags permit a
+            // later replay to rediscover this already Pending historical row.
+            expanded.push_back(write_word(receiptOffset, 1));
+          }
+        }
+      }
+      for (const auto& source : sources)
+      {
+        const auto ending = endingClaims.find(source._definition._descriptor._owner);
+        if (ending == endingClaims.end())
+        {
+          continue;
+        }
+        if (source._words[1] > ending->second ||
+            (source._words[1] < ending->second && !all_zero(std::span{source._words}.subspan(2, 6))))
+        {
+          fail(code, "Claim cleanup cannot clear a different Source incarnation");
+        }
+        if (source._words[1] == ending->second)
+        {
+          // Ownership is immutable; clearing must not depend on a slot pointer
+          // that an earlier partial pass may already have erased. Counter and
+          // incarnation remain, fencing retained receipt history on reopen.
+          for (std::uint64_t word = 2; word != 8; ++word)
+          {
+            expanded.push_back(write_word(source._offset + word * 8, 0));
+          }
+        }
+      }
+    }
   } // namespace
 
   OperationResult validate_task_only_topology(NativeFile& file, const FixedLayout& layout,
@@ -340,7 +515,7 @@ namespace angaria::detail::mapped
   Result<std::vector<RedoCommand>> expand_task_claim_commands(
       NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records,
-      std::span<const RedoCommand> commands, ErrorCode errorCode)
+      std::span<const RedoCommand> commands, ErrorCode errorCode, bool nativeDelivery)
   {
     try
     {
@@ -417,27 +592,69 @@ namespace angaria::detail::mapped
           if (command._opcode == RedoOpcode::WriteRange && delivery._byteLength != 0 &&
               command._target < delivery._offset + delivery._byteLength && *end > delivery._offset)
           {
-            fail(unsupported, "ReleaseClaim cannot introduce delivery state before its cleanup is implemented");
+            fail(nativeDelivery ? errorCode : unsupported,
+                 "ReleaseClaim cannot overwrite topology or delivery roots used for replay discovery");
           }
         }
         for (const auto& record : records)
         {
-          if (command._opcode == RedoOpcode::WriteRange && record._envelope._kind == 8 &&
+          if (command._opcode == RedoOpcode::WriteRange &&
+              (record._envelope._kind == 8 || record._envelope._kind == 9 || record._envelope._kind == 10) &&
               command._target < record._offset + record._envelope._totalBytes && *end > record._offset)
           {
-            fail(unsupported, "Task-only ReleaseClaim cannot change ring slots");
+            fail(nativeDelivery ? errorCode : unsupported,
+                 "ReleaseClaim cannot overwrite the receipt or ring state used for replay discovery");
           }
         }
       }
-      check_idle_topology(file, layout, records, errorCode);
-      if (std::any_of(records.begin(), records.end(), [](const auto& record)
+      if (!nativeDelivery)
+      {
+        check_idle_topology(file, layout, records, errorCode);
+        if (std::any_of(records.begin(), records.end(), [](const auto& record)
           {
             return record._envelope._kind == 9 || record._envelope._kind == 10;
           }))
-      {
-        fail(unsupported, "ReleaseClaim receipt cleanup is not implemented");
+        {
+          fail(unsupported, "Legacy ReleaseClaim cannot clean native delivery records");
+        }
       }
       auto tasks = read_tasks(file, layout, records, commands, errorCode);
+      // A parent cleanup must keep each child's captured parent-incarnation tag
+      // stable throughout every interrupted prefix, not merely its final image.
+      for (const auto& [target, ending] : releaseTargets)
+      {
+        const auto parent = std::find_if(tasks.begin(), tasks.end(), [&](const auto& task)
+        {
+          return task._offset == target;
+        });
+        if (parent == tasks.end() || parent->_definition._descriptor._kind != TaskKind::Process)
+        {
+          continue;
+        }
+        for (const auto& child : tasks)
+        {
+          if (child._definition._descriptor._kind != TaskKind::Thread ||
+              child._definition._descriptor._process != parent->_definition._id)
+          {
+            continue;
+          }
+          for (const auto& command : commands)
+          {
+            for (const auto word : {std::size_t{0}, std::size_t{7}})
+            {
+              const auto identity = child._offset + word * 8;
+              if (command._opcode == RedoOpcode::WriteRange && identity >= command._target &&
+                  identity - command._target < command._payload.size() &&
+                  read_unsigned_le<std::uint64_t>(command._payload,
+                      static_cast<std::size_t>(identity - command._target)) != child._words[word])
+              {
+                fail(errorCode, "ReleaseClaim cannot change child incarnation tags used for parent replay");
+              }
+            }
+          }
+        }
+        (void)ending;
+      }
       std::vector<RedoCommand> expanded;
       for (const auto& command : commands)
       {
@@ -469,6 +686,22 @@ namespace angaria::detail::mapped
             (ending == std::numeric_limits<std::uint64_t>::max() || target->_words[0] != ending + 1)))
         {
           fail(errorCode, "ReleaseClaim target is not the ending or immediately replacing Task incarnation");
+        }
+        if (nativeDelivery)
+        {
+          std::map<TaskId, std::uint64_t> endingClaims{{target->_definition._id, ending}};
+          if (target->_definition._descriptor._kind == TaskKind::Process)
+          {
+            for (const auto& child : tasks)
+            {
+              if (child._definition._descriptor._kind == TaskKind::Thread &&
+                  child._definition._descriptor._process == target->_definition._id && child._words[7] == ending)
+              {
+                endingClaims.emplace(child._definition._id, child._words[0]);
+              }
+            }
+          }
+          append_delivery_cleanup(file, layout, records, tasks, endingClaims, expanded, errorCode);
         }
         const auto detach = [&](TaskRow& task)
         {

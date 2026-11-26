@@ -2,7 +2,7 @@
 
 Milestone 4, step 4.3, framework version **0.4.3**, validates the core native delivery reader profile. A [Publication](native-transport.md#storage-and-acceptance) retains one message and its destination; its receipt records delivery progress. A Source pin identifies the one delivery currently issued through that Source.
 
-The public Session factories still create format **2.1/`0x3`**. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); public native delivery views and receipt/claim cleanup remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify the reader before sending can produce them. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
+The public Session factories still create format **2.1/`0x3`**. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); step 4.5 adds [reserved progress and claim cleanup](native-progress.md). Public native delivery views remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify the reader before sending can produce them. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
 
 ## Admission before recovery
 
@@ -39,7 +39,7 @@ The [fixed runtime layouts](mapped-format.md#preallocated-live-state) retain the
 
 Strict/Spin scheduling, notification fields, and remaining reserved words stay zero. The presence flag makes epoch-zero acknowledgment time valid; UTC values are never used to infer operation order. Receipt presence follows its [own bit definitions](native-transport.md#receipt-fields-and-presence).
 
-An Issued receipt can remain valid after its process dies: recorded claim identity and a persisted pin do not prove a live OS owner. An Issued Thread Task must also match its recorded parent Process incarnation, attachment flag, and PID; historical released/acknowledged receipts can outlive that parent claim. Replacement cleanup will release the exact old issuance in step 4.5. Until then, Task attachment to publication-bearing state remains explicitly unsupported; this reader step does not weaken the existing cleanup guard.
+An Issued receipt can remain valid after its process dies: recorded claim identity and a persisted pin do not prove a live OS owner. An Issued Thread Task must also match its recorded parent Process incarnation, attachment flag, and PID; historical released/acknowledged receipts can outlive that parent claim. Step 4.5's replacement cleanup releases the exact old issuance and permits Task attachment to valid core publication-bearing state. The reader itself still performs no progress mutation.
 
 ## Tests and next steps
 

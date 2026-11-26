@@ -432,7 +432,7 @@ namespace angaria::detail::mapped
       }
     }
 
-    void validate_domain_targets(NativeFile& file, const FixedLayout& layout,
+    void validate_domain_targets(MutationJournalState& state, NativeFile& file, const FixedLayout& layout,
                                  std::span<const JournalRecordRange> records,
                                  std::span<const RedoCommand> commands, JournalKind kind,
                                  ErrorCode code = ErrorCode::IoError)
@@ -440,7 +440,9 @@ namespace angaria::detail::mapped
       require_fixed_compacts(commands, kind, code);
       if (has_compact(commands))
       {
-        const auto expanded = value_or_throw<JournalFailure>(expand_task_claim_commands(file, layout, records, commands, code));
+        const bool nativeDelivery = (state._controller->configuration()._requiredFeatures & native_delivery_feature) != 0;
+        const auto expanded = value_or_throw<JournalFailure>(expand_task_claim_commands(
+            file, layout, records, commands, code, nativeDelivery));
         value_or_throw<JournalFailure>(validate_redo_targets(expanded, layout, records, code));
       }
       else
@@ -494,7 +496,9 @@ namespace angaria::detail::mapped
       require_fixed_compacts(batch._commands, header._kind, ErrorCode::IoError);
       if (has_compact(batch._commands))
       {
-        batch._commands = value_or_throw<JournalFailure>(expand_task_claim_commands(file, fixed_layout(state), allRecords, batch._commands));
+        const bool nativeDelivery = (state._controller->configuration()._requiredFeatures & native_delivery_feature) != 0;
+        batch._commands = value_or_throw<JournalFailure>(expand_task_claim_commands(
+            file, fixed_layout(state), allRecords, batch._commands, ErrorCode::IoError, nativeDelivery));
       }
       value_or_throw<JournalFailure>(validate_redo_targets(batch._commands, fixed_layout(state), allRecords));
       return batch;
@@ -556,7 +560,7 @@ namespace angaria::detail::mapped
         {
           const auto commands = value_or_throw<JournalFailure>(decode_commands(prefix_bytes(state).subspan(
               journal_offset + journal_header_bytes, header._inlineBytes)));
-          validate_domain_targets(file, fixed_layout(state), prefix._ranges, commands, header._kind);
+          validate_domain_targets(state, file, fixed_layout(state), prefix._ranges, commands, header._kind);
         }
         checkpoint(state, JournalCheckpoint::Rollback);
         publish(state, JournalControl::Idle, JournalCheckpoint::Idle);
@@ -785,7 +789,7 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidArgument, "Unknown journal operation kind");
       }
-      validate_domain_targets(file, fixed_layout(state), allRecords, plan._commands,
+      validate_domain_targets(state, file, fixed_layout(state), allRecords, plan._commands,
                               plan._kind, ErrorCode::InvalidArgument);
       operation._headerBytes = value_or_throw<JournalFailure>(encode_journal_header(header));
       operation._result._generation = header._generation;

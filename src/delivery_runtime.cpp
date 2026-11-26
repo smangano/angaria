@@ -1,6 +1,7 @@
 #include "delivery_runtime.h"
 
 #include "angaria/detail/byte_operations.h"
+#include "delivery_access.h"
 #include "delivery_state.h"
 #include "mapped_payload.h"
 #include "publication_metadata.h"
@@ -29,18 +30,6 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::IoError, path, message);
       }
-    }
-
-    std::vector<std::byte> atomic_bytes(RuntimeAccess& access, std::uint64_t offset,
-                                        std::size_t words)
-    {
-      const auto values = access.read_words(offset, words);
-      std::vector<std::byte> bytes(words * 8);
-      for (std::size_t index = 0; index < words; ++index)
-      {
-        write_unsigned_le(bytes, index * 8, values[index]);
-      }
-      return bytes;
     }
 
     template <typename Definition>
@@ -158,7 +147,7 @@ namespace angaria::detail
       for (std::uint64_t offset = 0; offset < words;)
       {
         const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(4096, words - offset));
-        const auto bytes = atomic_bytes(access, state[2] + mapped::record_envelope_bytes + offset * 8, count);
+        const auto bytes = runtime_atomic_bytes(access, state[2] + mapped::record_envelope_bytes + offset * 8, count);
         for (std::size_t word = 0; word < count; word += 4)
         {
           const auto index = (offset + word) / 4;
@@ -296,7 +285,7 @@ namespace angaria::detail
                   destination._queueSequence == queueDeliveries.size() + 1 &&
                   destination._previousDelivery == (queueDeliveries.empty() ? 0 : queueDeliveries.back()._link),
               "queue.history", "Queue sequence or predecessor breaks complete accepted history");
-      const auto receipt = runtime_value(mapped::decode_receipt(atomic_bytes(access, destination._receiptReference, 16)));
+      const auto receipt = runtime_value(mapped::decode_receipt_words(access.read_words(destination._receiptReference, 16)));
       require(receipt._state != mapped::ReceiptState::Unused, "publication.receipt", "Accepted destination has no receipt obligation");
       if ((receipt._presence & 1) != 0)
       {

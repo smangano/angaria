@@ -119,6 +119,8 @@ Framework **`0.4.4`** consolidates repeated helpers after step 4.3. The [helper 
 
 Step **4.4**, framework **`0.4.5`**, adds [private committed payload mappings and complete append planning](docs/native-storage.md#committed-payload-storage-and-append-planning). Payload addresses remain stable across append growth and rollback of later uncommitted work. Full batch sizing includes receipts, the manifest, redo, and alignment before journal image construction. Public delivery and delivery-enabled Session creation remain with later steps.
 
+Step **4.5**, framework **`0.4.6`**, adds [reserved delivery progress and publication-aware claim cleanup](docs/native-progress.md). Private issuance, acknowledgment, release, and Task/Source cleanup use existing storage and can finish at a full log. Claim replay preserves historical identities and releases old Thread pins when their parent Process is replaced. Public send/receive remains planned, and factories still create format 2.1 Sessions.
+
 ## Run the restart walkthrough
 
 The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.

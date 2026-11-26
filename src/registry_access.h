@@ -58,11 +58,13 @@ namespace angaria::detail
   template <typename Id, typename Loaded>
   const Loaded& require_registered_entity(const std::vector<Loaded>& entries, Id id, const char* path,
                                            const char* invalidMessage = "Entity identity is zero",
-                                           const char* notFoundMessage = "Entity is not registered with this kind")
+                                           const char* notFoundMessage = "Entity is not registered with this kind",
+                                           ErrorCode invalidCode = ErrorCode::InvalidArgument,
+                                           ErrorCode notFoundCode = ErrorCode::NotFound)
   {
     if (id == Id::Invalid)
     {
-      runtime_fail(ErrorCode::InvalidArgument, path, invalidMessage);
+      runtime_fail(invalidCode, path, invalidMessage);
     }
     const auto found = std::find_if(entries.begin(), entries.end(), [id](const auto& entry)
     {
@@ -70,7 +72,7 @@ namespace angaria::detail
     });
     if (found == entries.end())
     {
-      runtime_fail(ErrorCode::NotFound, path, notFoundMessage);
+      runtime_fail(notFoundCode, path, notFoundMessage);
     }
     return *found;
   }

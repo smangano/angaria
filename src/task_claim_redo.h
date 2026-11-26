@@ -14,11 +14,12 @@ namespace angaria::detail::mapped
                                                std::span<const JournalRecordRange> records,
                                                ErrorCode errorCode = ErrorCode::IoError);
 
-  // Expands the Task-only ReleaseClaim subset without changing mapped storage.
-  // Delivery state is rejected until receipt and Source cleanup are installed.
+  // Expands ReleaseClaim without changing mapped storage. Core delivery cleanup
+  // is explicitly admitted by the caller's already validated native profile.
   // The caller validates all returned targets before performing any redo write.
   Result<std::vector<RedoCommand>> expand_task_claim_commands(
       NativeFile& file, const FixedLayout& layout,
       std::span<const JournalRecordRange> records,
-      std::span<const RedoCommand> commands, ErrorCode errorCode = ErrorCode::IoError);
+      std::span<const RedoCommand> commands, ErrorCode errorCode = ErrorCode::IoError,
+      bool nativeDelivery = false);
 } // namespace angaria::detail::mapped
