@@ -79,6 +79,12 @@ target_link_libraries(angaria_inspect PRIVATE angaria)
 add_library(angaria_api_contract OBJECT examples/trading_api.cpp)
 target_link_libraries(angaria_api_contract PRIVATE angaria)
 
+# Review-only declarations have no runtime definitions. Compile real caller
+# workflows without linking stubs or exposing them as runnable examples.
+add_library(angaria_public_api_review OBJECT examples/api_review.cpp)
+target_include_directories(angaria_public_api_review PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(angaria_public_api_review PRIVATE cxx_std_20)
+
 # Primer programs use implemented public APIs and remain runnable without tests.
 foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record 12_capture 13_process_exchange)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)

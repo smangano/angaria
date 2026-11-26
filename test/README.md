@@ -1,5 +1,7 @@
 # Reading the tests
 
+The [complete public interface review](../docs/public-interface.md) has its own compile-only target, `angaria_public_api_review`, exercising [proposed application/replay workflows](../examples/api_review.cpp). Those declarations have no definitions, fake runtime, or runnable output; the ordinary tests below still qualify the implemented API.
+
 The [shared-helper audit](../docs/helper-audit.md) maps the focused production and test-only headers. Common Result and process plumbing is shared, while [wire_fixture.h](wire_fixture.h) remains an independent test reference encoder and each scenario retains its expected values. [test_shared_helpers.cpp](test_shared_helpers.cpp) checks the common byte, arithmetic, error, wire-code, Field, and escaping contracts directly.
 
 Milestone 4 begins with a [native transport design review](../docs/native-transport.md) and [ordered implementation steps](../docs/milestones/milestone-4.md). Step 4.2 adds private delivery codecs; step 4.3 adds [core Session/history validation](../docs/native-validation.md); step 4.4 adds [committed payload storage and append sizing](../docs/native-storage.md#committed-payload-storage-and-append-planning); step 4.5 adds [reserved progress and claim cleanup](../docs/native-progress.md). New Sessions still use format 2.1 and public native delivery is disabled. Existing public examples remain the runnable baseline; later steps add public delivery alongside its failure qualification.
