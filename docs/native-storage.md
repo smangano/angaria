@@ -205,6 +205,8 @@ The [file configuration tests](../test/test_file_configuration.cpp) explain publ
 
 ## Registry qualification and native profiles
 
+Step 4.1 reviews a [future native delivery profile](native-transport.md) and its [implementation prerequisites](milestones/milestone-4.md). Format 2.2 and its delivery/loss capabilities remain planned; current runtime support is still the existing 2.0/2.1 Registry/identity implementation. New delivery-aware loaders and Task/Source cleanup must precede public sending.
+
 Step 2.11 adds owning, consistent [Registry snapshots](api.md#current-and-historical-registry-snapshots). One recovered mutation gate protects complete current validation and the copy of either current definitions or the final definitions at a requested committed revision. Historical cuts include topology states, memberships, Publishing generations, exact schema versions, and attribution. They do not reconstruct earlier Task attachment diagnostics. Inspecting an old cut still validates the current retained catalog, so an inconsistent current index cannot hide behind a request for earlier history.
 
 Task definitions are immutable and retain no predecessor links. The shared loader requires every committed Task definition to have its unique current index row, and verifies that its creator and Thread parent existed at its registration revision. These checks apply to ordinary attachment, typed reads, mutations, and snapshots. The [corruption regressions](../test/test_task_catalog_validation.cpp) deliberately rewrite private fixtures; application code uses the public Registry instead.

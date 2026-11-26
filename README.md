@@ -6,7 +6,7 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1, [2](docs/milestones/milestone-2.md), and [3](docs/milestones/milestone-3.md) are complete. Milestone 3 adds general message construction, capture, and inspection through exact Registry definitions; native Queue transport follows in later milestones.
+Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1, [2](docs/milestones/milestone-2.md), and [3](docs/milestones/milestone-3.md) are complete. Milestone 3 adds general message construction, capture, and inspection through exact Registry definitions. [Milestone 4](docs/milestones/milestone-4.md) starts the native Queue transport contract review.
 
 The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR and, from milestone 3, build numbering starting at `1` for each milestone. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
 
@@ -112,6 +112,8 @@ python3 test/process_exchange.py build/angaria_primer_13_process_exchange build/
 ```
 
 Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. Framework version **`0.3.7`** integrates the completed milestone-3 staging branch into `main`. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
+
+Milestone 4, step 4.1, framework version **`0.4.1`**, reviews the [native transport contract](docs/native-transport.md) and [eleven implementation steps](docs/milestones/milestone-4.md). It specifies future delivery capabilities, safe mapping/pin lifetimes, publication validation, and Source cleanup. This design PR enables no native send/receive methods or new native format; the thirteen existing primer programs remain the runnable learning path.
 
 ## Run the restart walkthrough
 

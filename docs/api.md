@@ -159,6 +159,8 @@ Step 3.6's [process qualification](process-exchange.md) uses these same APIs in 
 
 ## Messages and receive events
 
+Step 4.1's [native transport review](native-transport.md) specifies future admission, compatibility, receipt, and lifetime behavior. Native delivery remains unimplemented in this design PR. The planned additions `DeliveryView::_publishedAt` and `SourceQueueSet::close()` arrive with step 4.7; current headers are unchanged. Fresh selection initially supports at most one Active Queue per Source while existing in-flight acknowledgment/release remains available during membership growth. See the [milestone implementation sequence](milestones/milestone-4.md).
+
 `MessageView` carries an exact schema identity, payload format, immutable byte span, and user flags. Publication borrows input bytes for the duration of the call. A committed message retains its encoded data independently of the caller's input buffer.
 
 Receive returns a `DeliveryView`, `DeliveryGap`, `ReceiveTimeout`, or `Error`. The delivery identifies the original publication, current token, and enqueue/dequeue times expressed as UTC chrono time points. The mapped timestamp encoding follows step 1.4.

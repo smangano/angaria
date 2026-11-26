@@ -182,6 +182,8 @@ The 32-byte symbol row reserves ID (`u32`), flags (`u32`), value reference (`u64
 
 ## Rings, publications, and receipts
 
+The following structures reserve the native delivery layout. Step 4.1's [native transport contract](native-transport.md) defines their reviewed future 2.2 capability boundary, precise ring generation and receipt presence semantics, and lifetime rules. This design PR changes no current 2.0/2.1 encoding or runtime constants.
+
 A two-plane ring allocation has a 64-byte record envelope followed by `ring_capacity` slots of 32 bytes, rounded up to 64 bytes. Each slot contains `queue_sequence:u64`, `delivery_link:u64`, `publication_ref:u64`, and `generation/state:u64`. A ring slot is an index into retained history. Its overwrite is neither an acknowledgment nor permission to reclaim a pinned payload. Recover-from-log queues reconstruct missing entries from retained delivery links and receipts. Allow-loss queues use overwritten sequence ranges while preserving an already issued pin.
 
 Step 2.9 allocates the initial ring in the Queue activation batch. Its immutable body is empty, predecessor is zero, and associated Registry revision is the Queue's first Active definition revision. The Queue state row stores its reference at byte 16 and resolved capacity at byte 24; every other word remains zero. Ring slots and allocation padding are zero until delivery is implemented. Each retained ring has exactly one Active Queue owner. Source runtime rows remain zero, and Publishing rows retain only topology revision/current definition reference. Active state uses wire code 2 in both definition and index; all creation attribution stays unchanged across revisions.

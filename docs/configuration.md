@@ -152,6 +152,8 @@ Source membership may gain a newly registered queue through an atomic topology u
 
 ## Policy binding and scheduling
 
+The [milestone-4 transport review](native-transport.md#native-compatibility-and-required-capabilities) specifies when native delivery and the existing `allow_loss` choice can be enabled safely. Step 4.1 changes no loader behavior or TOML version: current unavailable policies still return `UnsupportedPolicy`. Runtime implementation will use the common programmatic/TOML validation path and the required capability recorded at Session creation.
+
 Session storage and capacity settings bind at session creation. Queue delivery, Source selection/wait, and Publishing acceptance choices resolve from explicit values and defaults before entity activation. Active policy choices are fixed under this initial contract. A changed policy uses a new entity with the desired configuration.
 
 Strict selection prefers the largest priority and selects equal-priority available queues round robin. Priority zero is the lowest strict priority.

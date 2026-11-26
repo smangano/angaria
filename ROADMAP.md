@@ -6,7 +6,7 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), [milestone 2](docs/milestones/milestone-2.md) through its eleven reviewed steps, and [milestone 3](docs/milestones/milestone-3.md) through its six reviewed steps and integration release `0.3.7`. Milestone 4 begins native mapped message transport. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), [milestone 2](docs/milestones/milestone-2.md) through its eleven reviewed steps, and [milestone 3](docs/milestones/milestone-3.md) through its six reviewed steps and integration release `0.3.7`. [Milestone 4](docs/milestones/milestone-4.md) is in native transport contract review. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Living programmer primer
 
@@ -118,6 +118,8 @@ Complete. Framework version `0.3.7` integrates the six reviewed steps recorded i
 Completion requires applications to exchange several registered message types and an offline inspector to decode them without application-specific code. Older records retain their original meaning after new versions are registered.
 
 ## 4 Two plane mapped storage
+
+Step 4.1, framework version `0.4.1`, reviews the [native transport contract](docs/native-transport.md). The [eleven-step plan](docs/milestones/milestone-4.md) orders checked codecs, validation, mapped storage, and cleanup before public send/receive. This first PR changes no runtime behavior or native-format constants. Fresh Source selection initially supports one Active Queue; multiple-Queue scheduling follows milestone 5 through the same APIs.
 
 - Implement the fixed-size rings of message offsets and the append-only memory-mapped payload plane.
 - Support single-producer queue ownership and allocation of shared payload storage.

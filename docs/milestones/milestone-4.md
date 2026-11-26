@@ -1,0 +1,41 @@
+# Milestone 4 Two-plane mapped transport
+
+Milestone 3 and the manual Intel CI change reached `main` through [PR #30](https://github.com/smangano/angaria/pull/30) and [PR #31](https://github.com/smangano/angaria/pull/31), framework version `0.3.8`. Staging branch `milestone-4` starts at that commit. Each step uses `milestone-4-<s>` and a PR targeting staging; a separate integration PR brings the completed milestone into `main`.
+
+Step 4.1 uses framework version **`0.4.1`**. The build number increases for each new PR under the [versioning policy](../../ROADMAP.md#versioning). It does not automatically change native format or protocol versions.
+
+## Review steps
+
+| Step | Branch | Scope | Completion criterion |
+| --- | --- | --- | --- |
+| 4.1 | `milestone-4-1` | Review the [native transport contract](../native-transport.md). | Specify compatibility/capabilities, message validation, timestamps, ring/receipt encodings, view lifetimes, and Source cleanup. This PR changes documentation and framework version only. |
+| 4.2 | `milestone-4-2` | Implement checked Publication, destination, receipt, and ring codecs. | Independent golden bytes and malformed-input tests cover widths, references, bounds, state/presence combinations, and full-width sequences. No public delivery yet. |
+| 4.3 | `milestone-4-3` | Extend Session and history validation. | Validate committed publications, Queue links, receipts, and live state without breaking Registry/snapshot operations. Unsupported capabilities fail before recovery. |
+| 4.4 | `milestone-4-4` | Implement mapped payload storage and allocation planning. | Preflight complete append costs; map committed immutable payloads safely across file growth; rollback never truncates pinned committed bytes. |
+| 4.5 | `milestone-4-5` | Extend reserved progress, replay, and claim cleanup. | Private receipt transitions and publication-aware Task/Source cleanup are idempotent, fit FixedState storage, and work at `LogFull`. Complete these before enabling public send. |
+| 4.6 | `milestone-4-6` | Enable direct send and publication lookup. | `QueueWriter::send` and `Task::publication_status` implement atomic acceptance, issued-ID checks, identical repeats, conflicts, retained lookup, and interrupted outcomes. Enable creation of the core delivery profile only after its prerequisites are complete. |
+| 4.7 | `milestone-4-7` | Enable basic Source delivery. | Existing receive/acknowledge/release APIs support one Active Queue, ring/history fallback, stable payload views, exact tokens, spinning, deadlines, and the reviewed explicit-close lifecycle. |
+| 4.8 | `milestone-4-8` | Enable configured allowed loss. | Negotiate its separate capability, execute/replay `LoseRange`, report gaps, and preserve issued pins. Programmatic and TOML validation enable the same behavior. |
+| 4.9 | `milestone-4-9` | Complete failure and exhaustion qualification. | Combine producer/consumer termination, interrupted/repeated recovery, wraparound, full logs, counter boundaries, and unchanged-request rejection. Focused fault tests also accompany earlier mutation steps. |
+| 4.10 | `milestone-4-10` | Add a native multi-process primer application. | Independent producers/consumers exercise the real public mapped path, exact schemas, backlog, acknowledgment/redelivery, and replacement, using at most one Active Queue per Source. |
+| 4.11 | `milestone-4-11` | Measure and finish the milestone. | Record reproducible latency, throughput, and allocation/commit contention baselines; audit progress guarantees, compatibility, documentation, and the full primer before integration. |
+
+Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
+
+## Step 4.1 Contract review
+
+The [transport contract](../native-transport.md) makes the milestone's design decisions explicit. It proposes native format 2.2 with separate required capabilities for core delivery and allowed loss, preserving the meanings of existing 2.0/2.1 Sessions. It defines full-width ring generations, receipt timestamp presence, Binary validation before acceptance, and distinct publication/enqueue/dequeue times.
+
+Two process-local API additions are planned for step 4.7: `DeliveryView::_publishedAt` and `SourceQueueSet::close()`. Headers are unchanged in step 4.1. Explicit close reports cleanup errors; destruction and move replacement still need a fenced, deferred-cleanup path. Current Session/topology validation and Task cleanup reject publication-bearing state, so their extension is a prerequisite of public send.
+
+Fresh Source selection supports at most one Active member Queue in this milestone. Existing in-flight delivery and acknowledgment/release remain usable if another Queue becomes Active. Multiple-Queue selection policies follow milestone 5 through the same Source APIs.
+
+## Qualification and completion
+
+Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.
+
+Automatic CI runs Linux x86_64, Linux ARM64, and macOS ARM64. Intel Mac qualification remains [request-only](../native-storage.md#request-macos-x86_64-qualification). The integration PR records results for its exact commit, with all supported runtime/format boundaries and primer examples reviewed together.
+
+Publishing fan-out follows milestone 6, eventfd waiting milestone 7, segmented storage/reclamation milestone 8, advanced Fields/serializers milestone 9, and generalized native export/replay/migration tools milestone 10.
+
+[Roadmap](../../ROADMAP.md) · [Native transport contract](../native-transport.md) · [Completed milestone 3](milestone-3.md)

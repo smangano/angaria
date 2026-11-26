@@ -1,5 +1,7 @@
 # Reading the tests
 
+Milestone 4 begins with a [native transport design review](../docs/native-transport.md) and [ordered implementation steps](../docs/milestones/milestone-4.md). Step 4.1 enables no native delivery or new native format. Existing tests/examples remain the implemented baseline; later steps add checked delivery codecs, native progress, and crash qualification alongside their features.
+
 For a guided introduction before reading test fixtures, use the [programmer primer](../docs/primer.md) and [runnable examples](../examples/primer/). CTest's `primer_examples` checks the first seven lessons, including process ownership and TOML. The eighth lesson runs separately as `registry_walkthrough`, covering concurrent registrars, historical snapshots, owner replacement, and offline Registry inspection.
 
 The ninth lesson runs as `payload_example` and shows schema-driven binary encoding/decoding. Its [codec tests](test_payload.cpp) use independent golden bytes, integer/IEEE boundaries, exact schema versions, malformed inputs, payload bounds, and independent codec lifetime. These payload APIs use the current Registry definitions and remain separate from the legacy Field-template serialization tests.
