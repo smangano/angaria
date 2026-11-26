@@ -8,9 +8,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <optional>
 #include <set>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -37,8 +39,34 @@ namespace angaria::detail
 
     bool same_descriptor(const FieldDescriptor& left, const FieldDescriptor& right)
     {
-      return left._id == right._id && left._name == right._name && left._base == right._base &&
-             left._size == right._size && left._doc == right._doc;
+      if (left._id != right._id || left._name != right._name || left._base != right._base ||
+          left._size != right._size || left._doc != right._doc ||
+          left._logical._kind != right._logical._kind ||
+          left._logical._enumerators.size() != right._logical._enumerators.size())
+      {
+        return false;
+      }
+      if (left._logical == right._logical)
+      {
+        return true;
+      }
+      // Registration order has no enum meaning. Borrow labels while comparing
+      // the canonical stored mapping, so exact retries need no definition copy
+      // and remain possible when the log has no room for another record.
+      std::map<EnumerationNumber, std::string_view> requested;
+      for (const auto& entry : right._logical._enumerators)
+      {
+        requested.emplace(entry._value, entry._name);
+      }
+      for (const auto& entry : left._logical._enumerators)
+      {
+        const auto found = requested.find(entry._value);
+        if (found == requested.end() || found->second != entry._name)
+        {
+          return false;
+        }
+      }
+      return true;
     }
 
     bool same_descriptor(const MessageDescriptor& left, const MessageDescriptor& right)
@@ -166,6 +194,11 @@ namespace angaria::detail
       runtime_check_task(access, actor);
       runtime_value(mapped::validate_field_descriptor(descriptor));
       runtime_validate_field_policy(descriptor, ErrorCode::InvalidArgument);
+      if (mapped::field_requires_basic_fields(descriptor) &&
+          (access._session->_controller->configuration()._requiredFeatures & mapped::basic_fields_feature) == 0)
+      {
+        runtime_fail(ErrorCode::UnsupportedPolicy, "field.feature", "This Session predates basic_fields_v1; create a new Session for logical Fields or int8");
+      }
       const auto fields = runtime_fields(access);
       for (const auto& field : fields)
       {
@@ -184,9 +217,9 @@ namespace angaria::detail
       const auto index = allocate_index(access, mapped::SectionKind::FieldIndex,
           access._session->_controller->configuration()._limits._fields,
           std::span<const LoadedField>{fields}, "limits.fields");
-      const auto bodyBytes = add_bytes(add_bytes(88, descriptor._name.size()), descriptor._doc.size());
+      const auto bodyBytes = runtime_value(mapped::field_definition_body_bytes(descriptor));
       auto plan = append_plan(access, actor, 6, static_cast<std::uint32_t>(descriptor._id), index, 0, bodyBytes);
-      mapped::FieldDefinition definition{descriptor, registration(plan)};
+      mapped::FieldDefinition definition{runtime_value(mapped::canonicalize_field_descriptor(descriptor)), registration(plan)};
       plan._records.front()._immutable = runtime_value(mapped::encode_field_definition(definition, plan._base._tail));
       runtime_value(access._journal.execute(access._guard, plan));
       return descriptor._id;

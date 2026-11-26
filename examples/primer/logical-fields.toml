@@ -1,0 +1,60 @@
+# Copy this file into a fresh directory before running lesson 10.
+# The Session directory is relative to this file's location.
+config_version = 2
+
+[session]
+name = "Primer logical Fields"
+application_version = "Primer-1"
+directory = "logical-session"
+max_log_bytes = 1048576
+
+[limits]
+tasks = 2
+queues = 0
+source_sets = 0
+publishing_sets = 0
+memberships_per_set = 0
+fields = 8
+message_schemas = 4
+symbols = 0
+string_pool_bytes = 0
+
+[[tasks]]
+name = "Setup"
+
+[[fields]]
+name = "Enabled"
+id = 0xEE000010
+type = "bool"
+
+[[fields]]
+name = "Flags"
+id = 0xEE000011
+type = "bits"
+bits = 16
+
+[[fields]]
+name = "Side"
+id = 0xEE000012
+type = "enum"
+underlying = "byte"
+# Declaration order does not change the numeric meaning. Inspection returns
+# the canonical numeric order, so Buy appears before Sell.
+enumerators = [{ name = "Sell", value = 2 }, { name = "Buy", value = "1" }]
+
+[[fields]]
+name = "Instrument"
+id = 0xEE000013
+type = "chars"
+size = 6
+
+[[fields]]
+name = "Adjustment"
+id = 0xEE000014
+type = "int8"
+
+[[messages]]
+name = "OrderSettings"
+type = 2
+version = 1
+fields = ["Enabled", "Flags", "Side", "Instrument", "Adjustment"]

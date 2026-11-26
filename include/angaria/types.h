@@ -42,7 +42,8 @@ namespace angaria
     BASE_CHARS,
     BASE_BYTES,
     BASE_SYMBOL,
-    BASE_STRING
+    BASE_STRING,
+    BASE_INT8 = 26
   };
 
   template <typename T>

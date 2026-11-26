@@ -13,6 +13,7 @@ namespace angaria::detail::mapped
 {
   inline constexpr std::uint16_t synchronization_version = 1;
   inline constexpr std::uint64_t journal_feature = 1;
+  inline constexpr std::uint64_t basic_fields_feature = 2;
 
   // The superblock is the 4096-byte session control area at offset zero of
   // session.ang: metadata, section directory, mutable roots, and operation journal.
@@ -28,10 +29,11 @@ namespace angaria::detail::mapped
     StorageMapping _storage{StorageMapping::TwoPlane};
     std::uint16_t _synchronizationVersion{synchronization_version};
     std::uint32_t _liveAbiProfile{};
-    std::uint64_t _requiredFeatures{journal_feature};
+    std::uint64_t _requiredFeatures{journal_feature | basic_fields_feature};
     std::uint64_t _optionalFeatures{};
     CapacityLimits _limits{};
     std::uint64_t _segmentBytes{};
+    std::uint16_t _formatMinor{format_minor};
   };
 
   // The native adapter supplies its checked host profile via qualify_native_profile().
@@ -39,9 +41,10 @@ namespace angaria::detail::mapped
   {
     std::uint32_t _liveAbiProfile{};
     std::uint16_t _synchronizationVersion{synchronization_version};
-    std::uint64_t _supportedRequiredFeatures{journal_feature};
+    std::uint64_t _supportedRequiredFeatures{journal_feature | basic_fields_feature};
     bool _segmentedStorage{};
     std::optional<CapacityLimits> _capacityCeilings{};
+    std::uint16_t _maxFormatMinor{format_minor};
   };
 
   // Creates a provisional prefix; it does not create or publish a usable session.

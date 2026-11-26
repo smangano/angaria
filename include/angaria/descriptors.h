@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace angaria
@@ -256,6 +257,35 @@ namespace angaria
     std::string _doc{};
   };
 
+  enum class FieldLogicalKind
+  {
+    None,
+    Boolean,
+    Bits,
+    Enumeration,
+    FixedAscii
+  };
+
+  // Metadata numbers retain signedness and the entire 64-bit range. The
+  // storage base supplies their encoded width and imposes its numeric bounds.
+  using EnumerationNumber = std::variant<std::int64_t, std::uint64_t>;
+
+  struct EnumeratorDescriptor
+  {
+    std::string _name;
+    EnumerationNumber _value;
+
+    bool operator==(const EnumeratorDescriptor&) const = default;
+  };
+
+  struct FieldLogicalMetadata
+  {
+    FieldLogicalKind _kind{FieldLogicalKind::None};
+    std::vector<EnumeratorDescriptor> _enumerators{};
+
+    bool operator==(const FieldLogicalMetadata&) const = default;
+  };
+
   struct FieldDescriptor
   {
     FieldId _id{};
@@ -263,6 +293,7 @@ namespace angaria
     EFieldBase _base{EFieldBase::BASE_NONE};
     std::uint32_t _size{};
     std::string _doc{};
+    FieldLogicalMetadata _logical{};
   };
 
   struct MessageDescriptor

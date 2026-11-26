@@ -6,7 +6,7 @@ Step 1.3 defines Angaria's process-local C++ types and the operations that subse
 cmake --build build --target angaria_api_contract
 ```
 
-The target checks declarations, including future delivery operations. The [programmer primer](primer.md) contains runnable examples of the implemented Session and Registry API. General message implementation follows in milestone 3, mapped queues in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its separate earlier implementation.
+The target checks declarations, including future delivery operations. The [programmer primer](primer.md) contains runnable examples of Session and Registry use, scalar/logical payload encoding, canonical message records, capture, and generic inspection. Native mapped Queue payload operations follow in milestone 4, and Queue Set behavior in milestones 5 and 6. The prototype's executable and tests exercise its separate earlier implementation.
 
 ## Headers
 
@@ -16,6 +16,10 @@ The target checks declarations, including future delivery operations. The [progr
 | `angaria/descriptors.h` | Owning descriptors, session options and capacities, policy choices, and metadata views. |
 | `angaria/results.h` | Typed ordinary failures and bounded publication outcome reports. |
 | `angaria/message.h` | Immutable borrowed payload and delivery views, gap events, and timeouts. |
+| `angaria/message_record.h` | Portable message headers/records, bounded framing, owning/borrowed decoding, and exact binary schema context. |
+| `angaria/capture.h` | Bounded, move-only readers/writers of consecutive canonical records through borrowed streams. |
+| `angaria/inspection.h` | Owning Field/schema catalogs and bounded generic text rendering with exact Session/schema context. |
+| `angaria/payload.h` | Owning schema-driven binary payload codecs, exact scalar/logical values, and bounded construction. |
 | `angaria/registry.h` | Registration, discovery, metadata inspection, activation, and draft ownership changes. |
 | `angaria/runtime.h` | Session, Task, QueueWriter, SourceQueueSet, and PublishingQueueSet handles. |
 
@@ -79,7 +83,9 @@ Step 2.6 implements `Registry::register_task(TaskDescriptor)` on a live actor-bo
 
 A Process Task omits its parent. A Thread Task names a registered Process Task, which can be offline and need not be the registrar. Registration describes a logical participant; it does not attach that Task or install native process/thread IDs. Attachment separately enforces the live local parent and thread-affinity rules. A new registration consumes one reserved entry, an unused Task ID, and log space for its immutable definition and transaction manifest. Its creator/time/revision record the acting claim's logical Task, current UTC time, and new Registry revision. See the [native registration contract](native-storage.md#public-task-registration) for coordination resources and interrupted outcomes.
 
-Step 2.7 adds `register_field` and `register_message`, plus Field/schema lookup, description, and registration metadata. A Field's full ID, name, base type, declared byte size, and documentation are immutable; exact re-registration returns its existing ID, while a conflicting ID or name returns `Conflict`. Valid Field IDs range from `0xEE000000` through `0xEEFFFFFF`, independently of the number of reserved Field entries. The current native implementation accepts char/byte, signed/unsigned 16-, 32-, and 64-bit integers, and 32-/64-bit floating-point Fields with their fixed encoded widths. Other known representations return `UnsupportedPolicy`; malformed IDs, unknown base types, and incorrect scalar sizes return `InvalidArgument`.
+Step 2.7 adds `register_field` and `register_message`, plus Field/schema lookup, description, and registration metadata. A Field's full ID, name, base type, declared byte size, documentation, and logical metadata are immutable; exact re-registration returns its existing ID, while a conflicting ID or name returns `Conflict`. Valid Field IDs range from `0xEE000000` through `0xEEFFFFFF`, independently of the number of reserved Field entries. The current implementation accepts char/byte, signed int8 and signed/unsigned 16-, 32-, and 64-bit integers, 32-/64-bit floating point, and the basic logical representations below. Other known representations return `UnsupportedPolicy`; malformed IDs, unknown base types, and incorrect sizes return `InvalidArgument`.
+
+Step 3.3 implements [logical Field metadata](logical-fields.md) in `FieldDescriptor::_logical`. Its `FieldLogicalKind` is `None`, `Boolean`, `Bits`, `Enumeration`, or `FixedAscii`. Only an Enumeration has entries: each `EnumeratorDescriptor` owns a name and `EnumerationNumber` (`int64_t` for signed storage, `uint64_t` for unsigned storage, checked against the base width). Entry order canonicalizes numerically; reordered exact retries preserve attribution and revision. The complete mapping is immutable. int8 uses appended base code 26. New Sessions use format 2.1; existing 2.0 Sessions reject new logical/int8 registrations with `UnsupportedPolicy` and retain scalar behavior.
 
 A message type retains one name across a [schema family](glossary.md#ownership-and-recovery). Each nonzero 32-bit version identifies a separate immutable schema. Versions can be sparse or registered out of numeric order. Changing the type/name pairing or an existing schema's ordered Field list/documentation returns `SchemaConflict`; exact retry preserves its original attribution and revision. Every referenced Field must be registered. Order and repeated Field IDs are preserved, and an empty Field list is valid for a control-message definition. Schema capacity counts versions, while Field-list length is bounded by available log bytes rather than a hidden 16-bit limit. `find_message(name, version)` and `describe_message(SchemaId)` return the exact retained version, not a latest-version substitution. Registration establishes definitions, not payload encoding or publication behavior; see the [native schema contract](native-storage.md#fields-and-message-schemas).
 
@@ -116,6 +122,40 @@ Step 2.9 implements those three opening operations and each handle's `id()`. Ope
 The application serializes sends touching a common queue and operations on a common Source Queue Set. A thread Task attaches on its current thread while its parent process claim is held by that process. The thread Task and its endpoints retain the parent claim until they close. A process Task supports the application's coordinated sending threads.
 
 The [concurrency contract](concurrency.md) uses per-Task lifetime claims and a crash-released session mutation gate. Initial send, receive, Registry, and delivery-progress operations are blocking. Claim replacement, issuance, acknowledgment, and release use reserved state and require no new log allocation. Immutable payload reads after receive retain their mapping/pin without holding the operation gate.
+
+## Binary payload codecs
+
+Step 3.1 implements `BinaryPayloadCodec`, compiled from an exact `SchemaId` and an explicit payload byte cap. `from_registry` takes one consistent snapshot; `from_snapshot` also accepts a previously captured catalog. The codec owns resolved Field descriptors and their order, so it retains no Session, Task claim, or Registry view. `schema()` and `payload_size()` identify its layout; `fields()` borrows its ordered descriptors for the codec's lifetime.
+
+`PayloadValue` distinguishes char, byte, signed int8 and signed/unsigned 16-/32-/64-bit integers, float/double, `bool`, `BitFieldValue`, `EnumValue`, and `FixedAsciiValue`. `ScalarValue` remains an alias for `PayloadValue`; earlier scalar examples still compile. Exhaustive variant visitors need cases for the new alternatives. Enum values wrap an `IntegerValue` of the exact underlying width/sign; fixed ASCII owns its text bytes. `encode` accepts exactly one matching alternative for each Field occurrence and returns owning bytes. `decode` requires exactly the compiled payload length and returns owning values. Fields are packed in schema order with explicit little-endian integer and IEEE floating-point representations. Repeated Fields and empty schemas remain meaningful, and newer versions do not change older codecs.
+
+`encode({values...})` provides initializer-list construction under the codec's byte cap. `encode_into(values, output)` requires a byte span of exactly `payload_size()` bytes and returns `OperationResult`; all validation/allocation completes before copying, so errors leave caller output unchanged. These APIs construct application-memory payloads. Step 3.4 wraps them in portable message records below; Queue transport follows later milestones.
+
+Malformed or ambiguous selected definitions, invalid widths, mismatched values, and incorrect byte lengths return `InvalidArgument`. Missing exact schemas/referenced Fields return `NotFound`; recognized unavailable Field representations return `UnsupportedPolicy`; byte/allocation limits return `CapacityExceeded`. A zero cap is valid for an empty schema. Full layout, lifetime, and error rules are in [the payload contract](message-payload.md), demonstrated by the [ninth primer program](../examples/primer/09_payload.cpp).
+
+## Canonical message records
+
+Step 3.4 implements `MessageHeader`, `MessageRecord`, `MessageRecordView`, and `MessageRecordCodec`. The header owns an exact schema, payload format/byte count, full producer `PublicationId`, initial publication UTC time, and user flags. Encoding version 1 uses an explicit 80-byte little-endian header followed immediately by the payload. This portable record has no native offsets or destination receipts and leaves native Session formats 2.0/2.1 unchanged.
+
+Every header/record encode or decode requires `maxRecordBytes`, including header and payload. `encode_header` and `decode_header` operate on exactly 80 header bytes and validate the announced total before payload allocation. `encode` returns owning record bytes; `decode_view` borrows only the input payload; `decode` owns an independent header/vector. Whole-record decoding requires exactly one complete record. `encode_into` accepts the exact output span and preserves it on errors, including overlapping payload/output spans.
+
+All five stable payload-format codes are preserved as opaque bytes; JSON/XML/CSV/text serializers are not implied. `decode_binary(record, codec, schemaSession)` additionally requires Binary, the exact codec schema, and a matching independently retained source Session identity. A same-numbered schema from another Session or a different same-sized version returns `SchemaConflict`. The supplied definitions remain caller-selected, with no authentication of their origin or proof of publication admission.
+
+`MessageRecord::view()` is allowed on lvalues and borrows their payload storage. `MessageRecordView::message()` adapts to the existing borrowed `MessageView` while retaining the same backing-storage lifetime. Initial publication time is distinct from `DeliveryView`'s per-destination enqueue/dequeue metadata. Complete bytes, errors, lifetime, and receipt boundaries are specified in [the message-record contract](message-record.md) and demonstrated by [primer lesson 11](primer.md#11-wrap-a-payload-in-a-message-record).
+
+These codecs construct application-memory bytes. `MessageView` remains the borrowed view that later publication steps will consume; codec encoding does not issue publication identities or perform delivery.
+
+## Capture and generic inspection
+
+Step 3.5 implements `MessageCaptureWriter`, `MessageCaptureReader`, and `MessageInspector`. A [capture](capture-inspection.md) contains consecutive canonical records, with no additional file header or embedded schema catalog. Stream wrappers borrow a caller-owned stream and require record/aggregate byte caps. Writers validate before output; a partial I/O failure is terminal. Readers return an owning record, clean EOF, or a terminal contextual error. Counters count only complete successful records from the stream's initial position.
+
+`MessageInspector::from_session(session, limits)` obtains one consistent Registry snapshot. `from_snapshot(schemaSession, snapshot, limits)` accepts an independently retained Session identity and definitions. Inspectors own only Field/schema definitions and retain no Session or Task claim. Copies remain independent; moved-from inspectors return `InvalidState`. Later definitions require a new inspector. Native snapshot acquisition uses the ordinary Session API before inspector catalog preflight.
+
+`inspect(recordBytes)` or `inspect(recordView)` validates framing, source Session, and exact schema version, then returns owning ASCII text. It decodes existing binary scalar/logical Fields without application-specific types. Names, labels, and values are escaped; Field order, enum numbers/labels, bit widths, ASCII padding, and IEEE special values remain visible. Missing schemas return `NotFound`, a different Session returns `SchemaConflict`, and known nonbinary formats return `UnsupportedPolicy`.
+
+`InspectionLimits` bounds whole-record bytes, retained/expanded catalog definitions, and per-record text. Catalog preflight precedes inspector copies; repeated Field definitions are charged before compiling a selected layout. These size budgets do not measure exact process memory. The `angaria_inspect` CLI adds aggregate capture/output limits and closes native handles before capture I/O. Native catalog attachment can recover/write the Session and requires a compatible profile. See the [complete contract](capture-inspection.md) and [primer lesson 12](primer.md#12-capture-and-inspect-multiple-message-types).
+
+Step 3.6's [process qualification](process-exchange.md) uses these same APIs in independent executables. A retained inspector keeps its original schema catalog while other processes add a version and replace a producer claim. Cold inspectors read every retained version after applications exit. This step adds an example and qualification coverage without changing public API or persisted formats.
 
 ## Messages and receive events
 

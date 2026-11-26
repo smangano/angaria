@@ -4,13 +4,13 @@ This document defines Angaria's configuration schema and lifecycle rules. Step 2
 
 Configuration files use TOML through cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`. The syntax contract targets TOML v0.5.0, which the upstream README documents. The [trading configuration](../examples/trading.toml) illustrates the three-process topology from the [milestone 1 plan](milestones/milestone-1.md). [cpptoml source](https://github.com/skystrife/cpptoml/tree/fededad7169e538ca47e11a9ee9251bc361a9a65)
 
-The current native profile supports two-plane storage, fixed-width scalar Fields, strict selection, spin waiting, recovery-from-log delivery, and all-destination acceptance. Other recognized policy choices below describe the planned contract and return `UnsupportedPolicy` until implemented. Sending, receiving, and message encoding remain later milestone work. YAML, JSON, and XML converters arrive in milestone 10 and produce TOML for this same loader.
+The current native profile supports two-plane storage, scalar and basic logical Fields, strict selection, spin waiting, recovery-from-log delivery, and all-destination acceptance. Other recognized policy choices below describe the planned contract and return `UnsupportedPolicy` until implemented. The [binary payload codec](message-payload.md) encodes these registered definitions; sending and receiving remain later milestone work. YAML, JSON, and XML converters arrive in milestone 10 and produce TOML for this same loader.
 
 The example registers three process Tasks, MarketData, StrategyHost, and Risk, plus the Strategy thread Task hosted by StrategyHost. Strategy owns StrategyInputs and produces StrategyToRisk. MarketDataUpdates names the Strategy and Risk destination queues. Its capacity values illustrate a bounded configuration. The [primer's TOML lesson](primer.md#7-move-setup-into-a-toml-file) provides a smaller runnable starting point.
 
 ## File structure and values
 
-The root key `config_version` is required and must be the integer `1`. The configuration contains `session` and `limits` tables, optional `defaults` tables, and arrays of tables declaring Tasks, Source Queue Sets, Queues, Publishing Queue Sets, Fields, and Messages. Declaration arrays may be omitted or empty. Each declared category must fit its reserved capacity.
+The root key `config_version` is required and must be integer `1` or `2`. Version 1 retains its scalar Field syntax. Version 2 adds the [logical Field forms](logical-fields.md#toml-version-2) and int8. Both contain `session` and `limits` tables, optional `defaults` tables, and arrays of tables declaring Tasks, Source Queue Sets, Queues, Publishing Queue Sets, Fields, and Messages. Declaration arrays may be omitted or empty. Each declared category must fit its reserved capacity.
 
 Names and references are case-sensitive strings. During creation a reference names a declared entity of the required kind; declaration order does not constrain forward references. During file-based attachment a reference may also name an entity already registered in the Session. Entity names identify one entity in their Registry namespace. Source and Publishing Queue Sets share the Queue Set namespace. Duplicate declarations and conflicting identities are configuration errors, even when duplicate descriptors are identical. The optional `doc` key supplies documentation for each declared Task, Queue, Queue Set, Field, or Message.
 
@@ -122,15 +122,19 @@ Each publication records its destination snapshot. Later membership changes pres
 
 ## Initial Fields and Messages
 
-Optional `[[fields]]` declarations have required `name`, `type`, and `id` keys, plus an optional `doc` string. The type identifies a supported Field base type, such as `int64`. The identifier is a full 32-bit value whose high byte is `0xEE`, matching the wiki's 24-bit effective Field identity. Unknown base types and conflicting Field names or IDs are errors.
+Optional `[[fields]]` declarations have required `name`, `type`, and `id` keys, plus an optional `doc` string. The type identifies a supported scalar or logical representation, such as `int64` or version-2 `bool`. The identifier is a full 32-bit value whose high byte is `0xEE`, matching the wiki's 24-bit effective Field identity. Unknown types and conflicting Field names or IDs are errors.
 
 Optional `[[messages]]` declarations have required `name`, `type`, `version`, and `fields` keys, plus an optional `doc` string. The type is an integer from 1 through 65,535. The version is an integer from 1 through 4,294,967,295. Fields are an ordered array of Field names.
 
 A message schema is identified by its type and version. Multiple immutable versions may share a message type and name. Conflicting names for a type, conflicting types for a name, and repeated type/version declarations are errors. Every referenced Field must resolve.
 
-Step 2.7 implements the equivalent programmatic Field/schema registrations and inspections. Field IDs use the complete `0xEE000000`–`0xEEFFFFFF` range; table capacity counts entries rather than the numeric ID. Programmatic exact re-registration is idempotent, while conflicting Field IDs/names return Conflict and conflicting schema identities/type-name pairings return SchemaConflict. Message Field order and repetition are meaningful, and an empty array is valid. The native Field types accepted in TOML are `char`, `byte`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, and `float64`. Their sizes follow the fixed scalar wire width rather than `sizeof` a native C++ object. Other representations and their encoding features follow milestones 3 and 9.
+Step 2.7 implements the equivalent programmatic Field/schema registrations and inspections. Field IDs use the complete `0xEE000000`–`0xEEFFFFFF` range; table capacity counts entries rather than the numeric ID. Programmatic exact re-registration is idempotent, while conflicting Field IDs/names return Conflict and conflicting schema identities/type-name pairings return SchemaConflict. Message Field order and repetition are meaningful, and an empty array is valid. Both TOML versions accept `char`, `byte`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, and `float64`. Their sizes follow the fixed scalar wire width rather than `sizeof` a native C++ object.
 
 Applications may register definitions programmatically within the same reserved capacities. TOML declarations supply initial registrations.
+
+Step 3.3 adds version-2 `int8`, `bool`, `bits` with width 8/16/32/64, `enum` with an explicit integer base and closed value/label mapping, and `chars` with an exact positive ASCII byte size. The [logical Field contract](logical-fields.md#toml-version-2) specifies all keys, strict validation, and decimal-string enum values covering the full uint64 range. The [complete configuration](../examples/primer/logical-fields.toml) is demonstrated in [primer lesson 10](primer.md#10-encode-logical-fields-and-preserve-an-output-buffer).
+
+New Sessions use mapped format 2.1 and declare logical support at creation, even when their TOML uses version 1. Existing format-2.0 Sessions retain scalar registration and reject new logical/int8 registrations without mutation. Attachment remains validation-only: supplied declarations do not register, replace, or reinterpret recorded definitions. Read the attached Session's Registry to obtain its authoritative Field meanings.
 
 ## Registration and activation
 

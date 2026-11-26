@@ -206,8 +206,8 @@ namespace
   {
     auto created = create();
     auto actor = created._creator.registry();
-    const std::array<std::pair<EFieldBase, std::uint32_t>, 10> types{{
-        {EFieldBase::BASE_CHAR, 1}, {EFieldBase::BASE_BYTE, 1},
+    const std::array<std::pair<EFieldBase, std::uint32_t>, 11> types{{
+        {EFieldBase::BASE_CHAR, 1}, {EFieldBase::BASE_BYTE, 1}, {EFieldBase::BASE_INT8, 1},
         {EFieldBase::BASE_INT16, 2}, {EFieldBase::BASE_UINT16, 2},
         {EFieldBase::BASE_INT32, 4}, {EFieldBase::BASE_UINT32, 4}, {EFieldBase::BASE_FLOAT32, 4},
         {EFieldBase::BASE_INT64, 8}, {EFieldBase::BASE_UINT64, 8}, {EFieldBase::BASE_FLOAT64, 8}}};
@@ -789,5 +789,171 @@ namespace
       }
       fs::remove_all(_directory);
     }
+  }
+  // Enum declaration order is a presentation choice, while the mapping itself
+  // is immutable. Retrying reordered entries must not allocate a new revision.
+  TEST_F(SchemaRegistryTest, LogicalMappingRetriesCanonicalizeWithoutChangingIdentity)
+  {
+    auto created = create();
+    auto registry = created._creator.registry();
+    auto side = field(0xee000020, "Side", EFieldBase::BASE_BYTE, 1);
+    side._logical._kind = FieldLogicalKind::Enumeration;
+    side._logical._enumerators = {{"Sell", std::uint64_t{2}}, {"Buy", std::uint64_t{1}}};
+    const auto id = require_value(registry.register_field(side));
+    const auto canonical = require_value(registry.describe_field(id));
+    ASSERT_EQ(canonical._logical._enumerators.size(), 2u);
+    EXPECT_EQ(canonical._logical._enumerators[0]._name, "Buy");
+    EXPECT_EQ(canonical._logical._enumerators[1]._name, "Sell");
+    const auto before = observe();
+    std::reverse(side._logical._enumerators.begin(), side._logical._enumerators.end());
+    EXPECT_EQ(require_value(registry.register_field(side)), id);
+    EXPECT_EQ(observe(), before);
+
+    auto changed = side;
+    changed._logical._enumerators[0]._name = "Bid";
+    expect_error(registry.register_field(changed), ErrorCode::Conflict);
+    changed = side;
+    changed._logical._enumerators.push_back({"Unknown", std::uint64_t{0}});
+    expect_error(registry.register_field(changed), ErrorCode::Conflict);
+    changed = side;
+    changed._logical = FieldLogicalMetadata{FieldLogicalKind::Boolean, {}};
+    expect_error(registry.register_field(changed), ErrorCode::Conflict);
+    EXPECT_EQ(observe(), before);
+
+    const auto original = message(3, 1, "Order", {id});
+    require_value(registry.register_message(original));
+    const auto historical = require_value(registry.snapshot());
+    changed = side;
+    changed._id = static_cast<FieldId>(0xee000021);
+    changed._name = "SideExtended";
+    changed._logical._enumerators.push_back({"Unknown", std::uint64_t{0}});
+    const auto extended = require_value(registry.register_field(changed));
+    require_value(registry.register_message(message(3, 2, "Order", {extended})));
+    EXPECT_EQ(require_value(registry.describe_message(original._schema))._fields, original._fields);
+    EXPECT_EQ(historical._fields[0]._descriptor._logical._enumerators.size(), 2u);
+    EXPECT_EQ(require_value(registry.snapshot(historical._revision))._fields[0]._descriptor._logical,
+              canonical._logical);
+  }
+
+  // This uses the public API and closes every handle before reattachment.
+  // Definitions and snapshots own their logical metadata independently.
+  TEST_F(SchemaRegistryTest, LogicalDefinitionsRemainOwningAcrossSessionReattachment)
+  {
+    RegistrySnapshot retained;
+    {
+      auto created = create();
+      auto registry = created._creator.registry();
+      auto enabled = field(0xee000020, "Enabled", EFieldBase::BASE_BYTE, 1);
+      enabled._logical._kind = FieldLogicalKind::Boolean;
+      auto flags = field(0xee000021, "Flags", EFieldBase::BASE_UINT64, 8);
+      flags._logical._kind = FieldLogicalKind::Bits;
+      auto code = field(0xee000022, "Code", EFieldBase::BASE_CHARS, 6);
+      code._logical._kind = FieldLogicalKind::FixedAscii;
+      auto status = field(0xee000023, "Status", EFieldBase::BASE_INT8, 1);
+      status._logical._kind = FieldLogicalKind::Enumeration;
+      status._logical._enumerators = {{"Failed", std::int64_t{-128}}, {"Ready", std::int64_t{127}}};
+      for (const auto& descriptor : {enabled, flags, code, status})
+      {
+        require_value(registry.register_field(descriptor));
+      }
+      retained = require_value(registry.snapshot());
+    }
+    auto attached = require_value(Session::attach(_directory));
+    const auto recovered = require_value(attached.registry().snapshot());
+    ASSERT_EQ(recovered._fields.size(), retained._fields.size());
+    for (std::size_t index = 0; index < retained._fields.size(); ++index)
+    {
+      EXPECT_EQ(recovered._fields[index]._descriptor._logical, retained._fields[index]._descriptor._logical);
+      EXPECT_EQ(recovered._fields[index]._descriptor._base, retained._fields[index]._descriptor._base);
+      EXPECT_EQ(recovered._fields[index]._descriptor._size, retained._fields[index]._descriptor._size);
+    }
+    EXPECT_EQ(retained._fields.back()._descriptor._logical._enumerators[0]._name, "Failed");
+  }
+
+  // Metadata labels occupy the immutable arena, including their manifest and
+  // allocation padding. Measure the real append and test its exact boundary.
+  TEST_F(SchemaRegistryTest, EnumMetadataBudgetIsAtomicAndExactRetriesWorkAtLogFull)
+  {
+    auto status = field(0xee000020, "Status", EFieldBase::BASE_UINT64, 8);
+    status._logical._kind = FieldLogicalKind::Enumeration;
+    status._logical._enumerators = {{"Maximum", std::numeric_limits<std::uint64_t>::max()},
+                                    {"Minimum", std::uint64_t{0}}};
+    std::uint64_t required{};
+    {
+      auto created = create();
+      require_value(created._creator.registry().register_field(status));
+      required = observe()._snapshot._tail;
+    }
+    fs::remove_all(_directory);
+    {
+      auto created = create(16, 8, required - 1);
+      const auto before = observe();
+      expect_error(created._creator.registry().register_field(status), ErrorCode::LogFull);
+      EXPECT_EQ(observe(), before);
+    }
+    fs::remove_all(_directory);
+    {
+      auto created = create(16, 8, required);
+      auto registry = created._creator.registry();
+      const auto id = require_value(registry.register_field(status));
+      const auto before = observe();
+      EXPECT_EQ(before._snapshot._tail, required);
+      std::reverse(status._logical._enumerators.begin(), status._logical._enumerators.end());
+      EXPECT_EQ(require_value(registry.register_field(status)), id);
+      EXPECT_EQ(observe(), before);
+    }
+  }
+
+  // The fixed layout and scalar definition bytes are shared with 2.0. Assemble
+  // a predecessor-profile fixture only while all native owners are closed;
+  // this is private compatibility setup, never an in-place upgrade API.
+  TEST_F(SchemaRegistryTest, LegacyScalarSessionStillAcceptsScalarsButRejectsNewRepresentations)
+  {
+    {
+      auto created = create();
+      require_value(created._creator.registry().register_field(field()));
+    }
+    {
+      auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang", mapped::FileAccess::ReadWrite));
+      const std::array<std::byte, 2> minor{};
+      const std::array<std::byte, 8> features{std::byte{1}};
+      require_value(file.write_exact(10, minor));
+      require_value(file.write_exact(56, features));
+    }
+    auto attached = require_value(Session::attach(_directory));
+    auto owner = require_value(attached.attach_task(TaskId{1}));
+    auto registry = owner.registry();
+    const auto old = require_value(registry.find_field("Price"));
+    EXPECT_EQ(require_value(registry.register_field(field())), old);
+    require_value(registry.register_field(field(0xee000002, "Quantity", EFieldBase::BASE_UINT64, 8)));
+    auto logical = field(0xee000003, "Enabled", EFieldBase::BASE_BYTE, 1);
+    logical._logical._kind = FieldLogicalKind::Boolean;
+    const auto before = observe();
+    expect_error(registry.register_field(logical), ErrorCode::UnsupportedPolicy);
+    expect_error(registry.register_field(field(0xee000004, "Small", EFieldBase::BASE_INT8, 1)), ErrorCode::UnsupportedPolicy);
+    EXPECT_EQ(observe(), before);
+    EXPECT_EQ(state()->_controller->configuration()._formatMinor, 0u);
+  }
+
+  // A Session containing required logical data cannot be relabeled as 2.0.
+  // The capable reader validates each stored Field against the recorded profile.
+  TEST_F(SchemaRegistryTest, LogicalDefinitionInLegacyProfileIsRejected)
+  {
+    {
+      auto created = create();
+      auto enabled = field(0xee000020, "Enabled", EFieldBase::BASE_BYTE, 1);
+      enabled._logical._kind = FieldLogicalKind::Boolean;
+      require_value(created._creator.registry().register_field(enabled));
+    }
+    {
+      auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang", mapped::FileAccess::ReadWrite));
+      const std::array<std::byte, 2> minor{};
+      const std::array<std::byte, 8> features{std::byte{1}};
+      require_value(file.write_exact(10, minor));
+      require_value(file.write_exact(56, features));
+    }
+    const auto before = read_image();
+    expect_error(Session::attach(_directory), ErrorCode::IoError);
+    EXPECT_EQ(read_image(), before);
   }
 } // namespace

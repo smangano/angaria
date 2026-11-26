@@ -358,7 +358,7 @@ namespace angaria::detail::mapped
                           configuration._maxLogBytes, configuration._storage,
                           configuration._synchronizationVersion, configuration._liveAbiProfile,
                           configuration._requiredFeatures, configuration._optionalFeatures,
-                          configuration._segmentBytes, limits._tasks, limits._queues,
+                          configuration._segmentBytes, configuration._formatMinor, limits._tasks, limits._queues,
                           limits._sourceSets, limits._publishingSets, limits._membershipsPerSet,
                           limits._fields, limits._messageSchemas, limits._symbols, limits._stringPoolBytes};
       };
