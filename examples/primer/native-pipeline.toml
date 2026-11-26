@@ -1,0 +1,111 @@
+# Copy beside a fresh Session directory before running lesson 17.
+config_version = 2
+
+[session]
+name = "Native market monitor"
+application_version = "Primer-17"
+directory = "market-session"
+max_log_bytes = 4194304
+
+[limits]
+tasks = 4
+queues = 2
+source_sets = 2
+publishing_sets = 0
+memberships_per_set = 1
+fields = 8
+message_schemas = 3
+symbols = 0
+string_pool_bytes = 0
+
+[defaults.queue]
+ring_capacity = 2
+delivery = "recover_from_log"
+
+[defaults.source_set]
+selection = "strict"
+wait = "spin"
+
+[[tasks]]
+name = "Setup"
+
+[[tasks]]
+name = "Feed"
+
+[[tasks]]
+name = "Strategy"
+
+[[tasks]]
+name = "Audit"
+
+[[source_sets]]
+name = "StrategyInputs"
+owner = "Strategy"
+
+[[source_sets]]
+name = "AuditInputs"
+owner = "Audit"
+
+[[queues]]
+name = "Quotes"
+producer = "Feed"
+source_set = "StrategyInputs"
+
+[[queues]]
+name = "Alerts"
+producer = "Strategy"
+source_set = "AuditInputs"
+
+[[fields]]
+name = "PriceTicks"
+id = 0xEE000001
+type = "uint64"
+
+[[fields]]
+name = "Quantity"
+id = 0xEE000002
+type = "uint64"
+
+[[fields]]
+name = "SourceTask"
+id = 0xEE000003
+type = "uint16"
+
+[[fields]]
+name = "SourceIncarnation"
+id = 0xEE000004
+type = "uint64"
+
+[[fields]]
+name = "SourceSequence"
+id = 0xEE000005
+type = "uint64"
+
+[[fields]]
+name = "SourceQueueSequence"
+id = 0xEE000006
+type = "uint64"
+
+[[fields]]
+name = "AboveLimit"
+id = 0xEE000007
+type = "bool"
+
+[[messages]]
+name = "Quote"
+type = 1
+version = 1
+fields = ["PriceTicks", "Quantity"]
+
+# Same byte count, different Field order: decode the exact header version.
+[[messages]]
+name = "Quote"
+type = 1
+version = 2
+fields = ["Quantity", "PriceTicks"]
+
+[[messages]]
+name = "PriceAlert"
+type = 2
+version = 1
+fields = ["SourceTask", "SourceIncarnation", "SourceSequence", "SourceQueueSequence", "PriceTicks", "Quantity", "AboveLimit"]

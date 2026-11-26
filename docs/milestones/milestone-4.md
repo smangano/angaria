@@ -90,6 +90,14 @@ Counter fixtures exercise the last representable publication ID, Source issuance
 
 The primer now explains uncertain outcomes, preserved identities, stale tokens, possible application work repetition, and the difference between append exhaustion and counter exhaustion. The runnable lessons remain public-API examples. Linux CI uses an explicit three-job compiler limit, matching native-profile jobs, and all automatic profiles run the full suite. Native format, public API, and synchronization protocol are unchanged. The native multi-process primer application remains step 4.10; measurements and the completion audit remain step 4.11.
 
+## Step 4.10 Native multi-process primer application
+
+Framework **0.4.12** adds the [native market-monitor walkthrough](../native-pipeline.md) as primer lesson 17. Feed, Strategy, and Audit are independent processes using public APIs and explicit TOML. Feed produces two exact Quote versions with equal byte widths and reversed Field order. Strategy decodes the received schema, preserves the full MessageHeader when copying, and forwards a PriceAlert that links back to the original Feed publication and Queue sequence. Audit receives and acknowledges the derived messages through its own Source.
+
+The coordinator starts with backlog beyond the two-entry ring, terminates Feed after accepted publication and Strategy after its first borrow but before output, then runs replacement roles and a live Audit. It verifies retained Queue order, new producer/consumer incarnations, release/redelivery with a stale old token, six linked outputs, and retained acceptance lookup after the business processes exit. Separate EOF handling abandons an unfinished input without forwarding it. Existing workspaces, duplicate initialization, competing ownership, and invalid arguments preserve prior data at their rejection boundaries.
+
+The application compiles with tests disabled. Its CTest walkthrough invokes the same public commands and retains role transcripts when a caller requests a fresh workspace. The primer and detailed guide explain the commands, schema/identity output, lifetime rules, and the separate send/acknowledgment commits. Each Source still has one Active Queue; selection, Publishing, and the five-process trading simulation retain their later scope. Measurements and the final audit remain step 4.11.
+
 ## Qualification and completion
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.
