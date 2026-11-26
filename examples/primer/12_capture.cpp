@@ -51,7 +51,7 @@ namespace
     MessageHeader header;
     header._schema = codec.schema();
     header._publication = primer::value(producer.next_publication_id());
-    header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{
+    header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
         static_cast<std::int64_t>(100 + header._publication._sequence)}};
     header._flags = flags;
     header._payloadBytes = payload.size();

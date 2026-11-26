@@ -11,21 +11,6 @@
 
 namespace angaria
 {
-  // Immutable message semantics, independent of native storage offsets and
-  // per-destination receipt state. The timestamp is the initial publication
-  // time; destination acceptance/enqueue and dequeue times remain separate.
-  struct MessageHeader
-  {
-    SchemaId _schema{};
-    PayloadFormat _format{PayloadFormat::Binary};
-    PublicationId _publication{};
-    UtcTimestamp _publicationTime{};
-    std::uint32_t _flags{};
-    std::uint64_t _payloadBytes{};
-
-    bool operator==(const MessageHeader&) const = default;
-  };
-
   struct MessageRecordView
   {
     MessageHeader _header;
@@ -44,7 +29,9 @@ namespace angaria
   };
 
   // Portable application/capture bytes, not a native arena RecordEnvelope or
-  // Publication body. All budgets include the fixed header and payload.
+  // Publication body. All budgets include the fixed header and payload. Version
+  // 1 stores publication metadata only: encode rejects delivery-only fields
+  // rather than silently discarding them.
   class MessageRecordCodec
   {
   public:

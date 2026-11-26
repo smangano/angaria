@@ -254,6 +254,9 @@ namespace angaria
       }
       const auto profile = runtime_value(mapped::qualify_native_profile());
       mapped::SuperblockConfiguration configuration;
+      configuration._formatMinor = mapped::delivery_format_minor;
+      configuration._requiredFeatures = mapped::journal_feature | mapped::basic_fields_feature |
+          mapped::native_delivery_feature;
       configuration._session = new_identity();
       configuration._maxLogBytes = options._maxLogBytes;
       configuration._limits = options._limits;
@@ -450,6 +453,18 @@ namespace angaria
       return *error;
     }
     return Task{std::get<std::shared_ptr<TaskState>>(std::move(result))};
+  }
+
+  Result<Task> Session::attach_task(std::string_view name)
+  {
+    try
+    {
+      return attach_task(runtime_value(Registry{_state}.find_task(name)));
+    }
+    catch (...)
+    {
+      return runtime_caught_error();
+    }
   }
 
   TaskClaim Task::claim() const

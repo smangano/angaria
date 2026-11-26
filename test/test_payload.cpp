@@ -118,6 +118,44 @@ namespace
     return snapshot({std::move(descriptor)}, {id});
   }
 
+  // Native send needs to admit caller-supplied bytes without building a vector
+  // of application values. Validation enforces the same logical wire rules as
+  // decode, including an error in the last Field after a valid earlier prefix.
+  TEST(BinaryPayloadTest, ValidatesWireConstraintsWithoutMaterializingApplicationValues)
+  {
+    const auto boolean = logical_field(FieldLogicalKind::Boolean, EFieldBase::BASE_BYTE, 1,
+                                         0xee000001, "Enabled");
+    const auto side = enum_field(EFieldBase::BASE_INT8, 1,
+        {{"Sell", std::int64_t{-1}}, {"Buy", std::int64_t{1}}}, 0xee000002, "Side");
+    const auto text = logical_field(FieldLogicalKind::FixedAscii, EFieldBase::BASE_CHARS, 3,
+                                      0xee000003, "Symbol");
+    const auto wire = codec(snapshot({boolean, side, text}, {boolean._id, side._id, text._id}));
+    const auto valid = octets({1, 0xff, 'A', 0, 0x7f});
+    require_value(wire.validate(valid));
+    for (const auto& invalid : {octets({2, 0xff, 'A', 0, 0x7f}),
+                              octets({1, 0, 'A', 0, 0x7f}),
+                              octets({1, 0xff, 'A', 0, 0x80}),
+                              octets({1, 0xff, 'A', 0})})
+    {
+      expect_error(wire.validate(invalid), ErrorCode::InvalidArgument);
+    }
+    EXPECT_EQ(valid, octets({1, 0xff, 'A', 0, 0x7f}));
+  }
+
+  TEST(BinaryPayloadTest, WireValidationAllowsAllOrdinaryCharAndIeeeFloatingPointBits)
+  {
+    const auto character = field(EFieldBase::BASE_CHAR, 1, 0xee000001, "Character");
+    const auto number = field(EFieldBase::BASE_FLOAT32, 4, 0xee000002, "Number");
+    auto wire = codec(snapshot({character, number}, {character._id, number._id}));
+    // A char is an uninterpreted byte; fixed ASCII is the separate restricted
+    // kind. Infinity and a NaN are valid IEEE values, not malformed payloads.
+    require_value(wire.validate(octets({0xff, 0, 0, 0x80, 0x7f})));
+    require_value(wire.validate(octets({0x80, 1, 0, 0x80, 0x7f})));
+    auto moved = std::move(wire);
+    require_value(moved.validate(octets({0x80, 1, 0, 0x80, 0x7f})));
+    expect_error(wire.validate({}), ErrorCode::InvalidState);
+  }
+
   // The mixture deliberately places wide values after narrow ones. The 42
   // payload bytes have no C++ struct padding, Field IDs, or schema header.
   TEST(BinaryPayloadTest, EncodesAndDecodesAnIndependentGoldenPackedPayload)

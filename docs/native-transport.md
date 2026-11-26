@@ -1,6 +1,6 @@
 # Native two-plane transport contract
 
-**Step 4.5, framework version `0.4.6`, adds private reserved delivery progress and publication-aware claim cleanup**, following [committed payload mappings and complete append sizing](native-storage.md#committed-payload-storage-and-append-planning), the [local delivery codecs](mapped-format.md#local-delivery-codecs), and [core Session/history validation](native-validation.md). This document specifies the complete planned milestone-4 behavior. Public native send, receive, acknowledgment, creation of delivery-enabled Sessions, and the API additions below remain planned. Current runnable application behavior remains the thirteen [milestone-3 primer lessons](primer.md); the [implementation sequence](milestones/milestone-4.md) introduces this contract in small PRs.
+**Step 4.6, framework version `0.4.8`, enables [direct Queue publication and outcome lookup](direct-publication.md)** and creates core delivery-enabled Sessions. It builds on [reserved progress and claim cleanup](native-progress.md), [committed payload mappings and complete append sizing](native-storage.md#committed-payload-storage-and-append-planning), the [local delivery codecs](mapped-format.md#local-delivery-codecs), and [core Session/history validation](native-validation.md). This document specifies the complete milestone-4 contract; public receive, acknowledgment, and explicit Source close follow in step 4.7, with allowed loss in step 4.8. The fourteen [primer lessons](primer.md) distinguish runnable features from those later steps.
 
 The [mapped format](mapped-format.md) defines stored representations, and the [concurrency contract](concurrency.md) defines journal commits and process recovery. This contract fills their native-delivery details without changing the agreed one-producer-per-Queue model or the blocking session mutation gate.
 
@@ -16,7 +16,7 @@ Recover-from-log delivery follows retained links when a ring entry has been over
 
 A **required capability** is a bit in the immutable superblock required-feature mask. A live binary must understand every required bit before it acquires a usable controller or performs journal recovery. It is distinct from a framework version string and from the Session definition's policy metadata, which is read later.
 
-The reviewed future profiles are:
+The native profiles are:
 
 | Native format | Required mask | Meaning |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Every listed format requires the journal bit. The basic-Field bit is absent on 2
 
 Native Publication and Ring record envelopes keep encoding 1; embedded destination and receipt rows keep their 48-byte and 128-byte sizes. The synchronization protocol remains 1, and fixed section sizes and ABI identifiers remain unchanged. Portable message-record encoding also remains 1. The new minor/capabilities protect previously unused delivery state and newly executable redo semantics; they do not make native structures portable between live ABI profiles. Later selection, Publishing/retry, and waiting capabilities require their own admission review; the milestone-4 profile does not advertise those operations.
 
-Step 4.3 readers admit core format 2.2/`0x7` for validated Registry/history inspection. Structural metadata recognizes the reviewed allowed-loss shape, but native attachment rejects `0xf` before recovery until step 4.8. Factories still create 2.1/`0x3` Sessions; the 2.2 fixtures are private qualification setup, not migration tools. Public creation switches to the core profile only after its codecs, loaders, redo, and claim cleanup are complete, with direct send in step 4.6. Allowed-loss creation is enabled in step 4.8 only after its validation/replay/cleanup is complete. From that implementation step, public Session factories create `0xf` Sessions even when their initial Queues use recovery delivery, allowing later allowed-loss Queue registration.
+Public factories create core format 2.2/`0x7` from step 4.6, after its codecs, loaders, redo, and claim cleanup are complete. Structural metadata recognizes the reviewed allowed-loss shape, but native attachment rejects `0xf` before recovery until step 4.8. Allowed-loss creation is enabled only after its validation/replay/cleanup is complete. From that later step, public Session factories will create `0xf` Sessions even when their initial Queues use recovery delivery, allowing later allowed-loss Queue registration.
 
 New binaries retain Registry, claim, payload, capture, and inspection support for 2.0/2.1. Native send/status/receive/acknowledge/release methods on those Sessions return `UnsupportedPolicy` without starting new delivery work. Closing an existing identity-only Source handle remains valid resource cleanup; a legacy Session has no native issuance to release. A 2.2/`0x7` Session remains usable for recovery delivery but rejects allowed-loss defaults/Queue registration without writes. Loss-bearing state without its required capability is invalid. An earlier core-only binary rejects a `0xf` Session before encountering a loss journal.
 
@@ -60,7 +60,7 @@ Sample initial publication UTC time once when preparing the accepted Publication
 
 UTC values can be zero or negative, and wall clocks can move backward. Presence flags establish whether a stored time exists; zero alone does not mean absent. Wait deadlines use the monotonic clock and have no relationship to these UTC fields.
 
-Step 4.7 plans an appended `DeliveryView::_publishedAt` member of the same UTC chrono type as `_enqueuedAt` and `_dequeuedAt`. They respectively expose initial Publication time, this destination's enqueue time, and this issuance's dequeue time. The new member is process-local API metadata, not a native struct layout or an encoding-version change. It is not added to headers in step 4.1.
+The approved `Message`/`MessageView`/`Delivery` model uses one logical `MessageHeader`, promoted to the implemented namespace in step 4.6. `_publishedAt` exposes initial Publication time; optional `_enqueuedAt` and `_dequeuedAt` expose this destination's enqueue and issuance times. Optional Queue/sequence/consumer fields carry the remaining destination context. Step 4.7 will populate these fields in received `Delivery` messages. Owning copies preserve the entire header. This process-local model does not change native layouts or portable encoding version 1; that older portable encoding rejects destination metadata it cannot represent.
 
 ## Ring generations
 
@@ -101,9 +101,9 @@ Release and claim cleanup preserve historical tags so repeated `ReleaseClaim` re
 
 ## Delivery views and payload mapping
 
-A **delivery pin** is the persisted Issued receipt and matching Source in-flight slot protecting that delivery. A mapping owner separately keeps its read-only address range alive in the receiving process. A copied `DeliveryView` owns neither resource; its payload span borrows them.
+A **delivery pin** is the persisted Issued receipt and matching Source in-flight slot protecting that delivery. A mapping owner separately keeps its read-only address range alive in the receiving process. A copied `MessageView` owns neither resource; its payload span borrows them.
 
-Establish the pin and mapping before returning a view. If mapping acquisition fails, do not expose an unowned span or silently consume a delivery; settle or recover its reserved progress. Prepare local cleanup identity independently of the returned view: an issuance committed before a later I/O/mapping/result failure must remain discoverable by close/destruction even when no `DeliveryView` reached the application. Keep the current mapping while that issuance remains in flight. Repeated receive returns the same token/time and must preserve previously returned spans for that pin.
+Establish the pin and mapping before returning a view. If mapping acquisition fails, do not expose an unowned span or silently consume a delivery; settle or recover its reserved progress. Prepare local cleanup identity independently of the returned view: an issuance committed before a later I/O/mapping/result failure must remain discoverable by close/destruction even when no `Delivery` reached the application. Keep the current mapping while that issuance remains in flight. Repeated receive returns the same token/time and must preserve previously returned spans for that pin.
 
 Append growth and other producers' ring overwrites must not move or invalidate these bytes. Existing mapping leases permit growth while preventing local shrink below exposed ranges. Rollback cannot truncate committed pinned bytes; no other participant may receive provisional append bytes. An empty payload still has a receipt pin but needs no zero-length native mapping.
 
@@ -135,7 +135,7 @@ Use the existing Spin/deadline contract: reject negative/overflowing timeouts; z
 
 ## Recovery and implementation handoff
 
-Current topology validation rejects publication-bearing state, and current Task cleanup rejects receipts/nonzero delivery state. Complete delivery-aware validation, replay, and Task/Source cleanup before public send. Publication recovery settles prepared/committed batches before any observer uses their roots, ring entries, receipts, or borrowed bytes. Ending a producer claim never retracts its accepted Publications; receipt cleanup concerns deliveries issued to that Task as a consumer.
+Delivery-aware validation and Task/Source cleanup are complete prerequisites of direct send. Publication recovery settles prepared/committed batches before any observer uses their roots, ring entries, receipts, or borrowed bytes. Ending a producer claim never retracts its accepted Publications; receipt cleanup concerns deliveries issued to that Task as a consumer.
 
 Receipt issuance, acknowledgment, release, close, replacement cleanup, and loss progress use reserved FixedState storage without append allocation, including when the publication log is full. All compact scans use retained committed definitions and fixed old identities, not pointers already cleared by an earlier replay pass. Preserve issuance counters across Source closure, never wrap counters silently, and reject stale tokens without progress.
 

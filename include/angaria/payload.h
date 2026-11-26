@@ -68,6 +68,9 @@ namespace angaria
     // The output must have exactly payload_size() bytes. Any error leaves it
     // unchanged; successful encoding replaces its complete contents.
     OperationResult encode_into(std::span<const PayloadValue> values, std::span<std::byte> output) const;
+    // Check exact wire length and logical Field constraints without allocating
+    // decoded values or copying application bytes. Used by native admission.
+    OperationResult validate(std::span<const std::byte> payload) const;
     Result<std::vector<PayloadValue>> decode(std::span<const std::byte> payload) const;
 
   private:

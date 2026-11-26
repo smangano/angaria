@@ -1,6 +1,6 @@
 # Basic logical Field contract
 
-**Implemented in milestone 3, step 3.3, framework version `0.3.3`.** Step 3.2 reviewed this contract before implementation. `FieldDescriptor`, TOML version 2, persisted definitions, and `BinaryPayloadCodec` now support the representations below. New Sessions use mapped format 2.1; existing format-2.0 Sessions retain scalar behavior. The [tenth primer program](../examples/primer/10_logical_fields.cpp) demonstrates the public API and its [TOML configuration](../examples/primer/logical-fields.toml).
+**Implemented in milestone 3, step 3.3, framework version `0.3.3`.** Step 3.2 reviewed this contract before implementation. `FieldDescriptor`, TOML version 2, persisted definitions, and `BinaryPayloadCodec` now support the representations below. Current factories use core mapped format 2.2/`0x7`, which includes the basic-Field capability introduced in 2.1. Existing format-2.0 Sessions retain scalar behavior. The [tenth primer program](../examples/primer/10_logical_fields.cpp) demonstrates the public API and its [TOML configuration](../examples/primer/logical-fields.toml).
 
 The [Wiki's Fields section](https://github.com/smangano/angaria/wiki/Angaria#fields) calls for booleans, bit fields, user-defined enumerations, and fixed-length ASCII sequences. A **logical representation** describes what a Field's bytes mean and which values are valid. Its **storage base** describes the underlying integer or character bytes. For example, a Boolean and a byte both occupy one byte, but only a Boolean restricts that byte to zero or one.
 
@@ -118,12 +118,13 @@ Logical metadata, enum entry arrays, and labels consume immutable arena/log byte
 
 ## Compatibility boundary
 
-Step 3.3 introduces **mapped format 2.1** and required Session feature bit **`0x2`**, `basic_fields_v1`, for logical attributes and the int8 base. The existing journal bit is `0x1`; newly created 2.1 Sessions require mask `0x3`. The feature is selected at Session creation, even before a logical Field is registered. Both programmatic creation and creation from either accepted TOML version use that new profile. Configuration version and mapped format remain independent: a version-1 scalar TOML file creates a format-2.1 Session.
+Step 3.3 introduces **mapped format 2.1** and required Session feature bit **`0x2`**, `basic_fields_v1`, for logical attributes and the int8 base. The existing journal bit is `0x1`; retained 2.1 Sessions require mask `0x3`. The feature is selected at Session creation, even before a logical Field is registered. Step 4.6 now creates core format 2.2/`0x7`, adding native delivery while retaining basic-Field support. Both programmatic creation and creation from either accepted TOML version use that current profile. Configuration version and mapped format remain independent: a version-1 scalar TOML file now creates a format-2.2 Session.
 
 | Session | Current library | Earlier format-2.0 library |
 | --- | --- | --- |
 | Existing format 2.0, journal feature only | Attach and retain scalar behavior; reject logical/int8 registration with `UnsupportedPolicy` and no state change. | Existing behavior. |
-| New format 2.1, required mask `0x3` | Validate metadata and use supported scalar/logical Fields. | Reject unsupported format/features before recovery or mutation. |
+| Existing format 2.1, required mask `0x3` | Validate metadata and use supported scalar/logical Fields; native send/status return `UnsupportedPolicy`. | Reject unsupported format/features before recovery or mutation. |
+| New core format 2.2, required mask `0x7` | Use supported scalar/logical Fields and direct Queue send/status. | Reject unsupported format/features before recovery or mutation. |
 | Unsupported format or unknown required feature | Reject before recovery or mutation. | Reject before recovery or mutation. |
 
 The current library retains a checked 2.0 decoder/validation path. Format 2.1 requires `basic_fields_v1`; 2.0 cannot advertise it. Logical attributes or base code 26 in a 2.0 file are invalid stored data. The record envelope, ABI profile, synchronization version, Field IDs, and message-schema identity rules are unchanged.

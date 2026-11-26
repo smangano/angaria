@@ -48,8 +48,8 @@ namespace
   mapped::SuperblockConfiguration fixture_configuration()
   {
     mapped::SuperblockConfiguration configuration;
-    // Keep the independently authored 2.0 fixture unchanged. New native
-    // Sessions default to 2.1; both profiles have explicit qualification below.
+    // Keep the independently authored 2.0 fixture unchanged. Framing defaults
+    // remain 2.1; public factories explicitly select the 2.2 core profile.
     configuration._formatMinor = 0;
     configuration._requiredFeatures = mapped::journal_feature;
     configuration._session._high = 0x0807060504030201;

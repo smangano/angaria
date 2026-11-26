@@ -1,6 +1,6 @@
 # Reserved delivery progress and claim cleanup
 
-Milestone 4, step 4.5, framework **0.4.6**, implements private progress operations for the core format **2.2/`0x7`** profile. They build on [history validation](native-validation.md) and [committed payload mapping](native-storage.md#committed-payload-storage-and-append-planning). Public sending, receiving, acknowledgment, and delivery-enabled Session creation remain later steps. The existing thirteen [primer programs](primer.md) remain the runnable application path.
+Milestone 4, step 4.5, framework **0.4.6**, implements private progress operations for the core format **2.2/`0x7`** profile. They build on [history validation](native-validation.md) and [committed payload mapping](native-storage.md#committed-payload-storage-and-append-planning). Step 4.6 now enables [public direct send and status](direct-publication.md), core Session creation, and the fourteenth [primer lesson](primer.md#14-send-directly-and-look-up-acceptance). Public receiving and acknowledgment follow in step 4.7.
 
 **Reserved progress** means updating the mutable receipt and fixed runtime rows that already exist, without appending another record. These operations use the journal's FixedState command area. Acknowledgment can complete when the publication log is full; it does not reclaim history or make append space reusable.
 
@@ -34,4 +34,4 @@ Task attachment and last-owner detachment now use this cleanup for valid core pu
 
 The [test guide](../test/README.md) distinguishes full-domain private delivery fixtures, deliberate corruption, and real process interruption from public API examples. Qualification covers exact tokens and counters, retained history after ring overwrite, full logs, old parent/Thread cleanup, partial absolute stores, replacement attachment, and repeated interrupted recovery. It tests process termination on a running local filesystem, without adding a power-loss durability guarantee.
 
-Factories remain on **2.1/`0x3`**, public delivery remains disabled, and no in-place profile upgrade is provided. Direct send and publication lookup follow in step 4.6. Step 4.7 adds public receive, payload-view ownership, explicit Source close, and deferred cleanup. Allowed-loss semantics and LoseRange replay remain step 4.8.
+Factories now select **2.2/`0x7`** in step 4.6 for [direct send and publication lookup](direct-publication.md). Existing profiles are never upgraded in place. Step 4.7 adds public receive, payload-view ownership, explicit Source close, and deferred cleanup. Allowed-loss semantics and LoseRange replay remain step 4.8.

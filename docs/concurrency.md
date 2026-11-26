@@ -6,7 +6,7 @@ This is an implementation contract. Step 2.3 implements private [native gate/cla
 
 The [terminology glossary](glossary.md) defines the storage and recovery terms used here.
 
-Step 4.1's [native transport design](native-transport.md) refines the planned delivery capability boundary, full-width ring generations, receipt presence bits, timestamps, and explicit/deferred Source cleanup. These refinements apply to the future delivery profile; framework version `0.4.1` does not enable new native formats or delivery operations. The [milestone steps](milestones/milestone-4.md) require delivery-aware validation and claim cleanup before public send.
+Step 4.1's [native transport design](native-transport.md) refines the delivery capability boundary, full-width ring generations, receipt presence bits, timestamps, and explicit/deferred Source cleanup. That design-only release did not enable new native formats or delivery operations. Step 4.6 now enables [direct Queue publication](direct-publication.md) after delivery-aware validation and claim cleanup; public receive and Source cleanup follow in step 4.7.
 
 ## Supported failure and progress scope
 

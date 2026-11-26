@@ -144,6 +144,57 @@ namespace
     expect_error(created._creator.open_source_set(ids._source), ErrorCode::OwnershipBusy);
   }
 
+  // Names are conveniences over Registry lookup, not a different ownership
+  // path. Every opening still checks the same active entity and Task claim.
+  TEST_F(EndpointRuntimeTest, NamedOpeningsResolveAllEndpointKindsAndPreserveOwnershipErrors)
+  {
+    auto created = create();
+    const auto ids = graph(created._creator.registry());
+    auto writer = require_value(created._creator.open_writer("Feed"));
+    auto source = require_value(created._creator.open_source_set("Inputs"));
+    auto publisher = require_value(created._creator.open_publishing_set("Updates"));
+    EXPECT_EQ(writer.id(), ids._queue);
+    EXPECT_EQ(source.id(), ids._source);
+    EXPECT_EQ(publisher.id(), ids._publishing);
+    const auto before = snapshot();
+    expect_error(created._creator.open_source_set("Inputs"), ErrorCode::OwnershipBusy);
+    expect_error(created._creator.open_writer("Missing"), ErrorCode::NotFound);
+    expect_error(created._creator.open_source_set("Missing"), ErrorCode::NotFound);
+    expect_error(created._creator.open_publishing_set("Missing"), ErrorCode::NotFound);
+    expect_error(created._session.attach_task("Creator"), ErrorCode::OwnershipBusy);
+    EXPECT_EQ(snapshot(), before);
+  }
+
+  TEST_F(EndpointRuntimeTest, NamedOpeningsPreserveMovedFromAndWrongThreadErrors)
+  {
+    auto created = create();
+    TaskDescriptor descriptor;
+    descriptor._name = "WorkerThread";
+    descriptor._kind = TaskKind::Thread;
+    descriptor._process = TaskId{1};
+    const auto owner = require_value(created._creator.registry().register_task(descriptor));
+    const auto ids = graph(created._creator.registry(), owner);
+    auto task = require_value(created._session.attach_task("WorkerThread"));
+    auto moved_task = std::move(task);
+    auto moved_session = std::move(created._session);
+    const auto before = snapshot();
+    expect_error(task.open_writer("Feed"), ErrorCode::InvalidState);
+    expect_error(task.open_source_set("Inputs"), ErrorCode::InvalidState);
+    expect_error(task.open_publishing_set("Updates"), ErrorCode::InvalidState);
+    expect_error(created._session.attach_task("WorkerThread"), ErrorCode::InvalidState);
+    std::thread other([&]
+    {
+      // Lookup itself must reject this thread before endpoint construction.
+      expect_error(moved_task.open_writer("Feed"), ErrorCode::WrongOwner);
+      expect_error(moved_task.open_source_set("Inputs"), ErrorCode::WrongOwner);
+      expect_error(moved_task.open_publishing_set("Updates"), ErrorCode::WrongOwner);
+    });
+    other.join();
+    EXPECT_EQ(snapshot(), before);
+    EXPECT_EQ(require_value(moved_task.open_writer("Feed")).id(), ids._queue);
+    expect_error(moved_session.attach_task("WorkerThread"), ErrorCode::OwnershipBusy);
+  }
+
   // Handles retain the Task claim independently of the original Task variable.
   // Each endpoint kind alone prevents replacement until its last owner closes.
   TEST_F(EndpointRuntimeTest, EveryEndpointKindRetainsItsTaskClaimUntilClosure)
@@ -340,7 +391,12 @@ namespace
         ++rejected;
       }
       source.reset();
-      ::_exit(rejected == 3 ? 0 : 1);
+      using angaria::test_support::has_error;
+      rejected += has_error(created._creator.open_writer("Feed"), ErrorCode::WrongOwner);
+      rejected += has_error(created._creator.open_source_set("Inputs"), ErrorCode::WrongOwner);
+      rejected += has_error(created._creator.open_publishing_set("Updates"), ErrorCode::WrongOwner);
+      rejected += has_error(created._session.attach_task("Creator"), ErrorCode::WrongOwner);
+      ::_exit(rejected == 7 ? 0 : 1);
     }
     int status{};
     pid_t waited;
@@ -399,9 +455,25 @@ namespace
   // Validate the complete command stream before detaching or writing a slot.
   TEST_F(EndpointRuntimeTest, TaskOnlyReleaseCannotIntroduceRingDeliveryState)
   {
-    auto created = create();
-    graph(created._creator.registry());
-    const auto claim = created._creator.claim();
+    {
+      auto created = create();
+      graph(created._creator.registry());
+    }
+    // This is the legacy Task-only cleanup contract. Build its predecessor
+    // profile offline, with no publications and every public owner closed.
+    // Core delivery cleanup independently rejects the same mixed writes under
+    // its stronger replay-discovery validation in the claim-cleanup suite.
+    {
+      auto file = require_value(runtime::mapped::NativeFile::open_existing(
+          _root / "session" / "session.ang", runtime::mapped::FileAccess::ReadWrite));
+      const std::array<std::byte, 2> minor{std::byte{1}};
+      const std::array<std::byte, 8> features{std::byte{3}};
+      require_value(file.write_exact(10, minor));
+      require_value(file.write_exact(56, features));
+    }
+    auto session = require_value(Session::attach(_root / "session"));
+    auto creator = require_value(session.attach_task(TaskId{1}));
+    const auto claim = creator.claim();
     auto state = std::make_shared<runtime::SessionState>();
     state->_directory = fs::canonical(_root / "session");
     state->_controller = require_value(runtime::mapped::SessionController::open_existing(state->_directory));

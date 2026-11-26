@@ -99,6 +99,10 @@ namespace angaria
 
     std::size_t validate_header(const MessageHeader& header, std::uint64_t maxRecordBytes)
     {
+      if (header._queue || header._queueSequence || header._consumer || header._enqueuedAt || header._dequeuedAt)
+      {
+        codec_fail(ErrorCode::UnsupportedPolicy, "message_record.delivery", "Version 1 portable records cannot store destination delivery metadata");
+      }
       if (header._schema._type == MessageType::Invalid)
       {
         codec_fail(ErrorCode::InvalidArgument, "message_record.schema.type", "Message type must be nonzero");
@@ -152,7 +156,7 @@ namespace angaria
       write_unsigned_le<std::uint64_t>(bytes, 48, header._publication._producer._incarnation);
       write_unsigned_le<std::uint64_t>(bytes, 56, header._publication._sequence);
       write_unsigned_le<std::uint64_t>(bytes, 64,
-          static_cast<std::uint64_t>(header._publicationTime.time_since_epoch().count()));
+          static_cast<std::uint64_t>(header._publishedAt.time_since_epoch().count()));
       write_unsigned_le<std::uint64_t>(bytes, 72, header._payloadBytes);
       return bytes;
     }
@@ -189,7 +193,7 @@ namespace angaria
       header._publication._producer._session._low = read_unsigned_le<std::uint64_t>(bytes, 40);
       header._publication._producer._incarnation = read_unsigned_le<std::uint64_t>(bytes, 48);
       header._publication._sequence = read_unsigned_le<std::uint64_t>(bytes, 56);
-      header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{
+      header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
           signed_from_bits<std::int64_t>(read_unsigned_le<std::uint64_t>(bytes, 64))}};
       header._payloadBytes = read_unsigned_le<std::uint64_t>(bytes, 72);
       static_cast<void>(validate_header(header, maxRecordBytes));
@@ -211,7 +215,7 @@ namespace angaria
 
   MessageView MessageRecordView::message() const noexcept
   {
-    return MessageView{_header._schema, _header._format, _payload, _header._flags};
+    return MessageView{_header, _payload};
   }
 
   MessageRecordView MessageRecord::view() const & noexcept

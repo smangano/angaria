@@ -4,7 +4,7 @@ Milestone 3, step 3.5, framework version `0.3.5`, adds [capture stream helpers](
 
 A **capture** is an ordinary binary stream containing consecutive [canonical message records](message-record.md). There is no additional file header, index, or schema serialization format: each entry is the existing 80-byte header followed by its declared payload. An empty stream is a valid empty capture. Native Session formats 2.0/2.1, record encoding version 1, and required features are unchanged.
 
-Capture order and duplicate publication IDs are preserved. They do not establish queue order, admission, delivery, or acknowledgment. Capture writes use ordinary streams; they are separate from Angaria's native journal and future Queue operations.
+Capture order and duplicate publication IDs are preserved. They do not establish queue order, admission, delivery, or acknowledgment. Capture writes use ordinary streams; they are separate from Angaria's native journal and [direct Queue publication](direct-publication.md).
 
 ## Retain the source catalog
 

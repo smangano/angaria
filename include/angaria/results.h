@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace angaria
 {
@@ -65,6 +66,23 @@ namespace angaria
     Partial,
     Rejected,
     OutcomeUnknown
+  };
+
+  enum class AcceptanceStatus
+  {
+    Accepted,
+    Partial,
+    Rejected
+  };
+
+  // Owns known acceptance and per-destination results. Operation errors,
+  // including OutcomeUnknown, are returned in the outer Result instead.
+  struct PublicationOutcome
+  {
+    PublicationId _publication{};
+    AcceptanceStatus _status{AcceptanceStatus::Rejected};
+    std::uint64_t _topologyRevision{};
+    std::vector<DestinationOutcome> _destinations;
   };
 
   // Destination views refer to the output buffer supplied to the operation.

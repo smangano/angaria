@@ -157,7 +157,7 @@ namespace angaria
     return SendResult::Sent;
   }
 
-  std::optional<Delivery> Consumer::receive_reading(std::chrono::milliseconds timeout)
+  std::optional<LegacyDelivery> Consumer::receive_reading(std::chrono::milliseconds timeout)
   {
     _role->check_owner();
     if (timeout.count() < 0)
@@ -181,7 +181,7 @@ namespace angaria
           const auto end = queue._offsets.begin() + queue._size;
           _inFlightOffset = *std::min_element(queue._offsets.begin(), end);
           const auto record = log.read_record(header, _inFlightOffset);
-          _inFlight = Delivery{record._sequence, record._timestampNs, record._value};
+          _inFlight = LegacyDelivery{record._sequence, record._timestampNs, record._value};
           return _inFlight;
         }
       }

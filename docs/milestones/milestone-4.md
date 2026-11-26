@@ -8,7 +8,7 @@ The focused [helper consolidation](../helper-audit.md) after step 4.3 uses **`0.
 
 ## Review steps
 
-A separate **0.4.7** [public interface review](../public-interface.md), branch `milestone-4-api-review`, follows step 4.5. It proposes the full application/log/replay surface through 1.0 without implementing new runtime operations or renumbering these development steps. Step 4.6 should incorporate the relevant approved API decisions before public send is enabled.
+A separate **0.4.7** [public interface review](../public-interface.md), branch `milestone-4-api-review`, follows step 4.5. It proposes the full application/log/replay surface through 1.0 without implementing new runtime operations or renumbering these development steps. Step 4.6 incorporates the approved message/header model, owning direct outcomes, and named setup while enabling direct publication at version 0.4.8.
 
 | Step | Branch | Scope | Completion criterion |
 | --- | --- | --- | --- |
@@ -30,7 +30,7 @@ Split a step further if needed to keep its PR reviewable. Each implementation PR
 
 The [transport contract](../native-transport.md) makes the milestone's design decisions explicit. It proposes native format 2.2 with separate required capabilities for core delivery and allowed loss, preserving the meanings of existing 2.0/2.1 Sessions. It defines full-width ring generations, receipt timestamp presence, Binary validation before acceptance, and distinct publication/enqueue/dequeue times.
 
-Two process-local API additions are planned for step 4.7: `DeliveryView::_publishedAt` and `SourceQueueSet::close()`. Headers are unchanged in step 4.1. Explicit close reports cleanup errors; destruction and move replacement still need a fenced, deferred-cleanup path. Delivery-aware Session/topology validation follows in step 4.3 and Task cleanup in step 4.5; both are prerequisites of public send.
+The original step-4.1 plan called for a publication timestamp and explicit Source close in step 4.7. The approved interface review now uses one MessageHeader shared by Message and MessageView, wrapped by Delivery; step 4.6 promotes that model and step 4.7 implements receive and SourceQueueSet::close(). Explicit close reports cleanup errors; destruction and move replacement still need a fenced, deferred-cleanup path. Delivery-aware Session/topology validation follows in step 4.3 and Task cleanup in step 4.5; both are prerequisites of public send.
 
 Fresh Source selection supports at most one Active member Queue in this milestone. Existing in-flight delivery and acknowledgment/release remain usable if another Queue becomes Active. Multiple-Queue selection policies follow milestone 5 through the same Source APIs.
 
@@ -57,6 +57,14 @@ The journal and topology/configuration preflight share checked complete-batch ge
 The private [reserved progress path](../native-progress.md) issues, acknowledges, and releases exact deliveries with bounded inline FixedState commands. It preserves Source issuance context on cleanup, increments issuance on redelivery, and uses retained Queue history after ring overwrite. Old tokens reject without new progress; an already pinned receive repeat preserves its identity/time even at exhausted fresh counters.
 
 Publication-aware ReleaseClaim restores old Issued receipts to Pending, clears owned Source pins independently of partially cleared slot pointers, and detaches the exact old Task/parent-bound Thread claims. Its compact persisted intent remains fixed-size, replay validates all targets before applying, and replacement/progress need no new append space at `LogFull`. Legacy profiles retain their Task-only checks. Factories and public delivery remain unchanged until step 4.6.
+
+## Step 4.6 Direct publication and lookup
+
+Framework **0.4.8** implements [direct publication](../direct-publication.md) and promotes the approved Message/MessageView/Delivery model with one consistent MessageHeader. Named Task/endpoint setup and owning PublicationOutcome overloads make the first operational producer path match the reviewed interface. Existing caller-buffer reports remain available.
+
+Public factories select core **2.2/0x7**. Exact schema and Binary admission, complete append sizing, issued IDs, identical repeats, conflicts, retained earlier-incarnation status, and interrupted outcomes are covered through public tests and focused journal/process-death qualification. Known rejection changes no acceptance state. Legacy Sessions retain their existing operations and reject native publication without writes. Portable record encoding 1 remains 80 bytes and rejects optional delivery fields it cannot represent.
+
+The [fourteenth primer lesson](../../examples/primer/14_direct_send.cpp) sends to an offline consumer and looks up acceptance after producer replacement. Receive, acknowledgment/release, and Source close remain step 4.7; advanced schemas and message replay retain their roadmap milestones.
 
 ## Qualification and completion
 

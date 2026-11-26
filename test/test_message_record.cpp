@@ -57,7 +57,7 @@ namespace
     header._schema = sample_schema;
     header._publication = {{sample_session, static_cast<TaskId>(0x1234), 0x1817161514131211},
                            0xf8f7f6f5f4f3f2f1};
-    header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{-2}};
+    header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{-2}};
     header._flags = 0xdeadbeef;
     header._payloadBytes = payloadBytes;
     return header;
@@ -206,7 +206,7 @@ namespace
       for (const auto flags : {std::uint32_t{0}, std::numeric_limits<std::uint32_t>::max()})
       {
         auto header = sample_header();
-        header._publicationTime = UtcTimestamp{std::chrono::nanoseconds{test._time}};
+        header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{test._time}};
         header._flags = flags;
         auto expected = golden_header();
         std::copy(test._bytes.begin(), test._bytes.end(), expected.begin() + 64);
@@ -434,6 +434,32 @@ namespace
     }
   }
 
+  TEST(MessageRecordTest, VersionOneRejectsDeliveryMetadataRatherThanSilentlyDroppingIt)
+  {
+    // The shared logical header also describes a selected destination. The
+    // existing 80-byte portable version stores publication metadata only, so a
+    // caller must choose a future capture format to preserve delivery details.
+    std::array<MessageHeader, 5> headers;
+    headers.fill(sample_header());
+    headers[0]._queue = QueueId{1};
+    headers[1]._queueSequence = 1;
+    headers[2]._consumer = TaskClaim{sample_session, TaskId{2}, 1};
+    headers[3]._enqueuedAt = UtcTimestamp{};
+    headers[4]._dequeuedAt = UtcTimestamp{};
+    for (const auto& header : headers)
+    {
+      expect_error(MessageRecordCodec::encode_header(header, 83), ErrorCode::UnsupportedPolicy, "delivery");
+      expect_error(MessageRecordCodec::encode(header, golden_payload(), 83), ErrorCode::UnsupportedPolicy, "delivery");
+      std::vector<std::byte> output(83, std::byte{0xa5});
+      const auto before = output;
+      expect_error(MessageRecordCodec::encode_into(header, golden_payload(), output, 83), ErrorCode::UnsupportedPolicy, "delivery");
+      EXPECT_EQ(output, before);
+      const auto payload = golden_payload();
+      const MessageRecordView view{header, payload};
+      EXPECT_EQ(view.message()._header, header);
+    }
+  }
+
   TEST(MessageRecordTest, BorrowedViewsKeepHeaderValuesButBorrowOnlyThePayload)
   {
     auto bytes = golden_record();
@@ -442,9 +468,10 @@ namespace
     EXPECT_EQ(record._payload.data(), bytes.data() + 80);
     EXPECT_EQ(record._payload.size(), 3u);
     const auto message = record.message();
-    EXPECT_EQ(message._schema, sample_schema);
-    EXPECT_EQ(message._format, PayloadFormat::Binary);
-    EXPECT_EQ(message._flags, 0xdeadbeefu);
+    EXPECT_EQ(message._header, record._header);
+    EXPECT_EQ(message._header._schema, sample_schema);
+    EXPECT_EQ(message._header._format, PayloadFormat::Binary);
+    EXPECT_EQ(message._header._flags, 0xdeadbeefu);
     EXPECT_EQ(message._payload.data(), record._payload.data());
 
     // The view's header is an ordinary value. Its payload still belongs to the
@@ -468,7 +495,7 @@ namespace
     EXPECT_EQ(owned._payload, golden_payload());
     const auto borrowed = owned.view();
     EXPECT_EQ(borrowed._payload.data(), owned._payload.data());
-    EXPECT_EQ(borrowed.message()._schema, sample_schema);
+    EXPECT_EQ(borrowed.message()._header._schema, sample_schema);
     auto copy = owned;
     EXPECT_NE(copy._payload.data(), owned._payload.data());
     copy._payload[0] = std::byte{0x7f};
