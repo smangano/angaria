@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-This guide follows the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.1** adds milestone 4's transport design review; it does not yet enable native delivery. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and exchange completed capture files across processes for generic inspection. Sending, publishing, receiving, and acknowledgment through Angaria Queues arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -633,6 +633,18 @@ Finally, after every application process has exited, the script starts the gener
 The example reserves each workspace and phase directory exclusively. Repeating a phase returns `Conflict` and preserves its earlier capture. Use a new workspace for another complete run. The [process-exchange contract](process-exchange.md) lists the individual commands and compatibility checks.
 
 This lesson tests claim replacement after process termination on a running system. The terminated producer's file was already complete. It does not demonstrate recovery of an interrupted capture write or power-loss durability. Ordinary files carry the encoded records between these applications; native Queue send/receive and Queue Set scheduling remain future milestone work.
+
+## What native transport will add
+
+Milestone 4's [reviewed plan](milestones/milestone-4.md) builds on these thirteen programs. Its first step documents the [transport contract](native-transport.md); the new native delivery examples will become runnable as their API methods are implemented.
+
+Instead of exchanging completed ordinary files, applications will send through Angaria's mapped Session storage. The **payload plane** retains the message bytes and their delivery history. A bounded **ring** keeps references to recent messages so a consumer can find them quickly. Replacing a ring entry does not acknowledge its message. A slow consumer using the default recovery policy can still follow the retained log.
+
+An acknowledgment ends a delivery obligation; it does not reclaim physical log space in milestone 4. When the bounded log is full, new sends can fail while acknowledgment, release, and owner replacement still work. Optional allowed-loss delivery can skip stale pending messages and report a gap, while preserving a message the application has already received.
+
+The planned receiving API returns a borrowed payload view: keep its Source and delivery alive while reading it. Acknowledging, releasing, or closing that Source ends the view's lifetime. The proposed explicit `close()` will report cleanup errors so a caller can retry instead of assuming cleanup succeeded. These operations and the separate initial-publication timestamp are design proposals in step 4.1, not new calls to add to today's programs.
+
+Native delivery will require a newly created Session with its delivery capability. Older Sessions keep their existing meanings and are not silently upgraded. Milestone 4 first supports a Source with one Active Queue; milestone 5 will select among several Queues feeding that Source.
 
 ## Understand bounds and ordinary failures
 
