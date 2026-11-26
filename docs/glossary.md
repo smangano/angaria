@@ -42,6 +42,7 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 | **Alias** | Another handle or pathname referring to the same underlying device/inode identity. Aliases share mapping bookkeeping, while access permissions and byte limits remain per handle. |
 | **Hard link** | An additional pathname for the same underlying file. A symbolic link instead names another path; the native file API rejects symbolic links in the final pathname component. |
 | **Mapped region** | An owned virtual-memory mapping of a file range. It retains the backing file state; its exposed byte spans borrow the region's lifetime. |
+| **Payload mapping owner** | The private move-only owner of a committed Publication's read-only application-byte mapping. Its lifetime keeps local addresses valid; a persisted delivery pin is separate. Empty payloads need no native mapping. |
 | **View** | A borrowed byte span referring to mapped storage. It does not own or extend the mapping's lifetime. |
 | **Page** | The host operating system's unit of virtual-memory mapping. Its byte size is queried at runtime and need not equal the superblock's 4,096 bytes. |
 | **Shared mapping** | A file mapping whose updates are visible through other mappings of the same file. Visibility alone does not provide atomic updates, thread synchronization, or power-loss durability. |
@@ -83,6 +84,7 @@ The [native storage contract](native-storage.md) defines file/mapping ownership,
 | **Operation generation** | The journal counter distinguishing accepted operations, including fixed-state updates that do not append records. A plan proposes the last completed generation plus one; an unaccepted rolled-back intent does not advance the stored counter. |
 | **Manifest** | An append-transaction record identifying the operation's new records and redo commands. It lives in the arena, separately from the reusable journal. |
 | **Append batch** | One contiguous group of new arena records followed by its manifest. The initial allocator rounds each record to 64 bytes, and one journal commit establishes acceptance for the whole batch. |
+| **Append allocation plan** | Size-only accounting for every record, immutable/mutable boundary, envelope, manifest reference, redo frame, and padding in an append batch. It checks the complete byte ceiling before payload images are constructed; it does not reserve space or commit acceptance. |
 | **Transaction plan** | A process-local proposal containing new records, absolute redo commands, and the snapshot on which they were based. The native journal rejects a stale snapshot before writing a new intent. |
 | **Redo** | Reapplying a committed operation's intended changes so interrupted work completes. The commands are repeatable without duplicating logical effects such as delivery or sequence issuance. |
 | **Redo target allowlist** | The byte-level rules permitting changes only to declared mutable words. It excludes immutable metadata/payload, reserved bytes, the journal, and final roots owned by the journal engine; it does not validate application or Registry semantics. |

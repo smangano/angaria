@@ -1,6 +1,6 @@
 #include "topology_append.h"
 
-#include "angaria/detail/record_layout.h"
+#include "angaria/detail/append_layout.h"
 
 #include <algorithm>
 #include <array>
@@ -58,17 +58,17 @@ namespace angaria::detail
   std::uint64_t append_tail(std::uint64_t tail, std::span<const std::uint64_t> bodies,
                              std::uint64_t commandBytes, std::uint64_t maxLogBytes)
   {
+    mapped::AppendLayoutPlanner planner(tail);
     for (const auto body : bodies)
     {
-      tail = add_bytes(tail, record_bytes(body));
+      (void)planner.add_record(body);
     }
-    const auto manifestBody = add_bytes(add_bytes(64, multiply_bytes(bodies.size(), 8)), commandBytes);
-    tail = add_bytes(tail, record_bytes(manifestBody));
-    if (tail > maxLogBytes)
+    const auto layout = planner.finish(commandBytes, maxLogBytes);
+    if (!layout)
     {
       runtime_fail(ErrorCode::LogFull, "session.max_log_bytes", "Complete definitions, manifest, and redo exceed the log byte ceiling");
     }
-    return tail;
+    return layout->_tail;
   }
 
   PreparedAppend prepare_append(RuntimeAccess& access, const std::shared_ptr<TaskState>& actor,

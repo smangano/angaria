@@ -1,5 +1,6 @@
 #include "mutation_journal.h"
 
+#include "angaria/detail/append_layout.h"
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/error_support.h"
@@ -596,23 +597,20 @@ namespace angaria::detail::mapped
           }
         }
       }
-      const auto immutable = checked_align(draft._immutable.size(), 8);
-      const auto bodySize = immutable ? checked_add(*immutable, draft._mutable.size()) : std::nullopt;
-      const auto required = bodySize ? checked_add(record_envelope_bytes, *bodySize) : std::nullopt;
-      const auto total = required ? checked_align(*required, 64) : std::nullopt;
-      if (!total || *total > max_log_bytes)
+      const auto layout = record_storage_layout(draft._immutable.size(), draft._mutable.size());
+      if (!layout)
       {
         fail(ErrorCode::InvalidArgument, "Proposed record size overflows");
       }
-      if (!contains_range(limit, offset, *total))
+      if (!contains_range(limit, offset, layout->_totalBytes))
       {
         fail(ErrorCode::LogFull, "Proposed record exceeds the remaining session byte budget");
       }
       RecordEnvelope envelope;
       envelope._kind = draft._kind;
       envelope._encoding = draft._encoding;
-      envelope._totalBytes = *total;
-      envelope._immutableBytes = draft._mutable.empty() ? *total - record_envelope_bytes : *immutable;
+      envelope._totalBytes = layout->_totalBytes;
+      envelope._immutableBytes = layout->_immutableBytes;
       envelope._generation = generation;
       envelope._previous = draft._previous;
       envelope._registryRevision = revision;
@@ -621,11 +619,11 @@ namespace angaria::detail::mapped
       image._offset = offset;
       image._range = value_or_throw<JournalFailure>(validate_journal_record(offset, envelope, draft._immutable,
                                                  arena, ErrorCode::InvalidArgument));
-      image._bytes.resize(host_size(*total));
+      image._bytes.resize(host_size(layout->_totalBytes));
       std::copy(encoded.begin(), encoded.end(), image._bytes.begin());
       std::copy(draft._immutable.begin(), draft._immutable.end(), image._bytes.begin() + record_envelope_bytes);
       std::copy(draft._mutable.begin(), draft._mutable.end(),
-                image._bytes.begin() + record_envelope_bytes + host_size(*immutable));
+                image._bytes.begin() + host_size(layout->_mutableOffset));
       return image;
     }
 
@@ -677,6 +675,44 @@ namespace angaria::detail::mapped
         fail(plan._kind == JournalKind::FixedState ? ErrorCode::CapacityExceeded : ErrorCode::LogFull,
              "Command stream exceeds its transaction byte budget");
       }
+      std::optional<AppendStorageLayout> appendLayout;
+      if (plan._kind == JournalKind::Append)
+      {
+        if (plan._subtype == TransactionSubtype::Registry &&
+            current._revision == std::numeric_limits<std::uint64_t>::max())
+        {
+          fail(ErrorCode::CapacityExceeded, "Registry revision is exhausted");
+        }
+        if (plan._records.empty() || plan._records.size() >= std::numeric_limits<std::uint32_t>::max())
+        {
+          fail(ErrorCode::InvalidArgument, "Append requires a representable nonempty record batch");
+        }
+        // Account for the COMPLETE batch before encoding redo or copying the first
+        // payload. A record may fit while its references/manifest/redo do not.
+        AppendLayoutPlanner planner(current._tail);
+        for (const auto& draft : plan._records)
+        {
+          if (draft._kind == 11)
+          {
+            fail(ErrorCode::InvalidArgument, "The journal owns the batch's sole final manifest");
+          }
+          const auto storage = record_storage_layout(draft._immutable.size(), draft._mutable.size());
+          if (!storage || !fits_host_size(storage->_totalBytes))
+          {
+            fail(ErrorCode::InvalidArgument, "Proposed record size exceeds addressable bounds");
+          }
+          (void)planner.add_record(draft._immutable.size(), draft._mutable.size());
+        }
+        appendLayout = planner.finish(commandBytes, state._controller->configuration()._maxLogBytes);
+        if (!appendLayout)
+        {
+          fail(ErrorCode::LogFull, "Complete append batch and manifest exceed the session byte ceiling");
+        }
+        if (!fits_host_size(appendLayout->_manifestBytes))
+        {
+          fail(ErrorCode::InvalidArgument, "Proposed manifest size exceeds addressable bounds");
+        }
+      }
       PreparedOperation operation;
       operation._prefix = scan_prefix(file, fixed_layout(state)._arenaBegin, current._tail, current._generation);
       operation._commands = value_or_throw<JournalFailure>(encode_commands(plan._commands));
@@ -706,23 +742,10 @@ namespace angaria::detail::mapped
       }
       else if (plan._kind == JournalKind::Append)
       {
-        if (plan._subtype == TransactionSubtype::Registry &&
-            current._revision == std::numeric_limits<std::uint64_t>::max())
-        {
-          fail(ErrorCode::CapacityExceeded, "Registry revision is exhausted");
-        }
-        if (plan._records.empty() || plan._records.size() >= std::numeric_limits<std::uint32_t>::max())
-        {
-          fail(ErrorCode::InvalidArgument, "Append requires a representable nonempty record batch");
-        }
         std::uint64_t offset = current._tail;
         const auto arena = fixed_layout(state)._arenaBegin;
         for (const auto& draft : plan._records)
         {
-          if (draft._kind == 11)
-          {
-            fail(ErrorCode::InvalidArgument, "The journal owns the batch's sole final manifest");
-          }
           auto image = make_image(draft, offset, header._generation, header._newRevision, arena,
                                    state._controller->configuration()._maxLogBytes);
           validate_previous(image._range, allRecords, ErrorCode::InvalidArgument);
@@ -753,9 +776,9 @@ namespace angaria::detail::mapped
         header._firstRecord = current._tail;
         header._recordCount = static_cast<std::uint32_t>(operation._images.size() + 1);
         operation._images.push_back(std::move(image));
-        if (header._newTail > state._controller->configuration()._maxLogBytes)
+        if (offset != appendLayout->_manifestOffset || header._newTail != appendLayout->_tail)
         {
-          fail(ErrorCode::LogFull, "Complete append batch and manifest exceed the session byte ceiling");
+          fail(ErrorCode::InvalidState, "Materialized append disagrees with its complete allocation plan");
         }
       }
       else

@@ -4,7 +4,7 @@ Milestone 3 and the manual Intel CI change reached `main` through [PR #30](https
 
 Steps 4.1 and 4.2 used framework versions **`0.4.1`** and **`0.4.2`**; step 4.3 uses **`0.4.3`**. The build number increases for each new PR under the [versioning policy](../../ROADMAP.md#versioning). It does not automatically change native format or protocol versions.
 
-The focused [helper consolidation](../helper-audit.md) after step 4.3 uses **`0.4.4`**, on `milestone-4-3-cleanup`, with a PR into `milestone-4`. It leaves the review-step numbering below unchanged; the next development step remains 4.4 and receives the next unused framework build number.
+The focused [helper consolidation](../helper-audit.md) after step 4.3 uses **`0.4.4`**, on `milestone-4-3-cleanup`, with a PR into `milestone-4`. It leaves the review-step numbering below unchanged. Step **4.4** uses framework version **`0.4.5`**.
 
 ## Review steps
 
@@ -43,6 +43,12 @@ These functions operate on local byte copies. They do not establish committed ac
 The [core reader validator](../native-validation.md) checks committed acceptance manifests, unique issued identities, exact registered schema references, historical active topology, complete Queue chains/roots, receipt/Source pins, acknowledgment progress, and authoritative ring windows. Existing Registry topology and historical snapshots remain inspectable with valid retained Publications. Invalid quiescent fixtures reject without writes; incompatible profiles reject before pending journal recovery.
 
 Readers admit canonical 2.2/`0x7` while factories still create 2.1/`0x3`. Loss and unsupported requirements remain fenced out before recovery. Task attachment to publication-bearing state keeps its cleanup guard until step 4.5. New private tests clearly distinguish native record fixtures from still-unimplemented public delivery calls, and all thirteen primer programs remain the public learning path.
+
+## Step 4.4 Mapped payload storage and allocation planning
+
+Private [payload owners and complete append sizing](../native-storage.md#committed-payload-storage-and-append-planning) now provide the storage foundations for delivery. A payload owner maps only a canonical committed Publication's application bytes and retains that address across file growth and rollback of a later append. Empty payloads avoid native zero-length mappings. This local mapping lifetime is separate from the persisted receipt/Source pin, which later progress and receive steps must establish.
+
+The journal and topology/configuration preflight share checked complete-batch geometry. Sizing includes immutable/mutable boundaries, all receipts, envelopes, manifest references, redo, and padding before journal image construction. These private foundations leave public delivery disabled and factories on 2.1/`0x3`; progress and claim cleanup remain step 4.5 prerequisites of sending.
 
 ## Qualification and completion
 

@@ -17,6 +17,7 @@ Use the related header below before introducing another local implementation. Th
 | [field_representation.h](../include/angaria/detail/field_representation.h) | Integer signedness/width and scalar byte widths. Logical validation and feature admission stay with their owners. |
 | [identity_helpers.h](../include/angaria/detail/identity_helpers.h) | Schema keys and the application Field-ID prefix, independent of Registry existence. |
 | [record_layout.h](../include/angaria/detail/record_layout.h) | Common native-record envelope/body/allocation geometry. Format constants remain in [mapped_format.h](../include/angaria/detail/mapped_format.h), which preserves existing arithmetic names through using declarations. |
+| [append_layout.h](../include/angaria/detail/append_layout.h) | Allocation-free complete append geometry, including separately aligned immutable/mutable bodies, manifest references, redo bytes, and final log limits. Added in step 4.4 and shared by journal execution and topology/configuration preflight. |
 | [definition_metadata.h](../src/definition_metadata.h) | Shared Registry-definition registration checks, body bounds, and canonical name/doc slices. |
 | [registry_access.h](../src/registry_access.h) | Registry/Task access ordering, required registration actors, and typed entity lookup mechanics. Diagnostics remain selected by the operation. |
 | [text_escaping.h](../include/angaria/detail/text_escaping.h) | Printable ASCII/hex escaping, quote policy, and bounded diagnostic streaming. |
@@ -33,6 +34,7 @@ Test support remains separate from production encoding so expected bytes cannot 
 | [result_helpers.h](../test/result_helpers.h), [result_assertions.h](../test/result_assertions.h) | Successful Result extraction and common error assertions. Assertions are separate so independent exec workers do not acquire a GoogleTest dependency. Scenario-specific path checks stay local. |
 | [wire_fixture.h](../test/wire_fixture.h) | Independent test integer/text/byte construction. Each suite still spells out its expected fields, codes, offsets, and values. |
 | [journal_fixture.h](../test/journal_fixture.h) | Shared hand-authored journal drafts used by the parent qualification tests and their exec worker. These are deliberately incomplete domain fixtures, not Session initialization examples. |
+| [publication_storage_fixture.h](../test/publication_storage_fixture.h) | Shared private committed Publication setup for payload mapping and rollback qualification. It isolates storage geometry from complete schema/topology/receipt semantics; it is not application setup. |
 | [native_fixture.h](../test/native_fixture.h) | Private native observation, snapshots, claim-name capture, and deliberate atomic corruption setup. |
 | [process_support.h](../test/process_support.h) | Test pipe reports, continuation, bounded reads/waits, SIGPIPE handling, and status/descriptor mechanics. Worker ownership stays in the fixture. |
 | [example_support.h](../examples/primer/example_support.h), [example_formatting.h](../examples/primer/example_formatting.h) | Primer failure/configuration conventions and related byte/Session-identity presentation. |

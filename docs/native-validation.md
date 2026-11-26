@@ -2,7 +2,7 @@
 
 Milestone 4, step 4.3, framework version **0.4.3**, validates the core native delivery reader profile. A [Publication](native-transport.md#storage-and-acceptance) retains one message and its destination; its receipt records delivery progress. A Source pin identifies the one delivery currently issued through that Source.
 
-The public Session factories still create format **2.1/`0x3`**. Public native delivery, mapped payload views, and receipt/claim cleanup remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify the reader before sending can produce them. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
+The public Session factories still create format **2.1/`0x3`**. Step 4.4 adds private [committed payload mappings and append planning](native-storage.md#committed-payload-storage-and-append-planning); public native delivery views and receipt/claim cleanup remain with later steps. Private tests construct **2.2/`0x7`** records through the journal to qualify the reader before sending can produce them. Their offline profile edits are deliberate fixtures, not supported upgrades or application setup.
 
 ## Admission before recovery
 
@@ -45,4 +45,4 @@ An Issued receipt can remain valid after its process dies: recorded claim identi
 
 The [delivery validation tests](../test/test_delivery_validation.cpp) start with real Registry definitions, then install private journal records. They cover ring wrap, old incarnations, accepted-ID order, historical snapshots, pins, released-receipt ordering, acknowledgment clocks, and deliberately inconsistent references/roots. A private read observer rejects any metadata request overlapping a large payload before allocation/I/O, while separate corruption fixtures still check its alignment padding. The [capability tests](../test/test_delivery_compatibility.cpp) qualify rejection before recovery. The [test reading guide](../test/README.md) separates these fixtures from runnable public API examples.
 
-Step 4.4 adds mapped payload storage and complete append planning. Step 4.5 extends progress replay and Task/Source cleanup. Public sending follows in step 4.6, receiving in step 4.7, and allowed loss in step 4.8. Application Binary payload admission belongs to the sending step; these history checks establish stored identity, reference, and progress relationships.
+Step 4.4 implements private mapped payload storage and complete append planning. Step 4.5 extends progress replay and Task/Source cleanup. Public sending follows in step 4.6, receiving in step 4.7, and allowed loss in step 4.8. Application Binary payload admission belongs to the sending step; these history checks establish stored identity, reference, and progress relationships.
