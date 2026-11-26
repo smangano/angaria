@@ -119,7 +119,7 @@ Completion requires applications to exchange several registered message types an
 
 ## 4 Two plane mapped storage
 
-Step 4.1, framework version `0.4.1`, reviewed the [native transport contract](docs/native-transport.md). Step 4.2, version `0.4.2`, implements checked private Publication/destination/receipt/ring codecs and independent byte fixtures. The [eleven-step plan](docs/milestones/milestone-4.md) orders codecs, history validation, mapped storage, and cleanup before public send/receive. Session format support remains 2.0/2.1. Fresh Source selection initially supports one Active Queue; multiple-Queue scheduling follows milestone 5 through the same APIs.
+Step 4.1, framework version `0.4.1`, reviewed the [native transport contract](docs/native-transport.md). Step 4.2, version `0.4.2`, implements checked private Publication/destination/receipt/ring codecs and independent byte fixtures. Step 4.3, version `0.4.3`, adds [core delivery-history validation](docs/native-validation.md) and capability rejection before recovery. The [eleven-step plan](docs/milestones/milestone-4.md) orders codecs, history validation, mapped storage, and cleanup before public send/receive. Readers retain 2.0/2.1 support and validate the 2.2 core profile; factories continue creating 2.1 Sessions until delivery mutation prerequisites are complete. Fresh Source selection initially supports one Active Queue; multiple-Queue scheduling follows milestone 5 through the same APIs.
 
 - Implement the fixed-size rings of message offsets and the append-only memory-mapped payload plane.
 - Support single-producer queue ownership and allocation of shared payload storage.

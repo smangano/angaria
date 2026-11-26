@@ -117,12 +117,14 @@ namespace angaria::detail
   }
 
   RuntimeAccess::RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady,
-                               mapped::JournalFaultInjector* injector)
+                               mapped::JournalFaultInjector* injector,
+                               RuntimeAccessReadObserver* observer)
       : _session(checked_session(std::move(session))),
         _guard(runtime_value(_session->_controller->acquire_mutation())),
         _journal(runtime_value(mapped::MutationJournal::open(_session->_controller, _guard, injector))),
         _snapshot(runtime_value(_journal.snapshot(_guard))),
-        _file(runtime_value(_session->_controller->file(_guard)))
+        _file(runtime_value(_session->_controller->file(_guard))),
+        _readObserver(observer)
   {
     const auto flags = read_words(112, 1)[0];
     if ((flags & ~session_ready_flag) != 0 || (requireReady && flags != session_ready_flag))
@@ -159,6 +161,10 @@ namespace angaria::detail
         !mapped::contains_range(_snapshot._tail, offset, length))
     {
       runtime_fail(ErrorCode::IoError, "runtime.bytes", "Immutable range exceeds committed history");
+    }
+    if (_readObserver)
+    {
+      runtime_value(_readObserver->before_read(offset, length));
     }
     std::vector<std::byte> result(static_cast<std::size_t>(length));
     runtime_value(_file->read_exact(offset, result));

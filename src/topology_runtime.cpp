@@ -1,5 +1,7 @@
 #include "topology_state.h"
 
+#include "delivery_runtime.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +26,12 @@ namespace angaria::detail
       {
         return value == 0;
       });
+    }
+
+    bool has_native_delivery(RuntimeAccess& access)
+    {
+      return (access._session->_controller->configuration()._requiredFeatures &
+              mapped::native_delivery_feature) != 0;
     }
 
     template <typename Definition>
@@ -226,17 +234,27 @@ namespace angaria::detail
           }
           else
           {
-            if (state[0] != 0 || state[1] != 0 || state[2] == 0 ||
-                state[3] != latest._definition._descriptor._ringCapacity || !all_zero(state.subspan(4)))
+            const bool delivery = has_native_delivery(access);
+            if (state[2] == 0 || state[3] != latest._definition._descriptor._ringCapacity ||
+                (delivery ? state[7] != 0 || !all_zero(state.subspan(12)) :
+                 state[0] != 0 || state[1] != 0 || !all_zero(state.subspan(4))))
             {
               runtime_fail(ErrorCode::IoError, "queue.state", "Active Queue has invalid ring geometry or unsupported delivery state");
             }
             ringReferences->emplace(latest._definition._id, state[2]);
           }
         }
-        else if (!all_zero(state))
+        else
         {
-          runtime_fail(ErrorCode::IoError, "source_set.state", "Source contains unsupported endpoint or scheduling state");
+          // Core delivery assigns only the first eight Source words. Strict/Spin
+          // scheduling and the recovery reservation stay zero. Draft Sources
+          // and legacy profiles retain the previous all-zero requirement.
+          const bool delivery = has_native_delivery(access) &&
+                                latest._definition._state == EntityState::Active;
+          if (!all_zero(delivery ? state.subspan(8) : state))
+          {
+            runtime_fail(ErrorCode::IoError, "source_set.state", "Source contains unsupported endpoint or scheduling state");
+          }
         }
         loaded.push_back(Loaded{latest._definition, latest._reference,
             indexBegin + slot * mapped::index_entry_bytes, stateBegin + slot * stateBytes, slot});
@@ -543,6 +561,12 @@ namespace angaria::detail
         {
           runtime_fail(ErrorCode::IoError, "queue.ring", "Active Queue ring ownership, geometry, or activation revision is inconsistent");
         }
+        if (has_native_delivery(access))
+        {
+          // The delivery validator checks each occupied slot against committed
+          // Queue history and also verifies allocation padding atomically.
+          continue;
+        }
         // Ring slots and allocation padding are mutable words. Read bounded
         // batches atomically under the gate, without a mapping per word.
         const auto words = (envelope._totalBytes - mapped::record_envelope_bytes) / 8;
@@ -578,7 +602,8 @@ namespace angaria::detail
     const auto sources = read_history<mapped::SourceDefinition>(access, 4, mapped::decode_source_definition, tasks);
     const auto publishing = read_history<mapped::PublishingDefinition>(access, 5, mapped::decode_publishing_definition, tasks);
     const auto& limits = access._session->_controller->configuration()._limits;
-    if (!access.record_references(9).empty() || !access.record_references(10).empty())
+    if ((!has_native_delivery(access) && !access.record_references(9).empty()) ||
+        !access.record_references(10).empty())
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "topology.delivery", "Publication and retry delivery state are not implemented by this native profile");
     }
@@ -687,6 +712,10 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::IoError, "queue.source_set", "Queue assignment has no matching Source membership");
       }
+    }
+    if (has_native_delivery(access))
+    {
+      runtime_validate_delivery(access, topology);
     }
     return topology;
   }

@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.2** adds private native storage codecs after milestone 4's transport design review; it does not yet enable native delivery. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.3** adds native history checks after milestone 4's storage codecs and transport design review; it does not yet enable public native delivery. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and exchange completed capture files across processes for generic inspection. Sending, publishing, receiving, and acknowledgment through Angaria Queues arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -638,7 +638,7 @@ This lesson tests claim replacement after process termination on a running syste
 
 Milestone 4's [reviewed plan](milestones/milestone-4.md) builds on these thirteen programs. Its first step documents the [transport contract](native-transport.md); step 4.2 adds internal storage codecs. A **codec** translates values into specified bytes and checks bytes when reading them back. These new codecs check Publication headers, destination rows, delivery receipts, and ring entries. A **receipt** records one destination's delivery progress. The codecs also check the byte cost before building a record, including its reserved receipts and padding.
 
-This is groundwork for sending through a Queue. Correctly encoding a record does not prove that its producer, schema, or destination belongs to a committed Session. Those relationships need the history checks added in later steps. The [private codec tests](../test/README.md) explain the stored layout; today's thirteen programs continue using the implemented public APIs. New native delivery examples will become runnable as their API methods are implemented.
+This is groundwork for sending through a Queue. Correctly encoding a record does not prove that its producer, schema, or destination belongs to a committed Session. Step 4.3 now checks these relationships when attaching a core delivery Session and inspecting its topology. It checks stored metadata without reading or copying the message payloads. It also checks that each received message has one matching Source pin, and that a ring entry points to the right retained message. A **pin** records which delivery is still borrowed by a consumer. These [history checks](native-validation.md) use private stored-message fixtures while the actual sending and receiving operations are being built. The [private codec tests](../test/README.md) explain the stored layout; today's thirteen programs continue using the implemented public APIs. New native delivery examples will become runnable as their API methods are implemented.
 
 Instead of exchanging completed ordinary files, applications will send through Angaria's mapped Session storage. The **payload plane** retains the message bytes and their delivery history. A bounded **ring** keeps references to recent messages so a consumer can find them quickly. Replacing a ring entry does not acknowledge its message. A slow consumer using the default recovery policy can still follow the retained log.
 
@@ -646,7 +646,7 @@ An acknowledgment ends a delivery obligation; it does not reclaim physical log s
 
 The planned receiving API returns a borrowed payload view: keep its Source and delivery alive while reading it. Acknowledging, releasing, or closing that Source ends the view's lifetime. The proposed explicit `close()` will report cleanup errors so a caller can retry instead of assuming cleanup succeeded. These operations and the separate initial-publication timestamp are design proposals in step 4.1, not new calls to add to today's programs.
 
-Native delivery will require a newly created Session with its delivery capability. Older Sessions keep their existing meanings and are not silently upgraded. Milestone 4 first supports a Source with one Active Queue; milestone 5 will select among several Queues feeding that Source.
+Readers can now validate the core delivery format, but today's factories still create format 2.1 Sessions. Runnable native delivery will require a newly created Session with its delivery capability once sending is implemented. Older Sessions keep their existing meanings and are not silently upgraded. Milestone 4 first supports a Source with one Active Queue; milestone 5 will select among several Queues feeding that Source.
 
 ## Understand bounds and ordinary failures
 

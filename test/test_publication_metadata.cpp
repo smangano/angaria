@@ -516,3 +516,142 @@ TEST(PublicationMetadata, RecordOffsetsRespectNativeAndHostBounds)
   const auto bytes = require_value(mapped::encode_publication_body(publication, offset, record_limit));
   EXPECT_EQ(require_value(mapped::decode_publication_body(bytes, offset, record_limit)), publication);
 }
+
+TEST(PublicationMetadata, BoundedMetadataMatchesIndependentGoldenBodyWithoutPayload)
+{
+  // Metadata readers receive three separate, bounded pieces. The three payload
+  // bytes between rows and padding are intentionally never supplied to them.
+  const auto golden = golden_direct();
+  const auto fixed = std::span{golden}.first(128);
+  const auto rows = std::span{golden}.subspan(128, 48);
+  const auto padding = std::span{golden}.subspan(179, 5);
+  const auto prefix = require_value(mapped::decode_publication_prefix(fixed, 184, record_offset, record_limit));
+  EXPECT_EQ(prefix._header, static_cast<const mapped::PublicationHeader&>(direct_publication()));
+  EXPECT_EQ(prefix._destinationCount, 1u);
+  EXPECT_EQ(prefix._payloadBytes, 3u);
+  EXPECT_EQ(prefix._layout, (mapped::PublicationLayout{8384, 8432, 8440, 184, 384}));
+  const auto metadata = require_value(mapped::decode_publication_metadata(
+      fixed, rows, padding, 184, record_offset, record_limit));
+  EXPECT_EQ(static_cast<const mapped::PublicationHeader&>(metadata), prefix._header);
+  EXPECT_EQ(metadata._destinations, direct_publication()._destinations);
+  EXPECT_EQ(metadata._layout, prefix._layout);
+  EXPECT_EQ(metadata._payloadBytes, 3u);
+}
+
+TEST(PublicationMetadata, LargeLogicalPayloadNeedsOnlyItsHeaderRowsAndAlignmentBytes)
+{
+  // This private shape fixture describes a 1 TiB + 3-byte opaque payload using
+  // just 128 header bytes, 48 row bytes, and 5 alignment bytes. No large span,
+  // vector, file, or payload allocation is constructed to represent that size.
+  constexpr auto payloadBase = std::uint64_t{1} << 40;
+  auto fixed = golden_direct();
+  fixed.resize(128);
+  put_integer(fixed, 64, payloadBase + 3, 8);
+  put_integer(fixed, 96, payloadBase + 8440, 8);
+  const auto body = golden_direct();
+  std::vector<std::byte> rows(body.begin() + 128, body.begin() + 176);
+  put_integer(rows, 32, payloadBase + 8440, 8);
+  const std::array<std::byte, 5> padding{};
+  const auto prefix = require_value(mapped::decode_publication_prefix(
+      fixed, payloadBase + 184, record_offset, payloadBase + 384));
+  EXPECT_EQ(prefix._layout._payloadOffset, 8432u);
+  EXPECT_EQ(prefix._layout._receiptsOffset, payloadBase + 8440);
+  EXPECT_EQ(prefix._payloadBytes, payloadBase + 3);
+  const auto metadata = require_value(mapped::decode_publication_metadata(
+      fixed, rows, padding, payloadBase + 184, record_offset, payloadBase + 384));
+  ASSERT_EQ(metadata._destinations.size(), 1u);
+  EXPECT_EQ(metadata._payloadBytes, payloadBase + 3);
+  EXPECT_EQ(metadata._destinations.front()._receiptReference, payloadBase + 8440);
+  expect_error(mapped::decode_publication_prefix(fixed, payloadBase + 184, record_offset,
+                                                 payloadBase + 383), ErrorCode::IoError);
+}
+
+TEST(PublicationMetadata, BoundedMetadataRetainsPartialSnapshotChecks)
+{
+  const auto golden = golden_partial();
+  const auto fixed = std::span{golden}.first(128);
+  const auto rows = std::span{golden}.subspan(128, 96);
+  const auto padding = std::span{golden}.subspan(227, 5);
+  const auto metadata = require_value(mapped::decode_publication_metadata(
+      fixed, rows, padding, 232, record_offset, 576));
+  EXPECT_EQ(metadata._destinations, partial_publication()._destinations);
+  EXPECT_EQ(metadata._payloadBytes, 3u);
+  auto duplicate = std::vector<std::byte>{rows.begin(), rows.end()};
+  put_integer(duplicate, 48, 65535, 2);
+  expect_error(mapped::decode_publication_metadata(fixed, duplicate, padding, 232, record_offset, 576), ErrorCode::IoError);
+}
+
+TEST(PublicationMetadata, PrefixRejectsMalformedGeometryBeforeVariableMetadataReads)
+{
+  const auto golden = golden_direct();
+  const auto fixed = std::span{golden}.first(128);
+  for (std::size_t length = 0; length < fixed.size(); ++length)
+  {
+    expect_error(mapped::decode_publication_prefix(fixed.first(length), 184, record_offset, record_limit), ErrorCode::IoError);
+  }
+  expect_error(mapped::decode_publication_prefix(std::span{golden}.first(129), 184, record_offset, record_limit), ErrorCode::IoError);
+  for (const auto immutableBytes : {std::uint64_t{0}, std::uint64_t{183}, std::uint64_t{185}, maximum})
+  {
+    expect_error(mapped::decode_publication_prefix(fixed, immutableBytes, record_offset, record_limit), ErrorCode::IoError);
+  }
+  for (const auto offset : {56u, 80u, 88u, 96u, 104u})
+  {
+    auto bad = std::vector<std::byte>{fixed.begin(), fixed.end()};
+    put_integer(bad, offset, maximum, 8);
+    expect_error(mapped::decode_publication_prefix(bad, 184, record_offset, record_limit), ErrorCode::IoError);
+  }
+  auto badCount = std::vector<std::byte>{fixed.begin(), fixed.end()};
+  put_integer(badCount, 48, 65536, 4);
+  expect_error(mapped::decode_publication_prefix(badCount, 184, record_offset, record_limit), ErrorCode::IoError);
+  auto badIdentity = std::vector<std::byte>{fixed.begin(), fixed.end()};
+  put_integer(badIdentity, 16, 0, 8);
+  expect_error(mapped::decode_publication_prefix(badIdentity, 184, record_offset, record_limit), ErrorCode::IoError);
+  auto badDirect = golden_partial();
+  put_integer(badDirect, 2, 0, 2);
+  expect_error(mapped::decode_publication_prefix(std::span{badDirect}.first(128), 232, record_offset, 576), ErrorCode::IoError);
+}
+
+TEST(PublicationMetadata, BoundedMetadataRequiresExactRowsAndZeroAlignmentPadding)
+{
+  const auto golden = golden_direct();
+  const auto fixed = std::span{golden}.first(128);
+  const auto rows = std::span{golden}.subspan(128, 48);
+  const std::array<std::byte, 5> padding{};
+  expect_error(mapped::decode_publication_metadata(fixed, rows.first(47), padding, 184, record_offset, record_limit), ErrorCode::IoError);
+  expect_error(mapped::decode_publication_metadata(fixed, std::span{golden}.subspan(128, 49), padding,
+                                                   184, record_offset, record_limit), ErrorCode::IoError);
+  expect_error(mapped::decode_publication_metadata(fixed, rows, std::span{padding}.first(4),
+                                                   184, record_offset, record_limit), ErrorCode::IoError);
+  std::array<std::byte, 6> extraPadding{};
+  expect_error(mapped::decode_publication_metadata(fixed, rows, extraPadding, 184, record_offset, record_limit), ErrorCode::IoError);
+  for (std::size_t index = 0; index < padding.size(); ++index)
+  {
+    auto badPadding = padding;
+    badPadding[index] = std::byte{1};
+    expect_error(mapped::decode_publication_metadata(fixed, rows, badPadding, 184, record_offset, record_limit), ErrorCode::IoError);
+  }
+  auto wrongReceipt = std::vector<std::byte>{rows.begin(), rows.end()};
+  put_integer(wrongReceipt, 32, 8448, 8);
+  expect_error(mapped::decode_publication_metadata(fixed, wrongReceipt, padding, 184, record_offset, record_limit), ErrorCode::IoError);
+  auto wrongTimestamp = std::vector<std::byte>{rows.begin(), rows.end()};
+  put_integer(wrongTimestamp, 24, 0, 8);
+  expect_error(mapped::decode_publication_metadata(fixed, wrongTimestamp, padding, 184, record_offset, record_limit), ErrorCode::IoError);
+}
+
+TEST(PublicationMetadata, EmptyPayloadMetadataStillRequiresZeroPayloadSlice)
+{
+  auto golden = golden_direct();
+  golden.resize(176);
+  put_integer(golden, 56, 0, 8);
+  put_integer(golden, 64, 0, 8);
+  put_integer(golden, 96, 8432, 8);
+  put_integer(golden, 160, 8432, 8);
+  const auto fixed = std::span{golden}.first(128);
+  const auto rows = std::span{golden}.subspan(128, 48);
+  const auto metadata = require_value(mapped::decode_publication_metadata(fixed, rows, {}, 176, record_offset, record_limit));
+  EXPECT_EQ(metadata._payloadBytes, 0u);
+  EXPECT_EQ(metadata._layout._payloadOffset, 0u);
+  EXPECT_EQ(metadata._layout._receiptsOffset, 8432u);
+  put_integer(golden, 56, 8432, 8);
+  expect_error(mapped::decode_publication_prefix(fixed, 176, record_offset, record_limit), ErrorCode::IoError);
+}

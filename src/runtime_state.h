@@ -69,13 +69,24 @@ namespace angaria::detail
   inline constexpr std::uint64_t task_attachment_time_flag = 2;
   inline constexpr std::uint64_t task_detachment_time_flag = 4;
 
+  // Private qualification seam for immutable read requests. Called after bounds
+  // checks, before allocation/I/O, under the operation gate. It must not reenter
+  // the runtime. Production operations do not supply an observer.
+  class RuntimeAccessReadObserver
+  {
+  public:
+    virtual ~RuntimeAccessReadObserver() = default;
+    virtual OperationResult before_read(std::uint64_t offset, std::uint64_t length) = 0;
+  };
+
   // A recovered, gate-bound view for one public operation. Immutable record
   // reads exclude readiness words; mutable words are read atomically.
   class RuntimeAccess
   {
   public:
     explicit RuntimeAccess(std::shared_ptr<SessionState> session, bool requireReady = true,
-                           mapped::JournalFaultInjector* injector = nullptr);
+                           mapped::JournalFaultInjector* injector = nullptr,
+                           RuntimeAccessReadObserver* observer = nullptr);
     std::vector<std::uint64_t> read_words(std::uint64_t offset, std::size_t count) const;
     std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length) const;
     const mapped::RecordEnvelope& record_envelope(std::uint64_t reference, std::uint16_t kind) const;
@@ -98,6 +109,7 @@ namespace angaria::detail
 
     void index_records();
     std::vector<RecordBoundary> _recordBoundaries;
+    RuntimeAccessReadObserver* _readObserver{};
   };
 
   struct LoadedTask

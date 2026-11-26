@@ -569,4 +569,111 @@ namespace
     configuration._requiredFeatures = 1;
     expect_error(mapped::encode_initial_superblock(configuration), ErrorCode::InvalidConfiguration);
   }
+  // Read support can advance before public factories create the new profile.
+  // The two 2.2 representations share geometry, but loss needs a separate bit.
+  TEST(MappedSuperblock, DeliveryProfilesMatchIndependentHeaderBytes)
+  {
+    for (const auto features : {std::uint64_t{7}, std::uint64_t{15}})
+    {
+      auto configuration = fixture_configuration();
+      configuration._formatMinor = 2;
+      configuration._requiredFeatures = features;
+      auto golden = golden_superblock();
+      put_integer(golden, 10, 2, 2);
+      put_integer(golden, 56, features, 8);
+      const auto encoded = mapped::encode_initial_superblock(configuration);
+      ASSERT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(encoded));
+      EXPECT_EQ(std::get<mapped::SuperblockBytes>(encoded), golden);
+      const auto decoded = mapped::decode_superblock(golden);
+      ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
+      EXPECT_EQ(std::get<mapped::SuperblockConfiguration>(decoded)._formatMinor, 2u);
+      EXPECT_EQ(std::get<mapped::SuperblockConfiguration>(decoded)._requiredFeatures, features);
+    }
+  }
+
+  TEST(MappedSuperblock, EveryKnownRequiredFeatureCombinationHasOneCanonicalMinor)
+  {
+    // A known bit cannot be disguised as an optional interpretation of an older
+    // minor. Loss without core delivery is invalid even if a reader knows loss.
+    for (std::uint16_t minor = 0; minor <= 2; ++minor)
+    {
+      for (std::uint64_t features = 0; features < 16; ++features)
+      {
+        SCOPED_TRACE(minor);
+        SCOPED_TRACE(features);
+        const auto valid = (minor == 0 && features == 1) ||
+                           (minor == 1 && features == 3) ||
+                           (minor == 2 && (features == 7 || features == 15));
+        auto configuration = fixture_configuration();
+        configuration._formatMinor = minor;
+        configuration._requiredFeatures = features;
+        auto bytes = golden_superblock();
+        put_integer(bytes, 10, minor, 2);
+        put_integer(bytes, 56, features, 8);
+        if (valid)
+        {
+          EXPECT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(
+              mapped::encode_initial_superblock(configuration)));
+          EXPECT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(mapped::decode_superblock(bytes)));
+        }
+        else
+        {
+          expect_error(mapped::encode_initial_superblock(configuration), ErrorCode::InvalidConfiguration);
+          expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
+        }
+      }
+    }
+  }
+
+  TEST(MappedSuperblock, DeliveryRecognitionDoesNotChangeProvisionalCreationDefaults)
+  {
+    auto configuration = fixture_configuration();
+    const mapped::SuperblockConfiguration defaults;
+    configuration._formatMinor = defaults._formatMinor;
+    configuration._requiredFeatures = defaults._requiredFeatures;
+    const auto encoded = mapped::encode_initial_superblock(configuration);
+    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(encoded));
+    const auto& bytes = std::get<mapped::SuperblockBytes>(encoded);
+    EXPECT_EQ(get_integer(bytes, 10, 2), 1u);
+    EXPECT_EQ(get_integer(bytes, 56, 8), 3u);
+  }
+
+  TEST(MappedSuperblock, CoreReaderAcceptsDeliveryHistoryButRejectsTheLossCapability)
+  {
+    auto core = fixture_configuration();
+    core._formatMinor = 2;
+    core._requiredFeatures = 7;
+    const auto current = fixture_support();
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(core, current)));
+
+    auto older = current;
+    older._maxFormatMinor = 1;
+    older._supportedRequiredFeatures = 3;
+    expect_error(mapped::check_live_compatibility(core, older), ErrorCode::IoError);
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(
+        mapped::check_live_compatibility(fixture_configuration(), older)));
+
+    auto loss = core;
+    loss._requiredFeatures = 15;
+    expect_error(mapped::check_live_compatibility(loss, current), ErrorCode::IoError);
+    auto future = current;
+    future._supportedRequiredFeatures = 15;
+    // This tests explicit capability negotiation only. It does not enable the
+    // native adapter's loss replay, which still advertises only the core bits.
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(loss, future)));
+  }
+
+  TEST(MappedSuperblock, UnknownDeliveryRequirementsRemainInspectableButCannotAttachLive)
+  {
+    auto bytes = golden_superblock();
+    put_integer(bytes, 10, 2, 2);
+    put_integer(bytes, 56, (std::uint64_t{1} << 63) | 7, 8);
+    const auto decoded = mapped::decode_superblock(bytes);
+    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
+    const auto& configuration = std::get<mapped::SuperblockConfiguration>(decoded);
+    EXPECT_EQ(configuration._requiredFeatures, (std::uint64_t{1} << 63) | 7);
+    expect_error(mapped::check_live_compatibility(configuration, fixture_support()), ErrorCode::IoError);
+    put_integer(bytes, 10, 3, 2);
+    expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
+  }
 } // namespace

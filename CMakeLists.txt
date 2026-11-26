@@ -28,6 +28,7 @@ add_library(angaria STATIC
   src/message_record.cpp
   src/publication_metadata.cpp
   src/delivery_state.cpp
+  src/delivery_runtime.cpp
   src/payload.cpp
   src/configuration.cpp
   src/configuration_runtime.cpp
@@ -134,6 +135,8 @@ if(BUILD_TESTING)
     test/test_publication_metadata.cpp
     test/test_delivery_state.cpp
     test/test_delivery_framing.cpp
+    test/test_delivery_compatibility.cpp
+    test/test_delivery_validation.cpp
     test/test_capture.cpp
     test/test_inspection.cpp
     test/test_session.cpp
