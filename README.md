@@ -113,7 +113,7 @@ python3 test/process_exchange.py build/angaria_primer_13_process_exchange build/
 
 Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. Framework version **`0.3.7`** integrates the completed milestone-3 staging branch into `main`. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
 
-Milestone 4, step 4.1, framework version **`0.4.1`**, reviews the [native transport contract](docs/native-transport.md) and [eleven implementation steps](docs/milestones/milestone-4.md). It specifies future delivery capabilities, safe mapping/pin lifetimes, publication validation, and Source cleanup. This design PR enables no native send/receive methods or new native format; the thirteen existing primer programs remain the runnable learning path.
+Milestone 4, step 4.2, framework version **`0.4.2`**, adds checked private codecs for Publications, destinations, receipts, and ring slots under the [native transport contract](docs/native-transport.md) and [eleven implementation steps](docs/milestones/milestone-4.md). Independent byte fixtures cover complete record costs, malformed inputs, receipt states, and full-width ring generations. Native send/receive methods and new Session formats remain planned; the thirteen existing primer programs remain the runnable learning path.
 
 ## Run the restart walkthrough
 
