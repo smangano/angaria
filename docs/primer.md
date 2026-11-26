@@ -1,6 +1,6 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The seventeen lessons here use implemented APIs. Framework **0.4.12**, milestone 4 step 4.10, adds a [native multi-process market monitor](native-pipeline.md) after the earlier send, receive, allowed-loss, and [failure qualification](native-qualification.md) steps.
+The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The seventeen lessons here use implemented APIs. Framework **0.4.13**, milestone 4 step 4.11, adds [measurements](native-performance.md) and a [completion audit](milestones/milestone-4-completion.md) for review before integration. Lesson 17 runs a [native multi-process market monitor](native-pipeline.md) after the earlier send, receive, allowed-loss, and [failure qualification](native-qualification.md) steps.
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
@@ -217,11 +217,11 @@ After activation, the `Feed` owner removes `QuotesToAudit` from `QuoteUpdates`. 
 
 Look for `QuoteUpdates destinations: 2 -> 1` in the output.
 
-This demonstrates a live topology update. Per-publication destination snapshots will preserve earlier publications' routing when publication is implemented.
+This demonstrates a live topology update. Direct sends already retain their original destination. Future Publishing Queue Set fan-out will preserve each publication's destination snapshot when membership changes.
 
 The configuration records higher priority for orders than quotes at `RiskInputs`, plus the default strict selection, spin waiting, log recovery, and all-destination acceptance policies. These are currently validated configuration choices. The example cannot demonstrate receiving priorities, busy waiting, recovery of a message, or acceptance across destinations yet.
 
-The planned log-recovery default lets a lagging consumer find retained deliveries after its ring entries have been overwritten. An alternative will allow skipping stale deliveries while reporting the gap. All-destination acceptance will require every destination to accept a publication; configurable partial acceptance will report which destinations accepted and which rejected it. Selection will choose among available inputs, and waiting will control what a consumer does when none is ready.
+The implemented log-recovery default lets a lagging consumer find retained deliveries after its ring entries have been overwritten. Configured allowed loss can instead skip stale pending deliveries while reporting the gap; lessons 15 and 16 demonstrate both. Publishing Queue Set acceptance remains planned: all-destination acceptance will require every destination to accept a publication, and configurable partial acceptance will report which destinations accepted and which rejected it. Multiple-input selection and additional waiting policies also follow later milestones.
 
 ## 6. Coordinate independent programs
 
@@ -273,7 +273,7 @@ Press Enter in terminal B, then run its producer command again. It now prints `R
 
 The example intentionally lets the original Task variable close while endpoint handles remain alive. Those handles retain the claim, which explains why the second producer cannot attach until they close. Normal process termination also releases the native claim lock; recorded PID information is diagnostic rather than the authority for deciding ownership.
 
-The producer reserves a publication identity, consisting of its claim and a sequence number. Reserving an identity does not publish a message. This walkthrough demonstrates separate processes sharing the Registry and enforcing endpoint ownership; actual producer-to-consumer delivery follows later milestones.
+The producer reserves a publication identity, consisting of its claim and a sequence number. Reserving an identity does not publish a message. This walkthrough demonstrates separate processes sharing the Registry and enforcing endpoint ownership. Lessons 14–17 build on this setup with actual producer-to-consumer delivery.
 
 ## 7. Move setup into a TOML file
 
@@ -576,7 +576,7 @@ header._payloadBytes = codec.payload_size();
 
 The **publication identity** contains the Session ID, producer Task ID, that Task claim's incarnation, and a producer-local sequence. `next_publication_id()` persists an issued sequence before returning it. Issuing an ID does not send a message or establish that a publication has been accepted. The record codec checks the shape of these values; it cannot prove that a claim is live or a sequence was issued by its stated Session.
 
-The timestamp is a caller-supplied count of UTC nanoseconds since the Unix epoch. This example deliberately uses 42 so its output is repeatable. It represents the record's initial publication time. Each destination can accept a delivery later, and each has its own dequeue and acknowledgment history. Those destination-specific times do not belong to this immutable header.
+The timestamp is a caller-supplied count of UTC nanoseconds since the Unix epoch. This example deliberately uses 42 so its output is repeatable. It represents the record's initial publication time. Portable record encoding 1 stores an 80-byte publication header. A received public MessageHeader also exposes optional Queue, Queue sequence, consumer, enqueue, and dequeue fields. Copying a received MessageView preserves that complete header. Encoding 1 rejects those delivery-only fields because its portable layout cannot represent them; it never silently drops them.
 
 After the helper returns, every Session, Registry, and Task handle is closed. The main function constructs a payload with price `-2` and quantity `7`, then encodes its complete record:
 
@@ -1013,6 +1013,16 @@ After an uncertain acknowledgment or release, stop reading the earlier borrowed 
 
 The [qualification guide](native-qualification.md) shows how tests combine ring wrap, producer/consumer death, repeated recovery, full logs, final counter values, and an actual OS refusal to grow the file. Its private crash hooks and boundary edits are test techniques. Continue using the public setup and error handling shown by the runnable lessons.
 
+## Reading performance measurements
+
+The [measurement guide](native-performance.md) shows how to measure the implemented transport. A **latency** is the time one operation takes; **throughput** is the number of completed operations per second. These depend on the machine, retained history, payload size, and competing Tasks. A small payload alone does not make a send cheap: Angaria also validates history and records acceptance under a shared gate.
+
+The benchmark separates ordinary public API calls from an instrumented private engine profile. The latter helps explain time spent waiting for the gate, growing the file, and committing work. It is a research tool rather than another application lesson. Its clock reads and observation callbacks add overhead. Use the seventeen programs above to learn the public API.
+
+Acknowledgment and other reserved progress operations do not append log bytes. They can still allocate ordinary process memory, map or read files, wait for the gate, or fail on I/O or exhausted counters. Neither these measurements nor a passing test promises a maximum latency or power-loss durability.
+
+A finite receive can time out while a producer is competing for that same gate. The timeout does not prove that no message will arrive later. Continue your application's receive loop as needed; a later poll can still receive the publication after the producer accepts it.
+
 ## How this guide will grow
 
 The learning sequence completes milestone 3 and introduces native sending and receiving in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
@@ -1021,7 +1031,6 @@ The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 
 | Milestone | What the primer will add when implemented |
 | --- | --- |
-| 4 | Complete the performance measurements and milestone audit after the native multi-process application. |
 | 5 | Receive through multiple inputs, compare selection policies, and acknowledge or recover deliveries. |
 | 6 | Publish to multiple destinations, compare all-destination and partial acceptance, retry rejected destinations, and run the five-process trading simulation. |
 | 7 | Compare spinning with Linux eventfd waiting and explain wakeups and endpoint replacement. |

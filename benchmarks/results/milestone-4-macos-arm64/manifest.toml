@@ -1,0 +1,36 @@
+"started_utc" = "2026-11-26T23:08:54.634283+00:00"
+"host_label" = "Apple M4; 10 logical CPUs; 16 GiB memory; macOS 27.0.1; no affinity or power controls"
+"platform" = "macOS-27.0.1-x86_64-i386-64bit"
+"machine" = "x86_64"
+"cpu" = "unavailable"
+"python" = "3.10.15"
+"git_head" = "d2c728c502fc2365711f21f0f34e6980548f5293"
+"git_dirty" = true
+"git_tracked_dirty" = false
+"executable" = "/Users/smangano/Documents/ChatGPT/C++/angaria/build/release/angaria_transport_benchmark"
+"executable_sha256" = "aa4f8b6548e0fb8d0706742a0f27bf64440763544f416df5d56171152c2d96e0"
+"compiler_version" = "Apple clang version 21.0.0 (clang-2100.4.1.1)"
+"cmake_cache" = "/Users/smangano/Documents/ChatGPT/C++/angaria/build/release/CMakeCache.txt"
+"smoke" = false
+"timeout_seconds" = 120
+"repetitions" = 3
+"runner_arguments" = ["build/release/angaria_transport_benchmark", "--output", "benchmarks/results/milestone-4-macos-arm64", "--messages", "128", "--warmup", "16", "--repetitions", "3", "--payload-bytes", "8,256", "--producers", "1,2,4", "--modes", "serial,phased,profile", "--host-label", "Apple M4; 10 logical CPUs; 16 GiB memory; macOS 27.0.1; no affinity or power controls"]
+"summary_method" = "median of per-run quantiles; samples are not pooled"
+"status" = "complete"
+"finished_utc" = "2026-11-26T23:11:24.599996+00:00"
+"completed_runs" = 42
+
+[source_sha256]
+"CMakeLists.txt" = "7b2499f5b41c7ff35b0e49b93a9a4e7d248f30457de3fa724d021fc29e595a5f"
+"VERSION" = "4a4d96cd7b7e3beb5389359d789b089841ffe8086b1a91b2d4a52a816ace9c4a"
+"benchmarks/native_transport.cpp" = "53c1345dfe37c873701f714bff996091b8831a56d01e72e2e3f1a65a1a642b17"
+"benchmarks/run_native.py" = "239b2248b2a62756976d04d75871d563c11ce9038f551611ed12aabcc033ecd4"
+
+[cmake]
+"CMAKE_BUILD_TYPE" = "Release"
+"CMAKE_CXX_COMPILER" = "/usr/bin/c++"
+"CMAKE_CXX_FLAGS" = "-Wall -Wextra -Werror"
+"CMAKE_CXX_FLAGS_DEBUG" = "-g"
+"CMAKE_CXX_FLAGS_MINSIZEREL" = "-Os -DNDEBUG"
+"CMAKE_CXX_FLAGS_RELEASE" = "-O3 -DNDEBUG"
+"CMAKE_CXX_FLAGS_RELWITHDEBINFO" = "-O2 -g -DNDEBUG"

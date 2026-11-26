@@ -6,7 +6,7 @@
 
 Angaria is a C++ inter-process messaging framework built around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The target application is a small, bounded network of cooperating processes, typically ten or fewer, with Tasks representing processes or threads.
 
-The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), [milestone 2](docs/milestones/milestone-2.md) through its eleven reviewed steps, and [milestone 3](docs/milestones/milestone-3.md) through its six reviewed steps and integration release `0.3.7`. [Milestone 4](docs/milestones/milestone-4.md) is in native transport contract review. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
+The ten milestones below guide implementation. Milestone 1 is complete through [PR #7](https://github.com/smangano/angaria/pull/7), [milestone 2](docs/milestones/milestone-2.md) through its eleven reviewed steps, and [milestone 3](docs/milestones/milestone-3.md) through its six reviewed steps and integration release `0.3.7`. [Milestone 4](docs/milestones/milestone-4.md) reaches its measurements and completion review in step 4.11, version `0.4.13`; integration into `main` remains a separate PR. Milestone 6 delivers the [five-process trading simulation](#demonstration-application) using the Registry, both Queue Set types, and recoverable mapped messages. Milestones 7 through 10 complete the synchronization, storage, field, and tooling coverage.
 
 ## Living programmer primer
 
@@ -77,7 +77,7 @@ Publishing records have a persistent identity and a snapshot of their destinatio
 
 Acceptance establishes delivery obligations. Consumers acknowledge independently. A destination configured to allow delivery loss can subsequently skip overwritten deliveries. Committed payloads remain available for inspection under the log's retention rules.
 
-The default recovery policy retains records needed for unacknowledged deliveries. Exhausting the configured log capacity returns a log-full result. Process-crash recovery is part of the planned implementation. Power-loss durability requires a separate contract.
+The default recovery policy retains records needed for unacknowledged deliveries. Exhausting the configured log capacity returns a log-full result. Native direct publication and delivery implement process-crash recovery; broader Publishing support follows milestone 6. Power-loss durability requires a separate contract.
 
 ## 1 Core architecture and policy contracts
 
@@ -121,7 +121,7 @@ Completion requires applications to exchange several registered message types an
 
 Step 4.1, framework version `0.4.1`, reviewed the [native transport contract](docs/native-transport.md). Step 4.2, version `0.4.2`, implements checked private Publication/destination/receipt/ring codecs and independent byte fixtures. Step 4.3, version `0.4.3`, adds [core delivery-history validation](docs/native-validation.md) and capability rejection before recovery. The [eleven-step plan](docs/milestones/milestone-4.md) orders codecs, history validation, mapped storage, and cleanup before public send/receive. Steps 4.6–4.7 implement public send/status, receive, acknowledgment/release, and Source close. Step 4.8, version `0.4.10`, enables configured allowed loss and protected in-flight delivery, with a sixteenth public-API primer lesson. New factories select format 2.2/`0xf`; readers retain 2.0/2.1 and core 2.2/`0x7` support without in-place upgrade. Fresh Source selection initially supports one Active Queue; multiple-Queue scheduling follows milestone 5 through the same APIs.
 
-Step 4.9, version `0.4.11`, adds [combined failure and exhaustion qualification](docs/native-qualification.md): overlapping producer/consumer failures, repeated recovery, full-log mixed history, final counter values, unchanged rejection, and actual OS file-growth failure. Step 4.10, version `0.4.12`, adds the [native multi-process primer application](docs/native-pipeline.md), connecting Feed, Strategy, and Audit through public mapped Queues, exact schemas, retained backlog, acknowledgment/redelivery, and replacement. Performance measurements and the completion audit remain step 4.11.
+Step 4.9, version `0.4.11`, adds [combined failure and exhaustion qualification](docs/native-qualification.md): overlapping producer/consumer failures, repeated recovery, full-log mixed history, final counter values, unchanged rejection, and actual OS file-growth failure. Step 4.10, version `0.4.12`, adds the [native multi-process primer application](docs/native-pipeline.md), connecting Feed, Strategy, and Audit through public mapped Queues, exact schemas, retained backlog, acknowledgment/redelivery, and replacement. Step 4.11, version `0.4.13`, records [performance measurements](docs/native-performance.md) and the [completion audit](docs/milestones/milestone-4-completion.md) before the separate milestone integration PR.
 
 - Implement the fixed-size rings of message offsets and the append-only memory-mapped payload plane.
 - Support single-producer queue ownership and allocation of shared payload storage.
@@ -197,7 +197,7 @@ Completion requires a reproducible application walkthrough, documented guarantee
 
 The completed v0 demo provides a CMake build, Linux CI, a bounded filesystem queue, one recorded integer schema, role locks, explicit acknowledgment, and process-restart tests. Its file format and runtime describe the current prototype.
 
-The build infrastructure, encoding patterns, inspector fixtures, ownership mechanisms, and failure tests provide reusable foundations for the milestones above. The shared Registry, mapped queue storage, general message API, Queue Sets, and policy implementations are planned work.
+The build infrastructure, encoding patterns, inspector fixtures, ownership mechanisms, and failure tests provide reusable foundations. The milestones above replace the prototype with the shared Registry, general messages, native mapped direct delivery, and configured recovery/loss. Multiple-input selection, Publishing fan-out, and the remaining policy implementations retain their later milestones.
 
 The [README](README.md) documents the runnable prototype, and the [session format](docs/session-format.md) describes its existing files. The [restart walkthrough](test/restart_demo.py) exercises its process and acknowledgment behavior.
 

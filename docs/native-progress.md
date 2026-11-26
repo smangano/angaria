@@ -2,11 +2,11 @@
 
 Milestone 4, step 4.5, framework **0.4.6**, implements private progress operations for the core format **2.2/`0x7`** profile. They build on [history validation](native-validation.md) and [committed payload mapping](native-storage.md#committed-payload-storage-and-append-planning). Step 4.6 enables [public direct send and status](direct-publication.md), core Session creation, and the fourteenth [primer lesson](primer.md#14-send-directly-and-look-up-acceptance). Step 4.7 exposes [public receive, acknowledgment/release, and Source close](native-receive.md) with bound payload views and the fifteenth primer lesson. Step 4.8 adds reserved allowed-loss progress under **2.2/`0xf`** and the sixteenth primer lesson.
 
-**Reserved progress** means updating the mutable receipt and fixed runtime rows that already exist, without appending another record. These operations use the journal's FixedState command area. Acknowledgment can complete when the publication log is full; it does not reclaim history or make append space reusable.
+**Reserved progress** means updating the mutable receipt and fixed runtime rows that already exist, without appending another record. These operations use the journal's FixedState command area. Acknowledgment can complete when the publication log is full; it does not reclaim history or make append space reusable. This is a log-byte-budget guarantee: local heap allocations, mappings, file operations, and retained-history validation can still occur and fail. It is not an allocation-free or constant-time API guarantee.
 
 ## Private receipt operations
 
-The [progress primitives](../src/delivery_progress.h) take a recovered, gate-bound `RuntimeAccess` and a captured claim or delivery token. A future public endpoint must first authenticate its native Task owner. The primitives check the core capability, Session identity, current attached Task incarnation, Thread parent context, complete topology/history, and Source ownership under the guard.
+The [progress primitives](../src/delivery_progress.h) take a recovered, gate-bound `RuntimeAccess` and a captured claim or delivery token. The [public Source endpoints](native-receive.md) first authenticate their native Task owner. The primitives check the core capability, Session identity, current attached Task incarnation, Thread parent context, complete topology/history, and Source ownership under the guard.
 
 | Operation | Effect |
 | --- | --- |
@@ -35,6 +35,8 @@ Task attachment and last-owner detachment now use this cleanup for valid core pu
 The [test guide](../test/README.md) distinguishes full-domain private delivery fixtures, deliberate corruption, and real process interruption from public API examples. Qualification covers exact tokens and counters, retained history after ring overwrite, full logs, old parent/Thread cleanup, partial absolute stores, replacement attachment, and repeated interrupted recovery. It tests process termination on a running local filesystem, without adding a power-loss durability guarantee.
 
 Factories select **2.2/`0xf`** from step 4.8, allowing both recovery delivery and optional loss. Existing profiles are never upgraded in place. The [public receive contract](native-receive.md) explains view lifetimes, failure fencing, and gaps.
+
+Step 4.9 adds [combined failure and exhaustion qualification](native-qualification.md), and step 4.10 demonstrates the public path in a [multi-process application](native-pipeline.md). The [milestone-4 completion review](milestones/milestone-4-completion.md) records the remaining API boundary; [performance measurements](native-performance.md) describe observed costs within explicit workloads. Neither qualification nor measurements add a lock-free, starvation-free, hard-real-time, or power-loss durability guarantee.
 
 ## Compact allowed-loss progress
 
