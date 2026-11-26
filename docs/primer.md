@@ -2,7 +2,7 @@
 
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
-The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.1** adds milestone 4's transport design review; it does not yet enable native delivery. Angaria is incomplete and may change incompatibly before **1.0.0**.
+The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.2** adds private native storage codecs after milestone 4's transport design review; it does not yet enable native delivery. Angaria is incomplete and may change incompatibly before **1.0.0**.
 
 You can run every example in this guide today. They create persistent sessions, register definitions, build connections, claim producer and consumer endpoints, encode scalar and basic logical payloads, and exchange completed capture files across processes for generic inspection. Sending, publishing, receiving, and acknowledgment through Angaria Queues arrive in later steps. Some of those operations already have declarations in the public headers; a declaration alone does not make an operation runnable.
 
@@ -636,7 +636,9 @@ This lesson tests claim replacement after process termination on a running syste
 
 ## What native transport will add
 
-Milestone 4's [reviewed plan](milestones/milestone-4.md) builds on these thirteen programs. Its first step documents the [transport contract](native-transport.md); the new native delivery examples will become runnable as their API methods are implemented.
+Milestone 4's [reviewed plan](milestones/milestone-4.md) builds on these thirteen programs. Its first step documents the [transport contract](native-transport.md); step 4.2 adds internal storage codecs. A **codec** translates values into specified bytes and checks bytes when reading them back. These new codecs check Publication headers, destination rows, delivery receipts, and ring entries. A **receipt** records one destination's delivery progress. The codecs also check the byte cost before building a record, including its reserved receipts and padding.
+
+This is groundwork for sending through a Queue. Correctly encoding a record does not prove that its producer, schema, or destination belongs to a committed Session. Those relationships need the history checks added in later steps. The [private codec tests](../test/README.md) explain the stored layout; today's thirteen programs continue using the implemented public APIs. New native delivery examples will become runnable as their API methods are implemented.
 
 Instead of exchanging completed ordinary files, applications will send through Angaria's mapped Session storage. The **payload plane** retains the message bytes and their delivery history. A bounded **ring** keeps references to recent messages so a consumer can find them quickly. Replacing a ring entry does not acknowledge its message. A slow consumer using the default recovery policy can still follow the retained log.
 
