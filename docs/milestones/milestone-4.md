@@ -8,6 +8,8 @@ The focused [helper consolidation](../helper-audit.md) after step 4.3 uses **`0.
 
 ## Review steps
 
+A separate **0.4.7** [public interface review](../public-interface.md), branch `milestone-4-api-review`, follows step 4.5. It proposes the full application/log/replay surface through 1.0 without implementing new runtime operations or renumbering these development steps. Step 4.6 should incorporate the relevant approved API decisions before public send is enabled.
+
 | Step | Branch | Scope | Completion criterion |
 | --- | --- | --- | --- |
 | 4.1 | `milestone-4-1` | Review the [native transport contract](../native-transport.md). | Specify compatibility/capabilities, message validation, timestamps, ring/receipt encodings, view lifetimes, and Source cleanup. This PR changes documentation and framework version only. |

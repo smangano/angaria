@@ -16,6 +16,8 @@ The current v0 prototype exchanges an integer message through a bounded filesyst
 
 ## Build and test
 
+For the complete proposed application interface, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Framework **0.4.7** adds isolated declarations and compile-only examples for review; planned methods are not runnable implementations.
+
 New to Angaria? Start with the [programmer primer](docs/primer.md). It introduces the core concepts in simple language and walks through thirteen runnable programs, from creating a Session to configuring fan-out, inspecting Registry history, and exchanging captured records across processes and producer replacements. It grows with each milestone.
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.

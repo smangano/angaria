@@ -1,5 +1,7 @@
 # Public C++ API contract
 
+The [complete public interface proposal](public-interface.md) reviews the full 1.0 roadmap, including application ergonomics, advanced Fields, diagnostics, offline logs, and replay. Its isolated `angaria::proposed` declarations have no runtime definitions; this document continues to describe the current API and its existing planned contracts.
+
 Step 1.3 defines Angaria's process-local C++ types and the operations that subsequent milestones implement. The [trading API example](../examples/trading_api.cpp) expresses the configuration topology through typed Registry and endpoint calls. CMake compiles it as the `angaria_api_contract` object target.
 
 ```sh

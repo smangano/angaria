@@ -170,7 +170,8 @@ namespace angaria::examples
     const auto publication = require_value(market._task.next_publication_id());
     const MessageView message{market._quote, PayloadFormat::Binary, payload, 0};
     auto report = market._updates.publish(publication, message, outcomes);
-    if (report._status == PublicationStatus::OutcomeUnknown)
+    if (report._error == ErrorCode::OutcomeUnknown ||
+        (report._error == ErrorCode::None && report._status == PublicationStatus::OutcomeUnknown))
     {
       report = market._task.publication_status(publication, outcomes);
     }

@@ -1,5 +1,7 @@
 # A programmer's first guide to Angaria
 
+The [complete public interface review](public-interface.md), framework **0.4.7**, shows the intended application and debugging surface through 1.0, including features still to be built. Its examples are compile-only proposals. The thirteen lessons here continue to use the implemented API.
+
 Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
 
 The runnable lessons follow the implemented public API through **milestone 3, step 3.6**, integration release **0.3.7**. Framework version **0.4.6**, milestone 4 step 4.5, adds private delivery progress and claim cleanup after the mapped payload storage, append sizing, and native history checks. The thirteen examples and their output remain the public learning path; native Queue delivery remains planned. Angaria is incomplete and may change incompatibly before **1.0.0**.
