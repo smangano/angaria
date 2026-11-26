@@ -21,9 +21,6 @@ jobs:
           - profile: macOS ARM64
             runner: macos-15
             architecture: arm64
-          - profile: macOS x86_64
-            runner: macos-15-intel
-            architecture: x86_64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6

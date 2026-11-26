@@ -40,7 +40,7 @@ cmake --build build --parallel 3
 ctest --test-dir build --output-on-failure
 ```
 
-Hosted CI exercises Linux and macOS on both x86_64 and ARM64. The [native qualification contract](docs/native-storage.md#registry-qualification-and-native-profiles) defines what those runs cover.
+Hosted CI automatically exercises Linux x86_64, Linux ARM64, and macOS ARM64. The slower macOS x86_64 qualification runs only when requested through its manual workflow. The [native qualification contract](docs/native-storage.md#registry-qualification-and-native-profiles) defines the coverage and [manual-run instructions](docs/native-storage.md#request-macos-x86_64-qualification).
 
 ## Configuration contract
 

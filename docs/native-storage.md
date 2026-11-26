@@ -219,12 +219,24 @@ The native adapter recognizes these little-endian 64-bit profiles, each requirin
 | --- | --- | --- |
 | Linux x86_64 | `0x00010001` | Existing `Linux CI` on `ubuntu-24.04`. |
 | Linux ARM64 | `0x00010002` | `Linux ARM64` on `ubuntu-24.04-arm`. |
-| macOS x86_64 | `0x00020001` | `macOS x86_64` on `macos-15-intel`. |
+| macOS x86_64 | `0x00020001` | Manual `macOS x86_64` on `macos-15-intel`; runs only when requested. |
 | macOS ARM64 | `0x00020002` | `macOS ARM64` on `macos-15`. |
 
-The additional jobs run in [native-profiles.yml](../.github/workflows/native-profiles.yml), using [GitHub-hosted standard runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Every job runs the full test suite, including the public walkthroughs, on its actual architecture. Qualification evidence is the passing run for the relevant commit/profile, rather than recognition of an ABI code alone. Live attachment continues to require the recorded profile to match the process's native adapter.
+Linux x86_64 runs automatically through [ci.yml](../.github/workflows/ci.yml). Linux ARM64 and macOS ARM64 run automatically through [native-profiles.yml](../.github/workflows/native-profiles.yml). macOS x86_64 runs only when requested through [macos-x86_64.yml](../.github/workflows/macos-x86_64.yml). These use [GitHub-hosted standard runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Every requested or automatic job runs the full test suite, including the public walkthroughs, on its actual architecture. Qualification evidence is the passing run for the relevant commit/profile, rather than recognition of an ABI code alone. Live attachment continues to require the recorded profile to match the process's native adapter.
 
 These runs exercise process termination on the runners' coherent local filesystems. They do not establish power-loss durability, network-filesystem support, arbitrary fork safety, foreign-profile live attachment, or later delivery/scheduling behavior. The implemented profile remains two-plane storage, strict selection, spin waiting, recovery-from-log delivery configuration, all-destination acceptance configuration, and native scalar/basic-logical Field definitions. Configured delivery policies gain execution behavior in their owning milestones.
+
+### Request macOS x86_64 qualification
+
+In GitHub's **Actions** tab, select **macOS x86_64 qualification (manual)**, choose **Run workflow**, select the branch, and start the run. It does not start on pushes or pull requests. The workflow must first be present on the default branch; the selected branch must contain its definition. See [GitHub's manual workflow instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+
+With GitHub CLI:
+
+```sh
+gh workflow run macos-x86_64.yml --repo smangano/angaria --ref main
+```
+
+Replace `main` with the branch to qualify. Use the normal Actions run page or `gh run watch --repo smangano/angaria` to follow it. Request this run when Intel Mac qualification is needed; ordinary PRs run the other three profiles automatically.
 
 ## Failures and validation scope
 
