@@ -51,16 +51,24 @@ namespace angaria::detail::mapped
     std::optional<Error> validate_configuration(const SuperblockConfiguration& configuration,
                                                 ErrorCode code)
     {
-      if (configuration._formatMinor > format_minor)
+      if (configuration._formatMinor > delivery_format_minor)
       {
-        return failure(code, "superblock.format", "Unsupported format version; expected 2.0 or 2.1");
+        return failure(code, "superblock.format", "Unsupported format version; expected 2.0, 2.1, or 2.2");
       }
-      const bool basic = (configuration._requiredFeatures & basic_fields_feature) != 0;
-      if ((configuration._requiredFeatures & journal_feature) == 0 ||
-          basic != (configuration._formatMinor == 1))
+      // Unknown required bits remain available to portable metadata inspection;
+      // live admission rejects them unless its adapter explicitly supports them.
+      // Known bits must always retain their canonical minor-version meaning.
+      constexpr auto known = journal_feature | basic_fields_feature |
+                             native_delivery_feature | allow_loss_feature;
+      const auto features = configuration._requiredFeatures & known;
+      const auto expected = configuration._formatMinor == 0 ? journal_feature :
+          configuration._formatMinor == 1 ? journal_feature | basic_fields_feature :
+          journal_feature | basic_fields_feature | native_delivery_feature;
+      if (features != expected &&
+          !(configuration._formatMinor == delivery_format_minor && features == (expected | allow_loss_feature)))
       {
         return failure(code, "superblock.required_features",
-                       "Format 2.0 requires the journal; 2.1 also requires basic_fields_v1");
+                       "Known required features must match the 2.0, 2.1, or 2.2 delivery profile");
       }
       if (configuration._session == SessionId{})
       {
@@ -187,9 +195,9 @@ namespace angaria::detail::mapped
       return malformed("superblock.magic", "Invalid ANGARIA magic");
     }
     if (read_integer<std::uint16_t>(bytes, 8) != format_major ||
-        read_integer<std::uint16_t>(bytes, 10) > format_minor)
+        read_integer<std::uint16_t>(bytes, 10) > delivery_format_minor)
     {
-      return malformed("superblock.format", "Unsupported format version; expected 2.0 or 2.1");
+      return malformed("superblock.format", "Unsupported format version; expected 2.0, 2.1, or 2.2");
     }
     if (read_integer<std::uint32_t>(bytes, 12) != superblock_bytes)
     {

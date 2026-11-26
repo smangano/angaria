@@ -58,7 +58,7 @@ Relative Session directories resolve from the TOML file's parent directory. Crea
 
 The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines retained format 2.0, current format 2.1, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, and publication identity issuance are implemented. Message delivery and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
+The [mapped layout and compatibility contract](docs/mapped-format.md) defines retained format 2.0, creation format 2.1, the core 2.2 reader profile, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, endpoint identity/ownership handles, and publication identity issuance are implemented. Message delivery and Queue Set scheduling follow their [roadmap milestones](ROADMAP.md).
 
 The [concurrency and recovery contract](docs/concurrency.md) specifies the blocking mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Publication, delivery, and notification behavior follow in their implementation milestones.
 
@@ -113,7 +113,7 @@ python3 test/process_exchange.py build/angaria_primer_13_process_exchange build/
 
 Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. Framework version **`0.3.7`** integrates the completed milestone-3 staging branch into `main`. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
 
-Milestone 4, step 4.2, framework version **`0.4.2`**, adds checked private codecs for Publications, destinations, receipts, and ring slots under the [native transport contract](docs/native-transport.md) and [eleven implementation steps](docs/milestones/milestone-4.md). Independent byte fixtures cover complete record costs, malformed inputs, receipt states, and full-width ring generations. Native send/receive methods and new Session formats remain planned; the thirteen existing primer programs remain the runnable learning path.
+Milestone 4, step 4.3, framework version **`0.4.3`**, adds [Session and delivery-history validation](docs/native-validation.md) after the checked record codecs. Core format 2.2 readers validate exact schemas, acceptance transactions, Queue history, receipts, Source pins, and ring windows; incompatible capabilities fail before recovery. New Sessions still use format 2.1, and public native send/receive remains planned. The thirteen existing primer programs remain the runnable learning path.
 
 ## Run the restart walkthrough
 

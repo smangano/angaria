@@ -71,7 +71,7 @@ Offsets below are from the start of `session.ang`. The initial immutable setting
 | ---: | ---: | --- |
 | 0 | 8 | Magic `ANGARIA\0`. |
 | 8 | 2 | Format major, `2`. This position also distinguishes prototype major `1`. |
-| 10 | 2 | Format minor: `0` for retained 2.0 Sessions, `1` for new 2.1 Sessions. |
+| 10 | 2 | Format minor: `0` for retained 2.0 Sessions, `1` for newly created 2.1 Sessions, `2` for the core delivery reader profile. |
 | 12 | 4 | Superblock bytes, `4096`. |
 | 16 | 16 | Session identity. |
 | 32 | 8 | Maximum accounted session bytes. |
@@ -79,7 +79,7 @@ Offsets below are from the start of `session.ang`. The initial immutable setting
 | 48 | 2 | Storage mapping code. |
 | 50 | 2 | Synchronization protocol version. |
 | 52 | 4 | Live ABI profile. |
-| 56 | 8 | Required feature bits: `0x1` journal; 2.1 additionally requires `0x2` basic Fields, giving mask `0x3`. |
+| 56 | 8 | Required feature bits: `0x1` journal; 2.1 requires `0x2` basic Fields (mask `0x3`); 2.2 requires `0x4` native delivery (core mask `0x7`). Allowed-loss bit `0x8` is recognized metadata and remains unsupported for live attachment until step 4.8. |
 | 64 | 8 | Optional, safely skippable feature bits. |
 | 72 | 8 | Current session-definition reference. |
 | 80 | 8 | Committed Registry revision root. |
@@ -174,6 +174,8 @@ Live state contains fixed-width data and recovery space. Native lock objects and
 
 A Source's in-flight slot pins one receipt and its payload. Its issuance counter remains valid across Source handle close/reopen within a claim. A new consumer incarnation distinguishes replacement claims. Re-reading the in-flight slot preserves its token. Recovery cannot treat a stale in-flight flag from a dead claim as proof of acknowledgment.
 
+Step 4.3's [core validation profile](native-validation.md#core-progress-words) defines the Queue acknowledgment-presence flag, Source InFlight flag, retained no-reclamation floor, and Source issuance-context checks without changing these row sizes. Those meanings require the 2.2 native-delivery capability; legacy profiles retain zero delivery state.
+
 Task state records the latest attachment plus monotonic restart/incarnation information. Immutable definition revisions preserve Task registration and topology lifecycle history; publications and receipts retain the claims that performed their operations. This is not an unlimited journal of every attach/detach event. Replacement claims and progress recovery must remain possible when publication storage is full; step 1.5 resolves them using reserved state.
 
 The Session flags word at superblock offset 112 uses bit 0 (`1`) for completed bootstrap; remaining bits are reserved. Public attachment requires this flag after recovery. The Task flags word at row offset 48 uses bit 0 (`1`) for recorded attachment, bit 1 (`2`) for presence of last-attachment time, and bit 2 (`4`) for presence of last-detachment time; remaining bits are reserved. A never-attached Task row is all zero. Process Tasks have zero parent incarnation; an attached Thread Task records its parent's incarnation. Detachment preserves that tag so interrupted cleanup can rediscover the ending parent's children during replay. Reserved Task bytes and state in empty index slots must be zero.
@@ -182,7 +184,7 @@ The 32-byte symbol row reserves ID (`u32`), flags (`u32`), value reference (`u64
 
 ## Rings, publications, and receipts
 
-The following structures reserve the native delivery layout. The [native transport contract](native-transport.md) defines their reviewed future 2.2 capability boundary, precise ring generation and receipt presence semantics, and lifetime rules. Step 4.2 implements private codecs for these local byte representations; current Session support remains 2.0/2.1, with native delivery still disabled.
+The following structures reserve the native delivery layout. The [native transport contract](native-transport.md) defines their reviewed future 2.2 capability boundary, precise ring generation and receipt presence semantics, and lifetime rules. Step 4.2 implements private codecs for these local byte representations. Step 4.3 adds [core delivery-history validation](native-validation.md), retaining legacy readers and the 2.1 creation default; public native delivery is still disabled.
 
 A two-plane ring allocation has a 64-byte record envelope followed by `ring_capacity` slots of 32 bytes, rounded up to 64 bytes. Each slot contains `queue_sequence:u64`, `delivery_link:u64`, `publication_ref:u64`, and `generation:u64`. A ring slot is an index into retained history. Its overwrite is neither an acknowledgment nor permission to reclaim a pinned payload. Recover-from-log queues reconstruct missing entries from retained delivery links and receipts. Allow-loss queues use overwritten sequence ranges while preserving an already issued pin.
 
@@ -223,7 +225,7 @@ A known fully rejected new publication allocates no committed record and changes
 
 ### Local delivery codecs
 
-The private codecs process local byte copies, using little-endian integers and absolute logical offsets. They never read live mutable words, perform journal writes, or infer committed acceptance. A caller must first acquire a consistent copy under the native synchronization protocol before decoding mutable state. Cross-record reference existence, schema contents, Queue ownership, publication/receipt correspondence, and Source pins are Session/history validation responsibilities, beginning in step 4.3.
+The private codecs process local byte copies, using little-endian integers and absolute logical offsets. They never read live mutable words, perform journal writes, or infer committed acceptance. A caller must first acquire a consistent copy under the native synchronization protocol before decoding mutable state. Cross-record reference existence, schema contents, Queue ownership, publication/receipt correspondence, and Source pins are checked by the [Session/history validator](native-validation.md) added in step 4.3.
 
 A Publication has this canonical order: 64-byte envelope, 128-byte fixed immutable body, the ordered destination rows, application payload bytes, zero padding to eight bytes, one mutable receipt per destination, and zero allocation padding to 64 bytes. The immutable-body codec excludes the envelope and receipts; its slices include their absolute positions. Empty payloads use offset and length zero. Destination and receipt counts must match and fit the nonzero, unique Queue IDs, at most 65,535. Every destination row references its corresponding receipt, including initially rejected destinations. The journal initializer takes exactly the receipt bytes and adds the final allocation padding.
 

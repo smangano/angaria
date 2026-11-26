@@ -2,7 +2,7 @@
 
 Milestone 3 and the manual Intel CI change reached `main` through [PR #30](https://github.com/smangano/angaria/pull/30) and [PR #31](https://github.com/smangano/angaria/pull/31), framework version `0.3.8`. Staging branch `milestone-4` starts at that commit. Each step uses `milestone-4-<s>` and a PR targeting staging; a separate integration PR brings the completed milestone into `main`.
 
-Step 4.1 used framework version **`0.4.1`**; step 4.2 uses **`0.4.2`**. The build number increases for each new PR under the [versioning policy](../../ROADMAP.md#versioning). It does not automatically change native format or protocol versions.
+Steps 4.1 and 4.2 used framework versions **`0.4.1`** and **`0.4.2`**; step 4.3 uses **`0.4.3`**. The build number increases for each new PR under the [versioning policy](../../ROADMAP.md#versioning). It does not automatically change native format or protocol versions.
 
 ## Review steps
 
@@ -26,7 +26,7 @@ Split a step further if needed to keep its PR reviewable. Each implementation PR
 
 The [transport contract](../native-transport.md) makes the milestone's design decisions explicit. It proposes native format 2.2 with separate required capabilities for core delivery and allowed loss, preserving the meanings of existing 2.0/2.1 Sessions. It defines full-width ring generations, receipt timestamp presence, Binary validation before acceptance, and distinct publication/enqueue/dequeue times.
 
-Two process-local API additions are planned for step 4.7: `DeliveryView::_publishedAt` and `SourceQueueSet::close()`. Headers are unchanged in step 4.1. Explicit close reports cleanup errors; destruction and move replacement still need a fenced, deferred-cleanup path. Current Session/topology validation and Task cleanup reject publication-bearing state, so their extension is a prerequisite of public send.
+Two process-local API additions are planned for step 4.7: `DeliveryView::_publishedAt` and `SourceQueueSet::close()`. Headers are unchanged in step 4.1. Explicit close reports cleanup errors; destruction and move replacement still need a fenced, deferred-cleanup path. Delivery-aware Session/topology validation follows in step 4.3 and Task cleanup in step 4.5; both are prerequisites of public send.
 
 Fresh Source selection supports at most one Active member Queue in this milestone. Existing in-flight delivery and acknowledgment/release remain usable if another Queue becomes Active. Multiple-Queue selection policies follow milestone 5 through the same Source APIs.
 
@@ -34,7 +34,13 @@ Fresh Source selection supports at most one Active member Queue in this mileston
 
 Private codecs now encode and decode the [Publication, destination, receipt, and ring layouts](../mapped-format.md#local-delivery-codecs). Their tests use independent expected bytes, deliberately malformed inputs, exact byte ceilings, receipt presence combinations, and ring sequences through `UINT64_MAX`. Framing tests check the boundary between immutable bytes, mutable receipt storage, and the journal's allowed write targets.
 
-These functions operate on local byte copies. They do not establish committed acceptance, resolve Registry/history references, access live atomic words, or enable native delivery. Session format support remains 2.0/2.1. Step 4.3 adds the cross-record and live-state validation needed before any public send is enabled.
+These functions operate on local byte copies. They do not establish committed acceptance, resolve Registry/history references, access live atomic words, or enable native delivery. Factories remain at format 2.1. Step 4.3 adds the cross-record and live-state validation described below before any public send is enabled.
+
+## Step 4.3 Session and history validation
+
+The [core reader validator](../native-validation.md) checks committed acceptance manifests, unique issued identities, exact registered schema references, historical active topology, complete Queue chains/roots, receipt/Source pins, acknowledgment progress, and authoritative ring windows. Existing Registry topology and historical snapshots remain inspectable with valid retained Publications. Invalid quiescent fixtures reject without writes; incompatible profiles reject before pending journal recovery.
+
+Readers admit canonical 2.2/`0x7` while factories still create 2.1/`0x3`. Loss and unsupported requirements remain fenced out before recovery. Task attachment to publication-bearing state keeps its cleanup guard until step 4.5. New private tests clearly distinguish native record fixtures from still-unimplemented public delivery calls, and all thirteen primer programs remain the public learning path.
 
 ## Qualification and completion
 
