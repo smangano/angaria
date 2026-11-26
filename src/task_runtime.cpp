@@ -159,23 +159,27 @@ namespace angaria::detail
       return words;
     }
 
-    void require_task_only_state(RuntimeAccess& access)
+    void require_cleanup_state(RuntimeAccess& access)
     {
       const auto layout = mapped::make_fixed_layout(access._session->_controller->configuration()._limits);
       if (!layout)
       {
         runtime_fail(ErrorCode::IoError, "task.cleanup", "Session has no valid fixed layout");
       }
-      for (const auto kind : {9, 10})
+      if ((access._session->_controller->configuration()._requiredFeatures & mapped::native_delivery_feature) == 0)
       {
-        if (!access.record_references(static_cast<std::uint16_t>(kind)).empty())
+        for (const auto kind : {9, 10})
         {
-          runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Publication receipt cleanup is not implemented yet");
+          if (!access.record_references(static_cast<std::uint16_t>(kind)).empty())
+          {
+            runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Legacy claims cannot clean native delivery records");
+          }
         }
       }
       // Validate definitions and resource mirrors before installing a claim,
       // including through a Session handle opened before external corruption.
-      // ReleaseClaim replay independently checks its idle-resource subset.
+      // ReleaseClaim replay independently discovers retained receipt identities
+      // and immutable Source ownership, including after a partial cleanup.
       (void)runtime_topology(access);
     }
 
@@ -221,7 +225,7 @@ namespace angaria::detail
       {
         return;
       }
-      require_task_only_state(access);
+      require_cleanup_state(access);
       auto plan = fixed_plan(access, _claim._task, _claim._incarnation);
       plan._commands.push_back(release_claim(loaded._stateOffset, _claim._incarnation, runtime_now_ns()));
       runtime_value(access._journal.execute(access._guard, plan));
@@ -313,7 +317,7 @@ namespace angaria::detail
       {
         runtime_value(observer->after_native_claim());
       }
-      require_task_only_state(access);
+      require_cleanup_state(access);
       auto words = task_words(access, loaded);
       if (bootstrap && (words[0] != 0 || access.read_words(112, 1)[0] != 0))
       {
