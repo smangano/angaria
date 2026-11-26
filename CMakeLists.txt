@@ -13,6 +13,9 @@ message(STATUS "Angaria version ${PROJECT_VERSION}")
 find_package(Boost 1.70 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+# Research instrumentation is compiled out of ordinary builds.
+option(ANGARIA_ENABLE_DIAGNOSTICS "Enable private transport performance instrumentation" OFF)
+
 include(FetchContent)
 FetchContent_Declare(
   cpptoml
@@ -23,6 +26,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cpptoml)
 
 add_library(angaria STATIC
+  src/performance_diagnostics.cpp
   src/capture.cpp
   src/inspection.cpp
   src/message_record.cpp
@@ -74,12 +78,21 @@ target_include_directories(angaria PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generate
 target_include_directories(angaria SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
 target_compile_features(angaria PUBLIC cxx_std_20)
 target_link_libraries(angaria PUBLIC Boost::headers Threads::Threads)
+if(ANGARIA_ENABLE_DIAGNOSTICS)
+  target_compile_definitions(angaria PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+endif()
 
 option(ANGARIA_BUILD_BENCHMARKS "Build native transport measurement tools" ON)
 if(ANGARIA_BUILD_BENCHMARKS)
   add_executable(angaria_transport_benchmark benchmarks/native_transport.cpp)
   target_include_directories(angaria_transport_benchmark PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_transport_benchmark PRIVATE angaria)
+  add_executable(angaria_transport_diagnostics benchmarks/transport_diagnostics.cpp)
+  target_include_directories(angaria_transport_diagnostics PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_transport_diagnostics PRIVATE angaria)
+  if(ANGARIA_ENABLE_DIAGNOSTICS)
+    target_compile_definitions(angaria_transport_diagnostics PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+  endif()
 endif()
 
 add_executable(angaria_queue_demo examples/queue_demo.cpp)
@@ -119,6 +132,10 @@ if(BUILD_TESTING)
       COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/run_native.py"
               "$<TARGET_FILE:angaria_transport_benchmark>" --smoke)
     set_tests_properties(native_benchmark_smoke PROPERTIES TIMEOUT 60)
+    add_test(NAME native_diagnostics_smoke
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/run_diagnostics.py"
+              "$<TARGET_FILE:angaria_transport_diagnostics>" --smoke)
+    set_tests_properties(native_diagnostics_smoke PROPERTIES TIMEOUT 90)
   endif()
 
   add_executable(angaria_native_atomic_worker test/native_atomic_worker.cpp)
@@ -186,6 +203,7 @@ if(BUILD_TESTING)
 
   add_executable(angaria_tests
     test/test.cpp
+    test/test_performance_diagnostics.cpp
     test/test_shared_helpers.cpp
     test/test_append_layout.cpp
     test/test_field.cpp
@@ -252,6 +270,9 @@ if(BUILD_TESTING)
     test/test_activation_recovery.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
+  if(ANGARIA_ENABLE_DIAGNOSTICS)
+    target_compile_definitions(angaria_tests PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+  endif()
   target_compile_definitions(
     angaria_tests PRIVATE
     ANGARIA_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/examples/trading.toml"

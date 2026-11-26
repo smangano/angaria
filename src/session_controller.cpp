@@ -2,6 +2,7 @@
 
 #include "native_atomic.h"
 #include "native_file_state.h"
+#include "performance_diagnostics.h"
 
 #include <cerrno>
 #include <cstdint>
@@ -158,6 +159,7 @@ namespace angaria::detail::mapped
         return native_io_error(diagnostic, "open coordination resource", errno);
       }
       struct stat info{};
+      ANGARIA_DIAGNOSTIC_COUNT(FileStatCalls, 1);
       if (::fstat(descriptor->_fd, &info) == -1)
       {
         return native_io_error(diagnostic, "stat coordination resource", errno);
@@ -178,7 +180,9 @@ namespace angaria::detail::mapped
                                          const std::filesystem::path& path, bool isDirectory,
                                          bool singleLink = true)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(NativeStat);
       struct stat info{};
+      ANGARIA_DIAGNOSTIC_COUNT(FileStatCalls, 1);
       if (::fstatat(directory, name, &info, AT_SYMLINK_NOFOLLOW) == -1)
       {
         return native_io_error(path, "stat stable session resource", errno);
@@ -265,6 +269,9 @@ namespace angaria::detail::mapped
       if (_nativeLocked)
       {
         native_gate_fence();
+#if defined(ANGARIA_ENABLE_DIAGNOSTICS) && ANGARIA_ENABLE_DIAGNOSTICS
+        _diagnosticHold.finish();
+#endif
         if (lock_file(_controller->_state->_mutationFd->_fd, LOCK_UN) == -1)
         {
           // Continuing with unknown gate ownership would permit unsafe reuse.
@@ -278,6 +285,9 @@ namespace angaria::detail::mapped
     std::unique_lock<std::recursive_mutex> _localLock;
     std::thread::id _thread;
     bool _nativeLocked{};
+#if defined(ANGARIA_ENABLE_DIAGNOSTICS) && ANGARIA_ENABLE_DIAGNOSTICS
+    diagnostics::GateHold _diagnosticHold;
+#endif
   };
 
   struct TaskLeaseState
@@ -591,6 +601,8 @@ namespace angaria::detail::mapped
 
   Result<MutationGuard> SessionController::acquire_mutation(bool nonblocking)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(GateAcquire);
+    ANGARIA_DIAGNOSTIC_COUNT(GateAttempts, 1);
     if (auto result = check_owner(); std::holds_alternative<Error>(result))
     {
       return std::get<Error>(std::move(result));
@@ -603,6 +615,7 @@ namespace angaria::detail::mapped
     {
       if (!guard->_localLock.try_lock())
       {
+        ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
         return storage_error(ErrorCode::OwnershipBusy, _state->_directory, "Mutation gate is busy in this process");
       }
     }
@@ -612,6 +625,7 @@ namespace angaria::detail::mapped
     }
     if (_state->_gateOwner != std::thread::id{})
     {
+      ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
       // A recursive mutex makes this ownership check safe without a blocking
       // bookkeeping lock in the try path. Recursive gate entry is still denied.
       return storage_error(ErrorCode::OwnershipBusy, _state->_directory,
@@ -625,11 +639,16 @@ namespace angaria::detail::mapped
     {
       if (lock_busy(errno))
       {
+        ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
         return storage_error(ErrorCode::OwnershipBusy, _state->_directory / "mutation.lock", "Mutation gate is busy");
       }
       return native_io_error(_state->_directory / "mutation.lock", "lock session mutation gate", errno);
     }
     guard->_nativeLocked = true;
+#if defined(ANGARIA_ENABLE_DIAGNOSTICS) && ANGARIA_ENABLE_DIAGNOSTICS
+    guard->_diagnosticHold.start();
+#endif
+    ANGARIA_DIAGNOSTIC_COUNT(GateAcquisitions, 1);
     _state->_gateOwner = guard->_thread;
     native_gate_fence();
     if (auto result = check_resources(*_state); std::holds_alternative<Error>(result))

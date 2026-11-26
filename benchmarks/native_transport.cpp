@@ -1,5 +1,4 @@
-#include "angaria/detail/error_support.h"
-#include "angaria/runtime.h"
+#include "transport_support.h"
 
 #include "publication_runtime.h"
 #include "runtime_state.h"
@@ -30,33 +29,7 @@ namespace
   using Clock = std::chrono::steady_clock;
   using TimePoint = Clock::time_point;
   using namespace angaria;
-
-  constexpr std::size_t channel_count = 4;
-  constexpr std::uint64_t ring_capacity = 8;
-
-  struct BenchmarkFailure
-  {
-    Error _error;
-  };
-
-  template <typename T>
-  T value(Result<T> result)
-  {
-    return detail::value_or_throw<BenchmarkFailure>(std::move(result));
-  }
-
-  void require(bool condition, std::string_view message)
-  {
-    if (!condition)
-    {
-      throw BenchmarkFailure{Error{ErrorCode::InvalidState, std::string{message}, "benchmark"}};
-    }
-  }
-
-  std::uint64_t elapsed_ns(TimePoint first, TimePoint last)
-  {
-    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(last - first).count());
-  }
+  using namespace angaria::benchmarks;
 
   enum class Metric : std::size_t
   {
@@ -89,17 +62,6 @@ namespace
     std::string_view _mode;
   };
 
-  std::uint64_t parse_count(std::string_view text, std::string_view name)
-  {
-    std::uint64_t result{};
-    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), result);
-    if (text.empty() || parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
-    {
-      throw BenchmarkFailure{Error{ErrorCode::InvalidArgument, "Expected an unsigned decimal integer", std::string{name}}};
-    }
-    return result;
-  }
-
   Options parse_options(int argc, char** argv)
   {
     if (argc != 7)
@@ -130,12 +92,10 @@ namespace
     return Options{argv[1], total, warmup, static_cast<std::size_t>(producers), static_cast<std::size_t>(bytes), mode};
   }
 
-  struct Channel
+  struct Channel : ChannelEndpoints
   {
-    Channel(Task producer, Task consumer, QueueWriter writer, SourceQueueSet source, std::size_t samples)
-        : _producer(std::move(producer)), _consumer(std::move(consumer)), _writer(std::move(writer)),
-          _source(std::move(source)), _producerClaim(_producer.claim()), _consumerClaim(_consumer.claim()),
-          _queue(_writer.id()), _sourceSet(_source.id())
+    Channel(ChannelEndpoints endpoints, std::size_t samples)
+        : ChannelEndpoints(std::move(endpoints))
     {
       for (auto& metric : _samples)
       {
@@ -148,14 +108,6 @@ namespace
       _samples[static_cast<std::size_t>(metric)].push_back(duration);
     }
 
-    Task _producer;
-    Task _consumer;
-    QueueWriter _writer;
-    SourceQueueSet _source;
-    TaskClaim _producerClaim;
-    TaskClaim _consumerClaim;
-    QueueId _queue;
-    SourceQueueSetId _sourceSet;
     std::array<std::vector<std::uint64_t>, static_cast<std::size_t>(Metric::Count)> _samples;
     std::uint64_t _completed{};
     std::uint64_t _checksum{};
@@ -186,19 +138,6 @@ namespace
     std::array<TimePoint, 4> _times{};
     std::array<std::uint64_t, 4> _counts{};
   };
-
-  void check_report(const PublicationReport& report, PublicationId publication, QueueId queue)
-  {
-    if (report._error != ErrorCode::None)
-    {
-      throw BenchmarkFailure{Error{report._error, "Publication returned an error", "benchmark.send"}};
-    }
-    require(report._publication == publication && report._status == PublicationStatus::Accepted &&
-            report._destinations.size() == 1 && report._destinations[0]._queue == queue &&
-            report._destinations[0]._status == DestinationStatus::Accepted &&
-            report._destinations[0]._reason == ErrorCode::None,
-            "Publication was not accepted by its sole destination");
-  }
 
   void send_one(Channel& channel, MessageView message, std::uint64_t sequence, bool measured,
                 const std::shared_ptr<detail::SessionState>& profileState)
@@ -302,90 +241,6 @@ namespace
     }
   }
 
-  // Every worker reaches the start barrier after its thread has been created.
-  // Stop the phase at the last worker's completion, excluding join overhead.
-  template <typename Function>
-  std::uint64_t run_workers(std::size_t count, Function function)
-  {
-    std::mutex mutex;
-    std::condition_variable condition;
-    std::size_t ready{};
-    bool released{};
-    bool cancelled{};
-    std::array<TimePoint, channel_count> finished{};
-    std::array<std::exception_ptr, channel_count> failures{};
-    std::vector<std::thread> workers;
-    workers.reserve(count);
-    try
-    {
-      for (std::size_t index = 0; index < count; ++index)
-      {
-        workers.emplace_back([&, index]
-        {
-          {
-            std::unique_lock lock{mutex};
-            ++ready;
-            condition.notify_all();
-            condition.wait(lock, [&]
-            {
-              return released;
-            });
-            if (cancelled)
-            {
-              return;
-            }
-          }
-          try
-          {
-            function(index);
-          }
-          catch (...)
-          {
-            failures[index] = std::current_exception();
-          }
-          finished[index] = Clock::now();
-        });
-      }
-    }
-    catch (...)
-    {
-      {
-        std::lock_guard lock{mutex};
-        cancelled = true;
-        released = true;
-      }
-      condition.notify_all();
-      for (auto& worker : workers)
-      {
-        worker.join();
-      }
-      throw;
-    }
-    TimePoint start;
-    {
-      std::unique_lock lock{mutex};
-      condition.wait(lock, [&]
-      {
-        return ready == count;
-      });
-      start = Clock::now();
-      released = true;
-    }
-    condition.notify_all();
-    for (auto& worker : workers)
-    {
-      worker.join();
-    }
-    for (std::size_t index = 0; index < count; ++index)
-    {
-      if (failures[index])
-      {
-        std::rethrow_exception(failures[index]);
-      }
-    }
-    return elapsed_ns(start, *std::max_element(finished.begin(), finished.begin() + count));
-  }
-
   void write_metrics(std::ostream& output, const std::vector<Channel>& channels)
   {
     bool first = true;
@@ -426,17 +281,7 @@ namespace
 
   void run(const Options& arguments)
   {
-    SessionOptions options;
-    options._name = "Native transport benchmark";
-    options._applicationVersion = "1";
-    options._directory = arguments._directory;
-    options._maxLogBytes = 64ULL * 1024 * 1024;
-    options._limits = CapacityLimits::empty().tasks(9).queues(4).source_sets(4).memberships_per_set(1)
-                          .fields(1).message_schemas(1);
-    options._defaults._ringCapacity = ring_capacity;
-    TaskDescriptor setup;
-    setup._name = "Setup";
-    auto created = value(Session::create(options, setup));
+    auto created = create_session(arguments._directory, "Native transport benchmark");
     auto registry = created._creator.registry();
 
     FieldDescriptor field;
@@ -463,32 +308,9 @@ namespace
     // contention without changing catalog geometry or the number of claims.
     std::vector<Channel> channels;
     channels.reserve(channel_count);
-    for (std::size_t index = 0; index < channel_count; ++index)
+    for (auto& endpoints : register_channels(created))
     {
-      const auto suffix = std::to_string(index + 1);
-      TaskDescriptor producerDescriptor;
-      producerDescriptor._name = "Producer" + suffix;
-      const auto producerId = value(registry.register_task(producerDescriptor));
-      TaskDescriptor consumerDescriptor;
-      consumerDescriptor._name = "Consumer" + suffix;
-      const auto consumerId = value(registry.register_task(consumerDescriptor));
-      SourceQueueSetDescriptor sourceDescriptor;
-      sourceDescriptor._name = "Inputs" + suffix;
-      sourceDescriptor._owner = consumerId;
-      const auto sourceId = value(registry.register_source_set(sourceDescriptor));
-      QueueDescriptor queueDescriptor;
-      queueDescriptor._name = "Queue" + suffix;
-      queueDescriptor._producer = producerId;
-      queueDescriptor._sourceSet = sourceId;
-      const auto queueId = value(registry.register_queue(queueDescriptor));
-      value(registry.activate_source_set(sourceId));
-      value(registry.activate_queue(queueId));
-      auto producer = value(created._session.attach_task(producerId));
-      auto consumer = value(created._session.attach_task(consumerId));
-      auto writer = value(producer.open_writer(queueId));
-      auto source = value(consumer.open_source_set(sourceId));
-      channels.emplace_back(std::move(producer), std::move(consumer), std::move(writer), std::move(source),
-                            arguments._messages / arguments._producers);
+      channels.emplace_back(std::move(endpoints), arguments._messages / arguments._producers);
     }
 
     const auto warmupPerChannel = arguments._warmupMessages / arguments._producers;

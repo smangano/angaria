@@ -3,6 +3,7 @@
 #include "angaria/detail/byte_operations.h"
 #include "delivery_runtime.h"
 #include "registry_access.h"
+#include "performance_diagnostics.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -587,6 +588,8 @@ namespace angaria::detail
 
   TopologySnapshot runtime_topology(RuntimeAccess& access)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(Topology);
+    ANGARIA_DIAGNOSTIC_COUNT(TopologyBuilds, 1);
     TopologySnapshot topology;
     topology._tasks = runtime_tasks(access);
     std::map<TaskId, std::uint64_t> tasks;

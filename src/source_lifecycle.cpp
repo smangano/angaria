@@ -1,5 +1,7 @@
 #include "source_runtime_state.h"
 
+#include "performance_diagnostics.h"
+
 #include "registry_access.h"
 #include "topology_state.h"
 
@@ -165,6 +167,7 @@ namespace angaria::detail
 
   void runtime_reconcile_sources(RuntimeAccess& access, const std::shared_ptr<TaskState>& task)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(SourceReconcile);
     // Snapshot only one shared reservation at a time. Release bookkeeping before
     // any journal work, while retaining the operation's already acquired gate.
     for (;;)

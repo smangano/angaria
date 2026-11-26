@@ -4,6 +4,7 @@
 #include "angaria/detail/checked_arithmetic.h"
 #include "journal_validation.h"
 #include "native_atomic.h"
+#include "performance_diagnostics.h"
 
 #include <algorithm>
 #include <array>
@@ -180,6 +181,8 @@ namespace angaria::detail
 
   void RuntimeAccess::index_records()
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(RecordIndex);
+    ANGARIA_DIAGNOSTIC_COUNT(IndexScans, 1);
     const auto layout = mapped::make_fixed_layout(_session->_controller->configuration()._limits);
     if (!layout || _snapshot._tail < layout->_arenaBegin ||
         _snapshot._tail % mapped::section_alignment != 0)
@@ -191,6 +194,7 @@ namespace angaria::detail
     // the same owning envelope copies instead of rescanning preceding records.
     for (auto offset = layout->_arenaBegin; offset < _snapshot._tail;)
     {
+      ANGARIA_DIAGNOSTIC_COUNT(IndexedRecords, 1);
       if (!mapped::contains_range(_snapshot._tail, offset, mapped::record_envelope_bytes))
       {
         runtime_fail(ErrorCode::IoError, "record", "Committed history ends inside a record envelope");
@@ -295,6 +299,7 @@ namespace angaria::detail
 
   std::vector<LoadedTask> runtime_tasks(RuntimeAccess& access)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(TaskCatalog);
     const auto capacity = access._session->_controller->configuration()._limits._tasks;
     const auto index = access.section_offset(mapped::SectionKind::TaskIndex);
     const auto states = access.section_offset(mapped::SectionKind::TaskState);
@@ -306,6 +311,7 @@ namespace angaria::detail
     std::set<std::uint64_t> definitions;
     for (std::size_t slot = 0; slot < capacity; ++slot)
     {
+      ANGARIA_DIAGNOSTIC_COUNT(TaskSlots, 1);
       const auto row = std::span{words}.subspan(slot * 8, 8);
       const auto state = std::span{stateWords}.subspan(slot * 32, 32);
       if (row[0] == 0)

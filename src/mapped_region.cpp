@@ -1,4 +1,5 @@
 #include "native_file_state.h"
+#include "performance_diagnostics.h"
 
 #include "angaria/detail/checked_arithmetic.h"
 
@@ -26,14 +27,17 @@ namespace angaria::detail::mapped
       {
         return;
       }
+      ANGARIA_DIAGNOSTIC_SCOPE(NativeUnmap);
       // A child has its own virtual mapping but must not lock inherited mutexes.
       // Multithreaded fork requires exec/_exit before library use or cleanup.
       if (_file->_ownerPid != static_cast<std::uint64_t>(::getpid()))
       {
+        ANGARIA_DIAGNOSTIC_COUNT(NativeUnmapCalls, 1);
         ::munmap(_address, _mappedLength);
         return;
       }
       std::lock_guard guard(_file->_inode->_mutex);
+      ANGARIA_DIAGNOSTIC_COUNT(NativeUnmapCalls, 1);
       ::munmap(_address, _mappedLength);
       _file->_inode->_mappingEnds.erase(_lease);
     }
@@ -100,6 +104,7 @@ namespace angaria::detail::mapped
   Result<MappedRegion> NativeFile::map_region(std::uint64_t offset, std::uint64_t length,
                                              bool writable) const
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(NativeMap);
     if (const auto error = check_file_owner(_state))
     {
       return *error;
@@ -144,6 +149,7 @@ namespace angaria::detail::mapped
     const auto lease = _state->_inode->_mappingEnds.insert(offset + length);
     const auto nativeLength = static_cast<std::size_t>(*mappedLength);
     const auto protection = PROT_READ | (writable ? PROT_WRITE : 0);
+    ANGARIA_DIAGNOSTIC_COUNT(NativeMapCalls, 1);
     void* const address = ::mmap(nullptr, nativeLength, protection, MAP_SHARED,
                                  _state->_fd, static_cast<off_t>(offset - delta));
     if (address == MAP_FAILED)
@@ -155,11 +161,14 @@ namespace angaria::detail::mapped
     if (address == nullptr)
     {
       // A null-address mapping cannot be represented as a C++ byte span.
+      ANGARIA_DIAGNOSTIC_COUNT(NativeMappedBytes, nativeLength);
+      ANGARIA_DIAGNOSTIC_COUNT(NativeUnmapCalls, 1);
       ::munmap(address, nativeLength);
       _state->_inode->_mappingEnds.erase(lease);
       return storage_error(ErrorCode::IoError, _state->_path, "Native mapping returned a null address");
     }
     region->_address = static_cast<std::byte*>(address);
+    ANGARIA_DIAGNOSTIC_COUNT(NativeMappedBytes, nativeLength);
     region->_lease = lease;
     region->_mappedLength = nativeLength;
     return MappedRegion(std::move(region));

@@ -131,6 +131,8 @@ Step 4.9, version `0.4.11`, adds [combined failure and exhaustion qualification]
 
 Completion requires contention, wraparound, resource-exhaustion, partial-write, and producer-termination tests, plus an audit of the [stated progress guarantees](docs/concurrency.md#supported-failure-and-progress-scope). The initial protocol serializes mutation; measure allocation/commit contention alongside latency and throughput for subsequent policy comparisons.
 
+The step-4.11 baseline exposed substantial preparation cost. Step **4.12**, version **0.4.14**, adds [detailed public-operation diagnostics](docs/performance-diagnostics.md), history/capacity/schema controls, and concurrent/idle-polling workloads. Integration into `main` is held until diagnosis, focused measured fixes, and performance/correctness qualification are reviewed. No runtime optimization is bundled into the diagnostic step.
+
 ## 5 Source Queue Sets
 
 - Implement receive operations through consumer-owned Source Queue Sets with per-queue priorities.

@@ -1,5 +1,7 @@
 #include "runtime_state.h"
 
+#include "performance_diagnostics.h"
+
 #include "task_claim_redo.h"
 #include "topology_state.h"
 
@@ -107,6 +109,7 @@ namespace angaria::detail
 
     void check_native(const std::shared_ptr<TaskState>& task, bool requireThread = true)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(TaskCheck);
       if (!task || !task->_session || !task->_session->_controller || !task->_lease)
       {
         runtime_fail(ErrorCode::InvalidState, "task", "Task has no live ownership state");
@@ -132,6 +135,7 @@ namespace angaria::detail
     TaskWords check_with_access(RuntimeAccess& access, const std::shared_ptr<TaskState>& task,
                                 const LoadedTask& loaded)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(TaskCheck);
       const auto words = task_words(access, loaded);
       if (task->_session->_controller.get() != access._session->_controller.get() ||
           loaded._definition._id != task->_claim._task || loaded._definition._descriptor._kind != task->_kind ||
