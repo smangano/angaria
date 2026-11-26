@@ -47,7 +47,9 @@ TOML is the common configuration format. YAML, JSON, and XML support is through 
 
 ### Sending one message
 
-A producer first obtains a `PublicationId`, then passes that identity and a `MessageView` to its output endpoint. A `MessageView` contains an exact schema, payload format, borrowed application bytes, and user flags. The send operation borrows those bytes only for the call; an accepted message retains its own stored bytes.
+A producer first obtains a `PublicationId`, then passes that identity and a `MessageView` to its output endpoint. The view's `_header` supplies its exact schema, payload format, payload byte count, and user flags; `_payload` borrows the application bytes. The send operation borrows those bytes only for the call; an accepted message retains its own stored bytes. Transport-owned publication and delivery metadata describes the accepted message, rather than being inferred from the caller's payload.
+
+A newly prepared header has an invalid default publication identity. `_publishedAt` is meaningful only when publication metadata is present; epoch zero alone never means absence. Sending uses the explicit request ID and the runtime clock to establish the new authoritative publication header. It reads schema, format, payload byte count, flags, and payload from the input view, without changing that view's header. If a stored message view is reused as new input, its old publication/delivery fields remain inspection data; they do not override the explicit new request identity or create destination metadata for the new publication.
 
 The proposed ordinary overload returns an **owning `PublicationOutcome`** through `Result<PublicationOutcome>`. Owning means that its destination results remain usable after the next operation or after the original output variables leave scope. The existing buffer-taking overload remains the path for callers that want to supply and reuse their own destination storage.
 
@@ -59,15 +61,36 @@ For a direct Queue there is one destination. For a Publishing Queue Set the snap
 
 ### Receiving and processing
 
-`SourceQueueSet::receive` returns a delivery, an allowed-loss gap, a timeout, or an error. A gap and a timeout are distinct events; neither owns a delivery slot. Source selection policy chooses among its Queues while preserving each Queue's message order.
+`SourceQueueSet::receive` returns a `Delivery`, an allowed-loss gap, a timeout, or an error. A gap and a timeout are distinct events; neither owns a delivery slot. Source selection policy chooses among its Queues while preserving each Queue's message order.
 
-A delivery supplies:
+The names describe ownership and delivery separately:
 
-- The original publication identity and message schema/format/bytes.
-- Its exact delivery token, including the consumer claim and issuance.
-- Initial publication, destination enqueue, and dequeue times.
+| Type | Purpose |
+| --- | --- |
+| `Message` | Owns its header and payload bytes, together with the dependencies needed to decode them later. |
+| `MessageView` | Holds the same header value and borrows read-only payload bytes. |
+| `Delivery` | Contains a `MessageView` in `_message` and the current acknowledgment/release token in `_token`. |
 
-The recommended default is a **borrowed `DeliveryView`**, backed by the Source's in-flight ownership. Applications that need a message after acknowledgment make an explicit owning copy first. That copy retains source schema/pool context as well as bytes, so later reclamation cannot invalidate pooled values. The ordinary path avoids copying every payload solely to make its lifetime invisible.
+Both message types expose a consistent `MessageHeader` as `_header`. Its common publication fields are schema, format, publication identity, publication time, payload byte count, and application flags. Its destination fields are Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. The destination fields are optional when no particular destination has been selected, as with a publication-only log record; a message received in a `Delivery` has those fields populated. Optional timestamps distinguish absence from a valid epoch-zero time.
+
+This is one logical C++ header. Its immutable publication information and destination-specific delivery information may come from different stored records; its public shape does not dictate the native or portable byte layout. In particular, each destination of a fan-out publication can have different enqueue/dequeue times while retaining the same original publication identity.
+
+An application inspects either message type through the same member path:
+
+```cpp
+const auto originalHeader = delivery._message._header;
+auto saved = value(delivery._message.copy_message(maxPayloadBytes));
+value(inputs.acknowledge(delivery._token));
+
+// saved._header preserves originalHeader, including its delivery metadata.
+// saved._payload and its decoding dependencies remain usable here.
+```
+
+The ordinary receive path borrows the payload through the Source's in-flight ownership. Applications that need it after acknowledgment explicitly copy the `MessageView` into a `Message`. `copy_message` preserves the **entire header unchanged**, copies the payload, and retains source schema/pool context, so later reclamation cannot invalidate referenced values. `Message::view()` exposes that same header with a borrowed span over the owning payload. Copying a view alone does not extend the payload's lifetime.
+
+`EncodedPayload::view()` also carries decoding context for prepared output. A raw header/span view constructed by an application is suitable for sending but has no inferred Session/catalog binding; its `copy_message` returns `InvalidState` if that binding is absent. Every library-provided delivery, log, encoded-payload, or owning-message view retains the required decoding dependencies while its payload remains borrowed.
+
+The private retention helper keeps decoding dependencies alive; it neither keeps the delivery in flight nor copies an active acknowledgment token into the owning `Message`. Consumer and delivery fields retained in its header are historical information. The ordinary path avoids copying every payload solely to make its lifetime invisible.
 
 Acknowledgment is explicit and happens after processing succeeds. Release makes the message available for another issuance. A destructor must not acknowledge an unprocessed message. Repeated receive while a delivery is already in flight returns the same issuance and time; an old token cannot acknowledge a subsequent redelivery.
 
@@ -102,7 +125,7 @@ The headers are the full declaration reference. This table explains the applicat
 | Publishing Queue Sets | Publish to an ordered snapshot, all-destination/partial acceptance, status lookup, retry rejected destinations. | Public declarations exist; full Publishing behavior follows its roadmap milestone. |
 | Source Queue Sets | Receive, acknowledge/release exact tokens, report gaps/timeouts, close explicitly, preserve borrowed-view lifetime. | Opening/identity implemented; private delivery progress exists. Public delivery and close remain planned. |
 | Policies | Two-plane/segmented storage; strict/fair/weighted-random selection; spin/eventfd waiting; recover-from-log/allowed-loss delivery; all/partial acceptance. | Policy value types exist. Runtime support depends on the implementation milestone and platform; choosing a value does not enable an unsupported policy. |
-| Message construction | Schema-driven values, binary codecs, message views, owning/borrowed portable records. | Scalar/basic logical values and binary/record codecs implemented. Complete Field families and serializers are proposed. |
+| Message construction | Schema-driven values and codecs; owning `Message` and borrowed `MessageView` with the same `MessageHeader`; `Delivery` carries a view and its token; owning/borrowed portable records. | Scalar/basic logical values and binary/record codecs implemented. The consistent proposed message/header model, complete Field families, and serializers remain review declarations. |
 | Complete Fields and pools | Wider bit fields, temporal values, durations, sequence/GUID values, arrays, tuples, repeating groups, constraints, symbols and UTF-8 strings. | Proposed full-roadmap schema/value surface. Pool lifetime, bounds, and portable representation remain explicit. |
 | Generic inspection | Decode messages without application-specific C++ types, retain exact catalogs, render structured/text output. | Existing capture inspector implements bounded text rendering for supported Binary values. Broader structured inspection and formats are proposed. |
 | Runtime diagnostics | Task liveness, Queue sequence/backlog/progress, Source pin/issuance/selection state, Publishing topology, storage use/extents. | Task diagnostics implemented. A coherent public runtime/storage inspection surface is proposed, separate from definition-only Registry snapshots. |
@@ -176,9 +199,9 @@ Before reinjection, the example's application callback persists the source bookm
 
 ## Choices to review before adopting this proposal
 
-The first two defaults remain proposed. The replay direction is agreed; its detailed signatures are still part of this review:
+The message naming/header model and replay direction are agreed. The owning-outcome default and detailed signatures remain part of this review:
 
-1. **Borrowed deliveries with explicit owning copies.** Recommended for ordinary processing. This preserves the existing low-copy design and makes retention after acknowledgment an explicit choice. The alternative is an owning-message default, which is simpler to retain but copies every received payload.
+1. **`Message`, `MessageView`, and `Delivery` with one consistent header.** This naming and ownership model is agreed: `Message` owns, `MessageView` borrows payload bytes, and `Delivery` adds the acknowledgment token. Owning copies preserve the complete `MessageHeader` and decoding dependencies. Detailed signatures remain part of this review.
 2. **Owning publication outcomes for the ordinary overload, reusable buffers for controlled allocation.** Recommended for the small bounded topology. The owning result is easier to store and inspect; the buffer overload remains available where allocation matters. Its exact error/uncertainty representation needs to remain consistent with the existing publication contract.
 3. **Message replay by default, optional input tracing when needed.** This direction is agreed. The proposed recorder/replay signatures still need review. Whole-application determinism and a global cross-process execution trace are not implied.
 

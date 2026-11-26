@@ -8,6 +8,7 @@
 #include <functional>
 #include <ostream>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -15,6 +16,11 @@ namespace angaria::api_review
 {
   namespace api = angaria::proposed;
   using namespace std::chrono_literals;
+
+  static_assert(std::is_same_v<decltype(api::Message::_header), api::MessageHeader>);
+  static_assert(std::is_same_v<decltype(api::MessageView::_header), api::MessageHeader>);
+  static_assert(std::is_same_v<std::variant_alternative_t<0, api::ReceiveResult>, api::Delivery>);
+  static_assert(std::is_copy_constructible_v<api::Message>);
 
   template <typename T>
   T value(Result<T> result)
@@ -35,16 +41,31 @@ namespace angaria::api_review
   using ProcessValues = std::function<OperationResult(
       std::span<const api::FieldValue>, const api::MessageContext&)>;
 
-  Result<std::vector<api::FieldValue>> decode_delivery(const api::DeliveryView& delivery,
+  api::MessageView prepared_message(SchemaId schema, PayloadFormat format,
+      std::span<const std::byte> payload, std::uint32_t flags = 0)
+  {
+    // Application input supplies only construction fields. Publication and
+    // destination identity/times are established by the runtime, not invented
+    // by the caller while it is preparing bytes for a future send.
+    api::MessageHeader header;
+    header._schema = schema;
+    header._format = format;
+    header._payloadBytes = payload.size();
+    header._flags = flags;
+    return {header, payload};
+  }
+
+  Result<std::vector<api::FieldValue>> decode_delivery(const api::Delivery& delivery,
       const api::SchemaCodec& codec, const api::PoolContext& pools)
   {
-    if (codec.schema() != delivery._message._schema ||
-        codec.schema_session() != delivery._publication._producer._session)
+    const auto& header = delivery._message._header;
+    if (codec.schema() != header._schema ||
+        codec.schema_session() != header._publication._producer._session)
     {
       return Error{ErrorCode::SchemaConflict,
           "Route each delivery to its exact Session/schema codec", "example.schema"};
     }
-    return codec.decode(delivery._message._payload, delivery._message._format, pools);
+    return codec.decode(delivery._message._payload, header._format, pools);
   }
 
   void initialize(const std::filesystem::path& toml)
@@ -104,7 +125,7 @@ namespace angaria::api_review
       std::span<const api::FieldValue> values, const RememberRequest& remember)
   {
     const auto payload = value(feed._codec.encode(values, PayloadFormat::Binary, feed._pools));
-    const api::MessageView message{feed._codec.schema(), payload.format(), payload.bytes(), 0};
+    const auto message = payload.view();
     const auto publication = value(feed._task.next_publication_id());
     value(remember(publication, message));
 
@@ -199,7 +220,7 @@ namespace angaria::api_review
     {
       return std::monostate{};
     }
-    const auto& delivery = std::get<api::DeliveryView>(received);
+    const auto& delivery = std::get<api::Delivery>(received);
     const auto values = [&]() -> Result<std::vector<api::FieldValue>>
     {
       if (trace)
@@ -231,6 +252,23 @@ namespace angaria::api_review
       return *error;
     }
     return inputs.acknowledge(delivery._token);
+  }
+
+  api::Message retain_message_before_acknowledgment(api::SourceQueueSet& inputs,
+      const api::Delivery& delivery, std::uint64_t maxPayloadBytes)
+  {
+    // This declaration-only example makes the copy contract visible: owning
+    // bytes and decode dependencies does not discard the complete header or
+    // keep the Source's delivery in flight. Both message forms expose _header.
+    const auto expected = delivery._message._header;
+    auto saved = value(delivery._message.copy_message(maxPayloadBytes));
+    if (saved._header != expected || saved.view()._header != expected)
+    {
+      throw std::runtime_error("An owning copy must preserve the complete MessageHeader");
+    }
+    value(inputs.acknowledge(delivery._token));
+    // The returned Message remains usable after the borrowed delivery ends.
+    return saved;
   }
 
   struct StrategyEndpoints
@@ -384,7 +422,7 @@ namespace angaria::api_review
     }
     const auto values = value(record.decode(sourceCodec));
     const auto payload = value(targetCodec.encode(values, PayloadFormat::Binary, targetPools));
-    const api::MessageView message{targetCodec.schema(), payload.format(), payload.bytes(), record._message._flags};
+    const auto message = payload.view(record._message._header._flags);
     const auto publication = value(testProducer.next_publication_id());
     // Persist source position -> target ID and owning logical input before the
     // attempt. After a crash, resolve that ID before advancing/reinjecting.

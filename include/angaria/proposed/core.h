@@ -20,30 +20,67 @@ namespace angaria::proposed
   class Task;
   class Registry;
   struct CreatedSession;
+  struct Message;
   namespace detail
   {
     class MessageRetention;
   }
 
-  struct MessageView
+  struct MessageHeader
   {
     SchemaId _schema{};
     PayloadFormat _format{PayloadFormat::Binary};
-    std::span<const std::byte> _payload;
+    // An invalid publication identity marks prepared/outgoing input. The
+    // publication time is meaningful with a valid identity; epoch zero is valid.
+    PublicationId _publication{};
+    UtcTimestamp _publishedAt{};
+    std::uint64_t _payloadBytes{};
     std::uint32_t _flags{};
+    // Absent for a publication without a selected destination. A received
+    // Delivery supplies these fields, including epoch-zero timestamps.
+    std::optional<QueueId> _queue;
+    std::optional<std::uint64_t> _queueSequence;
+    std::optional<TaskClaim> _consumer;
+    std::optional<UtcTimestamp> _enqueuedAt;
+    std::optional<UtcTimestamp> _dequeuedAt;
+
+    bool operator==(const MessageHeader&) const = default;
+  };
+
+  struct MessageView
+  {
+    MessageHeader _header;
+    std::span<const std::byte> _payload;
+
+    MessageView() noexcept = default;
+    // Raw caller bytes for send/publish; the caller owns their lifetime.
+    MessageView(MessageHeader header, std::span<const std::byte> payload);
+    // While the borrow is valid, copy the complete header and bytes, retaining
+    // all decoding dependencies. Library/Message/EncodedPayload views carry that
+    // context. An unbound raw view returns InvalidState rather than guessing a
+    // Session/catalog. Capacity/allocation errors leave the borrow unchanged.
+    Result<Message> copy_message(std::uint64_t maxPayloadBytes) const;
+
+  private:
+    friend struct Message;
+    friend struct Delivery;
+    friend class LogCursor;
+    friend class EncodedPayload;
+    // Shares schema/pool dependencies only, never payload storage or a Source
+    // pin. Copying a view does not extend its borrowed payload lifetime.
+    std::shared_ptr<const detail::MessageRetention> _retention;
   };
   struct Message
   {
-    SchemaId _schema{};
-    PayloadFormat _format{PayloadFormat::Binary};
+    MessageHeader _header;
     std::vector<std::byte> _payload;
-    std::uint32_t _flags{};
     SessionId schema_session() const;
     Result<std::vector<FieldValue>> decode(const SchemaCodec& codec) const;
+    // Returns the same header by value and borrows only the payload bytes.
     MessageView view() const &;
     MessageView view() const && = delete;
   private:
-    friend struct DeliveryView;
+    friend struct MessageView;
     friend class LogCursor;
     // Owning copies retain source schema/pool context, not just native bytes.
     // They remain decodable after acknowledgment and later log reclamation.
@@ -54,25 +91,16 @@ namespace angaria::proposed
   // A replay context is never a live acknowledgment token.
   struct MessageContext
   {
-    PublicationId _publication{};
-    UtcTimestamp _publishedAt{};
-    std::optional<QueueId> _queue;
-    std::optional<std::uint64_t> _queueSequence;
-    std::optional<UtcTimestamp> _enqueuedAt;
-    std::optional<UtcTimestamp> _dequeuedAt;
+    MessageHeader _header;
     bool _replayed{};
   };
 
-  struct DeliveryView
+  struct Delivery
   {
-    DeliveryToken _token{};
-    PublicationId _publication{};
     MessageView _message;
-    UtcTimestamp _publishedAt{};
-    UtcTimestamp _enqueuedAt{};
-    UtcTimestamp _dequeuedAt{};
+    DeliveryToken _token{};
+    // Copies _message._header without changing its provenance/timestamps.
     MessageContext context() const;
-    Result<Message> copy_message(std::uint64_t maxPayloadBytes) const;
   };
 
   struct DeliveryGap
@@ -84,7 +112,7 @@ namespace angaria::proposed
   struct ReceiveTimeout
   {
   };
-  using ReceiveResult = std::variant<DeliveryView, DeliveryGap, ReceiveTimeout, Error>;
+  using ReceiveResult = std::variant<Delivery, DeliveryGap, ReceiveTimeout, Error>;
 
   enum class AcceptanceStatus
   {
@@ -318,6 +346,10 @@ namespace angaria::proposed
     QueueWriter(const QueueWriter&) = delete;
     QueueWriter& operator=(const QueueWriter&) = delete;
     QueueId id() const;
+    // Input header schema/format/payloadBytes/flags describe the bytes; size must
+    // match the span. Explicit id and runtime clocks establish authoritative
+    // publication/destination metadata. Historical input provenance is ignored,
+    // never used to override the request, and the caller's header is unchanged.
     Result<PublicationOutcome> send(PublicationId id, MessageView message);
     PublicationReport send(PublicationId id, MessageView message, std::span<DestinationOutcome> output);
   private:
@@ -348,6 +380,7 @@ namespace angaria::proposed
     PublishingQueueSet(const PublishingQueueSet&) = delete;
     PublishingQueueSet& operator=(const PublishingQueueSet&) = delete;
     PublishingQueueSetId id() const;
+    // The same input-only header and authoritative request/time rules as send.
     Result<PublicationOutcome> publish(PublicationId id, MessageView message);
     Result<PublicationOutcome> retry(PublicationId id, std::span<const QueueId> destinations);
     PublicationReport publish(PublicationId id, MessageView message, std::span<DestinationOutcome> output);

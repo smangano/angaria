@@ -25,6 +25,7 @@ namespace angaria::proposed
   class Session;
   class Task;
   class LogArchive;
+  struct MessageView;
   class Registry;
   struct RegistrySnapshot;
 
@@ -491,6 +492,9 @@ namespace angaria::proposed
     PayloadFormat format() const;
     std::span<const std::byte> bytes() const &;
     std::span<const std::byte> bytes() const && = delete;
+    // Prepared unified header plus borrowed bytes and decoding context.
+    MessageView view(std::uint32_t flags = 0) const &;
+    MessageView view(std::uint32_t flags = 0) const && = delete;
     // Native pool leases remain owned until publication copies their retention
     // obligations or this payload is destroyed. No native offsets are exposed.
 

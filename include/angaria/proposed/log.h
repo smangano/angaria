@@ -122,7 +122,7 @@ namespace angaria::proposed
     AcceptanceAttemptKind _kind{AcceptanceAttemptKind::Initial};
     TaskClaim _actor{};
     // Present only when a common attempt timestamp was recorded. The initial
-    // Publication has its own _publishedAt; individual accepted destination
+    // Publication time is in _message._header; individual accepted destination
     // timestamps remain in outcomes and are never synthesized from it.
     std::optional<UtcTimestamp> _acceptedAt;
     // Exactly the outcomes retained by this attempt, not cumulative receipt
@@ -135,7 +135,6 @@ namespace angaria::proposed
     TaskClaim _consumer{};
     std::uint64_t _ordinal{};
     std::chrono::nanoseconds _elapsed{}; // Monotonic elapsed time in this trace.
-    MessageContext _context; // Original handler context, before replay marking.
     DeliveryToken _recordedToken{}; // Historical issuance data, not ownership.
   };
 
@@ -144,7 +143,6 @@ namespace angaria::proposed
   public:
     ReplayOrigin _origin;
     Message _message;
-    UtcTimestamp _publishedAt{};
     std::uint64_t _topologyRevision{};
     std::optional<PublishingQueueSetId> _publishingSet;
     std::vector<LoggedAcceptanceOutcome> _originalDestinations;
@@ -158,6 +156,12 @@ namespace angaria::proposed
     // cumulative, and selected-attempt arrays all charge materialization caps.
     std::optional<AcceptanceAttempt> _selectedAttempt;
     std::optional<RecordedInput> _recordedInput; // ExecutionTrace projection only.
+
+    // The owning message header is authoritative: publication matches _origin.
+    // publications()/acceptance_attempts() have no selected destination header;
+    // deliveries() fills it from the selected snapshot. Recorded inputs retain
+    // the EXACT header at observation, never recomputed from a later receipt.
+    // Its queue/sequence/consumer must agree with the recorded historical token.
 
     // Owning values resolve recorded Symbol/String references through this
     // record's retained archive context, never a pool in a live target Session.
@@ -327,7 +331,7 @@ namespace angaria::proposed
     // power-loss durability. An I/O failure is terminal; only close is usable,
     // and readers can inspect the validated complete prefix, not skip a bad tail.
     // Return this recorder's input ordinal, not an immutable-cut seek bookmark.
-    Result<std::uint64_t> record_input(const DeliveryView& delivery);
+    Result<std::uint64_t> record_input(const Delivery& delivery);
     OperationResult close();
   private:
     std::shared_ptr<detail::InputTraceState> _state;
