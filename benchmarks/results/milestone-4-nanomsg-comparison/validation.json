@@ -1,0 +1,60 @@
+{
+  "measured_source_commit": "05f1858876e38d4fd3bebe1022c96b963e816d75",
+  "framework_version": "0.4.30",
+  "comparison_run_id": 46062073173,
+  "artifact_id": 15229775815,
+  "github_reported_artifact_digest": "sha256:7be3078e0fb1301fd81f4e01454f61fc2c6c0810f64e254db67ee01028258034",
+  "source_hashes_verified": 8,
+  "complete_attempts": 180,
+  "verified_deliveries": 2880,
+  "acknowledged_angaria_deliveries": 1440,
+  "incomplete_attempts": 0,
+  "pending_deliveries": 0,
+  "checks": [
+    {
+      "job_id": 140718380611,
+      "verification": [
+        "2026-11-27T20:16:40.5573213Z 100% tests passed, 0 tests failed out of 830"
+      ]
+    },
+    {
+      "job_id": 140718380485,
+      "verification": [
+        "2026-11-27T20:16:56.1074731Z 100% tests passed, 0 tests failed out of 830"
+      ]
+    },
+    {
+      "job_id": 140718380822,
+      "verification": [
+        "2026-11-27T20:16:11.6821860Z 100% tests passed out of 830"
+      ]
+    },
+    {
+      "job_id": 140718475649,
+      "verification": [
+        "2026-11-27T20:14:47.3690912Z IPC comparison: eight real cohorts, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed",
+        "2026-11-27T20:15:56.5297998Z Attempt 180/180 angaria H=128 B=1024: complete"
+      ]
+    },
+    {
+      "job_id": 140718475986,
+      "verification": [
+        "2026-11-27T20:14:26.5598170Z IPC comparison: eight real cohorts, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed"
+      ]
+    },
+    {
+      "job_id": 140718476155,
+      "verification": [
+        "2026-11-27T20:14:29.1413042Z IPC comparison: eight real cohorts, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed"
+      ]
+    }
+  ],
+  "independent_audit": {
+    "worker_reports": 360,
+    "reconstructed_payload_hashes": 5760,
+    "clock_brackets": 1080,
+    "dependency_packets": 540,
+    "balanced_blocks": 45,
+    "raw_report_equality": true
+  }
+}

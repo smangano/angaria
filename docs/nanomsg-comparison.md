@@ -11,6 +11,8 @@ The two profiles provide different guarantees:
 
 A timing ratio includes differences in recording, validation, synchronization, allocation, buffering, and transport. It cannot isolate the cost of acknowledgment. The [recorded unacknowledged Angaria profile](recorded-unacknowledged-delivery-plan.md) remains planned work. This step changes no public API or runtime guarantee. The primer's seventeen runnable examples were reviewed and require no changes.
 
+[Retained Linux measurements and plots](../benchmarks/results/milestone-4-nanomsg-comparison/README.md) show the current baseline, including long concurrent-process stalls.
+
 ## Build and qualify
 
 The comparison dependency is optional and OFF by default. Ordinary Angaria builds do not fetch or link nanomsg. Opting in fetches classic **libnanomsg 1.3.0**, statically linked into the comparison executable. CMake pins source commit `73e89d2ca28d11cbd39bb15e8d2e1edeb7eec68a` and the archive SHA-256 `acf65c0ef312f431aa3c4cb114326781c999ec0c977067f3a1f0c81b5ec8710f`. This is classic libnanomsg, not NNG.
@@ -39,7 +41,7 @@ The destination must be new. Defaults are 16 measured messages, payloads of 64/2
 
 `--smoke` uses four short attempts. `--messages`, `--histories`, `--payload-bytes`, `--blocks`, `--budget-ms`, and `--timeout` bound experiments. `--interval-ns` specifies an offered schedule. Its default zero makes all messages due at T0, a finite burst. Positive intervals retain the original release time when a producer falls behind. This prevents late messages from disappearing from scheduled latency. The last release must precede the phase deadline.
 
-Both profiles use the same 32-byte little-endian envelope and deterministic remaining bytes. The coordinator independently reconstructs the expected bytes and FNV-1a hash for every accepted/verified sequence. It rejects missing, duplicated, changed, or reordered identities in complete runs. Raw worker timestamps and actual Angaria publication identities remain available for audit.
+Static endpoint identities are captured before START; measured verification compares local header values and payload bytes. Both profiles use the same 32-byte little-endian envelope and deterministic remaining bytes. The coordinator independently reconstructs the expected bytes and FNV-1a hash for every accepted/verified sequence. It rejects missing, duplicated, changed, or reordered identities in complete runs. Raw worker timestamps and actual Angaria publication identities remain available for audit.
 
 The executable uses the public Angaria API: a fresh Session, three Tasks (setup and the two workers), one Queue, one Source with one Active Queue, an eight-slot ring, and a 64 MiB log limit. Producers include ID issuance in the complete producer path. Angaria receives a borrowed view of logged bytes; this is not an equal receive-copy-count experiment. Nanomsg uses copying PUSH/PULL calls over a fresh UNIX-domain IPC endpoint, one pair for this 1:1 edge. The requested socket buffers default to 131,072 bytes; actual values are recorded. Finite nonblocking retries/polls enforce a common work deadline. Nanomsg connection readiness is checked before START, including H=0; no hidden warmup payload is sent there.
 
