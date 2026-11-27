@@ -78,6 +78,83 @@ namespace angaria::detail::mapped
       return *sum;
     }
 
+    // Scan-local mappings avoid a native read/stat/map cycle for every record.
+    // A window never extends beyond the prefix being validated, so recovery can
+    // release it before shrinking an unaccepted append back to its original end.
+    class PrefixReader
+    {
+    public:
+      PrefixReader(NativeFile& file, std::uint64_t arena, std::uint64_t tail)
+          : _file(file), _arena(arena), _tail(tail)
+      {
+      }
+
+      std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length)
+      {
+        check_range(offset, length);
+        std::vector<std::byte> bytes(host_size(length));
+        copy_bytes(offset, bytes);
+        return bytes;
+      }
+
+      void copy_bytes(std::uint64_t offset, std::span<std::byte> output)
+      {
+        check_range(offset, output.size());
+        while (!output.empty())
+        {
+          ensure_window(offset);
+          const auto delta = host_size(offset - _windowBegin);
+          const auto count = std::min(output.size(), _bytes.size() - delta);
+          std::copy_n(_bytes.begin() + delta, count, output.begin());
+          offset += count;
+          output = output.subspan(count);
+        }
+      }
+
+      std::uint64_t load_acquire(std::uint64_t offset)
+      {
+        check_range(offset, sizeof(std::uint64_t));
+        ensure_window(offset);
+        // Record readiness is eight-byte aligned. It cannot straddle a
+        // 64 KiB boundary, and still uses the live mapped atomic adapter.
+        return value_or_throw<JournalFailure>(AtomicWord::bind(
+            _bytes, host_size(offset - _windowBegin))).load_acquire();
+      }
+
+    private:
+      void check_range(std::uint64_t offset, std::uint64_t length) const
+      {
+        if (offset < _arena || !contains_range(_tail, offset, length))
+        {
+          fail(ErrorCode::IoError, "Journal read extends beyond the committed prefix");
+        }
+      }
+
+      void ensure_window(std::uint64_t offset)
+      {
+        if (!_bytes.empty() && offset >= _windowBegin &&
+            contains_range(_bytes.size(), offset - _windowBegin, 1))
+        {
+          return;
+        }
+        _bytes = {};
+        _mapping = {};
+        const auto begin = offset - offset % _windowBytes;
+        const auto length = std::min(_windowBytes, _tail - begin);
+        _mapping = value_or_throw<JournalFailure>(_file.map_read_write(begin, length));
+        _bytes = value_or_throw<JournalFailure>(_mapping.writable_bytes());
+        _windowBegin = begin;
+      }
+
+      static constexpr std::uint64_t _windowBytes = 64 * 1024;
+      NativeFile& _file;
+      std::uint64_t _arena{};
+      std::uint64_t _tail{};
+      std::uint64_t _windowBegin{};
+      MappedRegion _mapping;
+      std::span<std::byte> _bytes;
+    };
+
     std::vector<std::byte> read_bytes(NativeFile& file, std::uint64_t offset, std::uint64_t length)
     {
       if (!contains_range(value_or_throw<JournalFailure>(file.size()), offset, length))
@@ -87,6 +164,11 @@ namespace angaria::detail::mapped
       std::vector<std::byte> bytes(host_size(length));
       value_or_throw<JournalFailure>(file.read_exact(offset, bytes));
       return bytes;
+    }
+
+    std::vector<std::byte> read_bytes(PrefixReader& reader, std::uint64_t offset, std::uint64_t length)
+    {
+      return reader.read_bytes(offset, length);
     }
 
     std::uint64_t load_at(NativeFile& file, std::uint64_t offset)
@@ -101,13 +183,29 @@ namespace angaria::detail::mapped
       value_or_throw<JournalFailure>(AtomicWord::bind(value_or_throw<JournalFailure>(mapping.writable_bytes()), 0)).store_release(value);
     }
 
-    RecordEnvelope read_envelope(NativeFile& file, std::uint64_t offset)
+    std::uint64_t load_at(PrefixReader& reader, std::uint64_t offset)
+    {
+      return reader.load_acquire(offset);
+    }
+
+    void copy_bytes(NativeFile& file, std::uint64_t offset, std::span<std::byte> output)
+    {
+      value_or_throw<JournalFailure>(file.read_exact(offset, output));
+    }
+
+    void copy_bytes(PrefixReader& reader, std::uint64_t offset, std::span<std::byte> output)
+    {
+      reader.copy_bytes(offset, output);
+    }
+
+    template <typename Reader>
+    RecordEnvelope read_envelope(Reader& file, std::uint64_t offset)
     {
       RecordEnvelopeBytes bytes{};
       // Readiness is always atomic, including when assembling a local decoder input.
-      value_or_throw<JournalFailure>(file.read_exact(offset, std::span{bytes}.first(48)));
+      copy_bytes(file, offset, std::span{bytes}.first(48));
       write_unsigned_le(bytes, 48, load_at(file, add(offset, 48, ErrorCode::IoError)));
-      value_or_throw<JournalFailure>(file.read_exact(add(offset, 56, ErrorCode::IoError), std::span{bytes}.subspan(56)));
+      copy_bytes(file, add(offset, 56, ErrorCode::IoError), std::span{bytes}.subspan(56));
       return value_or_throw<JournalFailure>(decode_record_envelope(bytes));
     }
 
@@ -135,7 +233,8 @@ namespace angaria::detail::mapped
       }
     }
 
-    JournalRecordRange read_range(NativeFile& file, std::uint64_t offset, std::uint64_t end,
+    template <typename Reader>
+    JournalRecordRange read_range(Reader& file, std::uint64_t offset, std::uint64_t end,
                                   std::uint64_t arena)
     {
       if (!contains_range(end, offset, record_envelope_bytes))
@@ -152,7 +251,8 @@ namespace angaria::detail::mapped
       return value_or_throw<JournalFailure>(validate_journal_record(offset, envelope, body, arena));
     }
 
-    Manifest read_manifest(NativeFile& file, const JournalRecordRange& record)
+    template <typename Reader>
+    Manifest read_manifest(Reader& file, const JournalRecordRange& record)
     {
       return value_or_throw<JournalFailure>(decode_manifest_body(read_bytes(file, record._offset + record_envelope_bytes,
                                                   record._envelope._immutableBytes), record._offset));
@@ -183,13 +283,14 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::IoError, "Committed allocation tail is invalid");
       }
+      PrefixReader reader(file, arena, tail);
       std::size_t groupStart{};
       std::uint64_t groupGeneration{};
       std::uint64_t previousGeneration{};
       for (auto offset = arena; offset < tail;)
       {
         ANGARIA_DIAGNOSTIC_COUNT(PrefixRecords, 1);
-        auto record = read_range(file, offset, tail, arena);
+        auto record = read_range(reader, offset, tail, arena);
         const auto& envelope = record._envelope;
         if (envelope._readiness != 2 || envelope._generation > generation)
         {
@@ -210,7 +311,7 @@ namespace angaria::detail::mapped
         }
         if (envelope._kind == 11)
         {
-          const auto manifest = read_manifest(file, record);
+          const auto manifest = read_manifest(reader, record);
           if (prefix._ranges.size() == groupStart || envelope._previous != prefix._manifest ||
               manifest._baseRevision != prefix._revision || manifest._newRevision != envelope._registryRevision)
           {

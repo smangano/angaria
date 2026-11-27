@@ -398,6 +398,42 @@ namespace
       return directory;
     }
 
+    // Private framing fixture, not registered application topology. A filler
+    // ring puts a Task body across a 64 KiB boundary; a later ring's large redo
+    // command also makes the final manifest span more than one scan window.
+    mapped::TransactionPlan window_crossing_plan(const mapped::JournalSnapshot& base)
+    {
+      constexpr std::uint64_t window_bytes = 64 * 1024;
+      constexpr std::uint64_t task_bytes = 192;
+      auto plan = make_plan(base, _configuration, true);
+      const auto boundary = ((base._tail + task_bytes + 192) / window_bytes + 1) * window_bytes;
+      const auto crossing_reference = boundary - 128;
+      const auto filler_reference = base._tail + task_bytes;
+
+      mapped::JournalRecord filler;
+      filler._kind = 8;
+      filler._mutable.resize(crossing_reference - filler_reference - mapped::record_envelope_bytes);
+      plan._records.push_back(std::move(filler));
+
+      auto crossing = plan._records.front();
+      crossing._previous = base._tail;
+      put_integer(crossing._immutable, 32, crossing_reference + mapped::record_envelope_bytes + 72);
+      plan._records.push_back(std::move(crossing));
+
+      mapped::JournalRecord ring;
+      ring._kind = 8;
+      ring._mutable.resize(window_bytes);
+      plan._records.push_back(std::move(ring));
+
+      mapped::RedoCommand large_redo;
+      large_redo._target = crossing_reference + task_bytes + mapped::record_envelope_bytes;
+      large_redo._payload.resize(window_bytes);
+      put_integer(large_redo._payload, 0, 0x0123456789abcdef);
+      put_integer(large_redo._payload, large_redo._payload.size() - 8, 0xfedcba9876543210);
+      plan._commands.push_back(std::move(large_redo));
+      return plan;
+    }
+
     std::uint64_t task_state() const
     {
       return section_offset(_configuration, mapped::SectionKind::TaskState);
@@ -678,6 +714,101 @@ namespace
     ASSERT_EQ(records.size(), 4u);
     EXPECT_EQ(records.front()._offset, first._records.at(0));
     EXPECT_EQ(records.back()._offset, second._manifest);
+  }
+
+  // The scan must assemble metadata across window boundaries, including a
+  // manifest whose redo stream is larger than one window. Later corruption in
+  // its final padding must still be seen by a fresh scan under the same guard.
+  TEST_F(MutationJournalTest, WindowedPrefixValidatesCrossingMetadataAndLargeManifestsFreshly)
+  {
+    constexpr std::uint64_t window_bytes = 64 * 1024;
+    _configuration._maxLogBytes = 1024 * 1024;
+    Access access(make_session());
+    const auto plan = window_crossing_plan(require_value(access._journal.snapshot(access._guard)));
+    const auto accepted = require_value(access._journal.execute(access._guard, plan));
+    std::vector<mapped::JournalRecordRange> records;
+    const auto before = require_value(access._journal.snapshot(access._guard, records));
+    ASSERT_EQ(records.size(), 5u);
+    ASSERT_EQ(accepted._records.size(), 4u);
+    EXPECT_EQ(records[2]._offset % window_bytes, window_bytes - 128);
+    EXPECT_EQ(records[2]._envelope._kind, 2u);
+    EXPECT_EQ(records[2]._envelope._previous, accepted._records.front());
+    EXPECT_EQ(records[2]._envelope._immutableBytes, 128u);
+    for (std::size_t index = 0; index != accepted._records.size(); ++index)
+    {
+      EXPECT_EQ(records[index]._offset, accepted._records[index]);
+      EXPECT_EQ(records[index]._envelope._readiness, 2u);
+    }
+    ASSERT_EQ(records.back()._offset, accepted._manifest);
+    const auto manifest_bytes = records.back()._envelope._immutableBytes;
+    ASSERT_GT(manifest_bytes, window_bytes);
+    EXPECT_NE(before._tail % window_bytes, 0u);
+
+    const auto image = access.image();
+    const auto manifest = require_value(mapped::decode_manifest_body(
+        std::span{image}.subspan(accepted._manifest + mapped::record_envelope_bytes, manifest_bytes),
+        accepted._manifest));
+    EXPECT_EQ(manifest._records, accepted._records);
+    EXPECT_EQ(manifest._commands, plan._commands);
+    EXPECT_EQ(access.word(plan._commands.back()._target), 0x0123456789abcdefu);
+    EXPECT_EQ(access.word(plan._commands.back()._target + window_bytes - 8), 0xfedcba9876543210u);
+
+    const auto padding_offset = accepted._manifest + mapped::record_envelope_bytes + manifest_bytes - 1;
+    ASSERT_GT(padding_offset, 3 * window_bytes);
+    ASSERT_EQ(image[padding_offset], std::byte{});
+    const std::array corrupt{std::byte{1}};
+    require_value(access.file().write_exact(padding_offset, corrupt));
+    const auto evidence = access.image();
+    expect_error(access._journal.snapshot(access._guard, records), ErrorCode::IoError);
+    EXPECT_TRUE(records.empty());
+    EXPECT_EQ(access.image(), evidence);
+
+    const std::array repaired{std::byte{0}};
+    require_value(access.file().write_exact(padding_offset, repaired));
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard, records)), before);
+    ASSERT_EQ(records.size(), 5u);
+    EXPECT_EQ(records.back()._offset, accepted._manifest);
+  }
+
+  // A scan of a large committed base ends at its partial final window, not at
+  // an unaccepted append's longer physical EOF. Real FileGrowth failure must
+  // therefore roll back without a scan mapping lease obstructing the shrink.
+  TEST_F(MutationJournalTest, LargePrefixWindowsDoNotObstructPreparedAppendRollback)
+  {
+    _configuration._maxLogBytes = 1024 * 1024;
+    FailingInjector injector(mapped::JournalCheckpoint::FileGrowth);
+    injector._active = false;
+    Access access(make_session(), &injector);
+    require_value(access._journal.execute(access._guard,
+        window_crossing_plan(require_value(access._journal.snapshot(access._guard)))));
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    const auto before = access.image();
+    auto plan = make_plan(base, _configuration, true);
+    put_integer(plan._commands[0]._payload, 0, 33);
+    put_integer(plan._commands[1]._payload, 0, 44);
+    injector._active = true;
+
+    expect_error(access._journal.execute(access._guard, plan), ErrorCode::IoError);
+    EXPECT_TRUE(injector._fired);
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+    EXPECT_EQ(require_value(access.file().size()), base._fileBytes);
+    EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
+    EXPECT_EQ(access.word(task_state()), 11u);
+    EXPECT_EQ(access.word(task_state() + 8), 22u);
+    const auto after = access.image();
+    const auto arena = mapped::make_fixed_layout(_configuration._limits)->_arenaBegin;
+    ASSERT_EQ(after.size(), before.size());
+    EXPECT_TRUE(std::equal(before.begin() + arena, before.end(), after.begin() + arena));
+
+    const auto accepted = require_value(access._journal.execute(access._guard, plan));
+    std::vector<mapped::JournalRecordRange> records;
+    const auto current = require_value(access._journal.snapshot(access._guard, records));
+    EXPECT_EQ(current._generation, base._generation + 1);
+    EXPECT_EQ(current._tail, accepted._tail);
+    ASSERT_EQ(records.size(), 7u);
+    EXPECT_EQ(records.back()._offset, accepted._manifest);
+    EXPECT_EQ(access.word(task_state()), 33u);
+    EXPECT_EQ(access.word(task_state() + 8), 44u);
   }
 
   // Publication storage includes preallocated mutable receipt slots as well as immutable bytes.
