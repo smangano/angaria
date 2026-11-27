@@ -597,6 +597,89 @@ namespace
     assert_recovered(directory, true, true);
   }
 
+  // The runtime may reuse the record boundaries already validated by a
+  // snapshot. Every export still describes a fresh, complete prefix: fixed
+  // progress changes its generation, and later Appends add both records and
+  // their final manifests without losing the earlier boundaries.
+  TEST_F(MutationJournalTest, SnapshotExportsCompleteRecordBoundariesAcrossCompletedBatches)
+  {
+    Access access(make_session());
+    std::vector<mapped::JournalRecordRange> records;
+    const auto initial = require_value(access._journal.snapshot(access._guard, records));
+    EXPECT_TRUE(records.empty());
+
+    const auto first = require_value(access._journal.execute(access._guard,
+        make_plan(initial, _configuration, true)));
+    const auto after_first = require_value(access._journal.snapshot(access._guard, records));
+    ASSERT_EQ(records.size(), 2u);
+    EXPECT_EQ(records[0]._offset, first._records.at(0));
+    EXPECT_EQ(records[1]._offset, first._manifest);
+    const auto original = records[0]._envelope;
+
+    const auto fixed = require_value(access._journal.execute(access._guard,
+        make_plan(after_first, _configuration)));
+    const auto after_fixed = require_value(access._journal.snapshot(access._guard, records));
+    EXPECT_EQ(after_fixed._generation, fixed._generation);
+    EXPECT_EQ(after_fixed._tail, after_first._tail);
+    ASSERT_EQ(records.size(), 2u);
+    EXPECT_EQ(records[0]._envelope, original);
+
+    const auto second = require_value(access._journal.execute(access._guard,
+        make_plan(after_fixed, _configuration, true)));
+    const auto after_second = require_value(access._journal.snapshot(access._guard, records));
+    EXPECT_EQ(after_second._generation, second._generation);
+    EXPECT_EQ(after_second._manifest, second._manifest);
+    EXPECT_EQ(after_second._tail, second._tail);
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), after_second);
+    ASSERT_EQ(records.size(), 4u);
+    const std::array offsets{first._records.at(0), first._manifest,
+                             second._records.at(0), second._manifest};
+    const std::array<std::uint16_t, 4> kinds{2, 11, 2, 11};
+    for (std::size_t index = 0; index != records.size(); ++index)
+    {
+      EXPECT_EQ(records[index]._offset, offsets[index]);
+      EXPECT_EQ(records[index]._envelope._kind, kinds[index]);
+      EXPECT_EQ(records[index]._envelope._readiness, 2u);
+      EXPECT_EQ(records[index]._envelope._generation,
+                index < 2 ? first._generation : second._generation);
+      EXPECT_EQ(records[index]._mutableBytes, 0u);
+    }
+    EXPECT_EQ(records[0]._envelope, original);
+  }
+
+  // A failed export must expose neither a previous successful result nor the
+  // valid early records visited before a later corrupted batch. Restoring the
+  // bytes lets the same journal validate them anew; no long-lived cache masks
+  // the deliberately injected damage or poisons later inspection.
+  TEST_F(MutationJournalTest, FailedSnapshotExportLeavesNoStaleOrPartialRecordBoundaries)
+  {
+    Access access(make_session());
+    const auto first = require_value(access._journal.execute(access._guard,
+        make_plan(require_value(access._journal.snapshot(access._guard)), _configuration, true)));
+    const auto second = require_value(access._journal.execute(access._guard,
+        make_plan(require_value(access._journal.snapshot(access._guard)), _configuration, true)));
+    std::vector<mapped::JournalRecordRange> records;
+    const auto before = require_value(access._journal.snapshot(access._guard, records));
+    ASSERT_EQ(records.size(), 4u);
+    const auto revision_offset = second._records.at(0) + 40;
+    std::array<std::byte, 8> revision{};
+    put_integer(revision, 0, before._revision + 1);
+    require_value(access.file().write_exact(revision_offset, revision));
+    const auto evidence = access.image();
+
+    expect_error(access._journal.snapshot(access._guard, records), ErrorCode::IoError);
+    EXPECT_TRUE(records.empty());
+    EXPECT_EQ(access.image(), evidence);
+    EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
+
+    put_integer(revision, 0, before._revision);
+    require_value(access.file().write_exact(revision_offset, revision));
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard, records)), before);
+    ASSERT_EQ(records.size(), 4u);
+    EXPECT_EQ(records.front()._offset, first._records.at(0));
+    EXPECT_EQ(records.back()._offset, second._manifest);
+  }
+
   // Publication storage includes preallocated mutable receipt slots as well as immutable bytes.
   // Initial receipt state and its redo must both survive reopening; this is storage coverage, not send semantics.
   TEST_F(MutationJournalTest, PublicationAppendMaterializesItsInitializedMutableReceipts)

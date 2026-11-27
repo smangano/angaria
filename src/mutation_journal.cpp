@@ -304,7 +304,8 @@ namespace angaria::detail::mapped
       return *layout;
     }
 
-    JournalSnapshot clean_snapshot(MutationJournalState& state, NativeFile& file)
+    JournalSnapshot clean_snapshot(MutationJournalState& state, NativeFile& file,
+                                    PrefixRecords* validated = nullptr)
     {
       ANGARIA_DIAGNOSTIC_SCOPE(Snapshot);
       if (control(state) != JournalControl::Idle)
@@ -312,11 +313,15 @@ namespace angaria::detail::mapped
         fail(ErrorCode::IoError, "Journal recovery is required");
       }
       const auto snapshot = roots(state, file);
-      const auto records = scan_prefix(file, fixed_layout(state)._arenaBegin, snapshot._tail, snapshot._generation);
+      auto records = scan_prefix(file, fixed_layout(state)._arenaBegin, snapshot._tail, snapshot._generation);
       if (snapshot._tail != snapshot._fileBytes || snapshot._accounted != snapshot._tail ||
           snapshot._manifest != records._manifest || snapshot._revision != records._revision)
       {
         fail(ErrorCode::IoError, "Canonical roots disagree with committed storage");
+      }
+      if (validated)
+      {
+        *validated = std::move(records);
       }
       return snapshot;
     }
@@ -683,7 +688,8 @@ namespace angaria::detail::mapped
     PreparedOperation preflight(MutationJournalState& state, NativeFile& file, const TransactionPlan& plan)
     {
       ANGARIA_DIAGNOSTIC_SCOPE(JournalPreflight);
-      const auto current = clean_snapshot(state, file);
+      PrefixRecords prefix;
+      const auto current = clean_snapshot(state, file, &prefix);
       if (plan._base != current)
       {
         fail(ErrorCode::Conflict, "Transaction plan was captured before another completed operation");
@@ -758,7 +764,9 @@ namespace angaria::detail::mapped
         }
       }
       PreparedOperation operation;
-      operation._prefix = scan_prefix(file, fixed_layout(state)._arenaBegin, current._tail, current._generation);
+      // clean_snapshot has already validated these exact records under this
+      // held gate. Preflight only builds local images before execution begins.
+      operation._prefix = std::move(prefix);
       operation._commands = value_or_throw<JournalFailure>(encode_commands(plan._commands));
       auto& header = operation._header;
       header._control = JournalControl::Prepared;
@@ -941,6 +949,14 @@ namespace angaria::detail::mapped
 
   Result<JournalSnapshot> MutationJournal::snapshot(const MutationGuard& guard)
   {
+    std::vector<JournalRecordRange> records;
+    return snapshot(guard, records);
+  }
+
+  Result<JournalSnapshot> MutationJournal::snapshot(const MutationGuard& guard,
+                                                    std::vector<JournalRecordRange>& records)
+  {
+    records.clear();
     try
     {
       if (!_state)
@@ -949,7 +965,10 @@ namespace angaria::detail::mapped
       }
       auto& file = *value_or_throw<JournalFailure>(_state->_controller->file(guard));
       recover_journal(*_state, file);
-      return clean_snapshot(*_state, file);
+      PrefixRecords prefix;
+      const auto snapshot = clean_snapshot(*_state, file, &prefix);
+      records = std::move(prefix._ranges);
+      return snapshot;
     }
     catch (...)
     {

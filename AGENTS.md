@@ -9,6 +9,13 @@
 
 Boost and Intel TBB are permitted dependencies when warranted by the implementation.
 
+## Performance and correctness
+
+- Treat performance and correctness as equally important requirements. Consider latency, throughput, allocation, synchronization, and scaling costs throughout design and review.
+- Assess a precaution's runtime cost against the likelihood and impact of the failure it prevents, given the supported operating conditions and assumptions.
+- After that risk assessment, a justified tradeoff may favor performance over overly defensive or overengineered precautions. Existing checks and tests are open to reassessment; their presence alone does not justify retaining a costly precaution.
+- Record the rationale, assumptions, accepted risks, and supporting measurements in the design or PR. Make any changes to documented guarantees explicit, and update affected documentation and tests accordingly.
+
 ## Shared helpers
 
 - Reuse the focused helper headers listed in `docs/helper-audit.md` before adding a local utility. Keep related helpers together; avoid a general-purpose catch-all header.

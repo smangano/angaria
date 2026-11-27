@@ -20,7 +20,7 @@ For the complete application interface direction, including offline log inspecti
 
 New to Angaria? Start with the [programmer primer](docs/primer.md). Its seventeen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. The latest lesson runs a [three-process market monitor](docs/native-pipeline.md) through native Queues, including backlog, schema versions, and replacement. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
 
-Step **4.12**, framework **0.4.14**, adds [detailed performance diagnostics](docs/performance-diagnostics.md) and [measured findings](docs/performance-diagnostics-findings.md). Milestone-4 integration into `main` is held for diagnosis, measured fixes, and performance/correctness qualification.
+Step **4.12**, framework **0.4.14**, adds [detailed performance diagnostics](docs/performance-diagnostics.md) and [measured findings](docs/performance-diagnostics-findings.md). Milestone-4 integration into `main` is held for diagnosis, measured fixes, and performance/correctness qualification. Step **4.13**, framework **0.4.15**, begins [optimization through validated-prefix reuse](docs/performance-prefix-reuse.md).
 
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 

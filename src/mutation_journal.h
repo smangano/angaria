@@ -1,6 +1,7 @@
 #pragma once
 
 #include "journal_format.h"
+#include "journal_validation.h"
 #include "session_controller.h"
 
 #include <cstddef>
@@ -95,6 +96,11 @@ namespace angaria::detail::mapped
                                         JournalFaultInjector* injector = nullptr);
     OperationResult recover(const MutationGuard& guard);
     Result<JournalSnapshot> snapshot(const MutationGuard& guard);
+    // Export owning framing copies from this fresh validation pass. Callers can
+    // resolve exact record boundaries without reading the prefix again. Failed
+    // validation clears the output rather than leaving stale records available.
+    Result<JournalSnapshot> snapshot(const MutationGuard& guard,
+                                      std::vector<JournalRecordRange>& records);
     Result<TransactionResult> execute(const MutationGuard& guard, const TransactionPlan& plan);
 
   private:
