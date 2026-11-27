@@ -106,6 +106,19 @@ namespace angaria::detail::mapped
     bool operator==(const Manifest&) const = default;
   };
 
+  // Validated metadata over local immutable bytes. References are little-endian
+  // eight-byte entries, not host-aligned integers. The view borrows its input:
+  // consume it before that input is destroyed or reused for another read.
+  struct ManifestView
+  {
+    TransactionSubtype _subtype{TransactionSubtype::Registry};
+    TaskId _actor{};
+    std::uint64_t _actorIncarnation{};
+    std::uint64_t _baseRevision{};
+    std::uint64_t _newRevision{};
+    std::span<const std::byte> _recordReferences;
+  };
+
   using JournalHeaderBytes = std::array<std::byte, journal_header_bytes>;
   using RecordEnvelopeBytes = std::array<std::byte, record_envelope_bytes>;
 
@@ -115,6 +128,7 @@ namespace angaria::detail::mapped
   Result<JournalHeader> decode_journal_header(std::span<const std::byte> bytes);
   Result<std::vector<std::byte>> encode_commands(std::span<const RedoCommand> commands);
   Result<std::vector<RedoCommand>> decode_commands(std::span<const std::byte> bytes);
+  OperationResult validate_commands(std::span<const std::byte> bytes);
   Result<RecordEnvelopeBytes> encode_record_envelope(const RecordEnvelope& envelope);
   Result<RecordEnvelope> decode_record_envelope(std::span<const std::byte> bytes);
 
@@ -124,4 +138,8 @@ namespace angaria::detail::mapped
                                                       std::uint64_t recordOffset);
   Result<Manifest> decode_manifest_body(std::span<const std::byte> bytes,
                                          std::uint64_t recordOffset);
+  // Checks the same complete body/command stream without materializing owning
+  // vectors. No command payload or reference view escapes its input lifetime.
+  Result<ManifestView> validate_manifest_body(std::span<const std::byte> bytes,
+                                             std::uint64_t recordOffset);
 } // namespace angaria::detail::mapped
