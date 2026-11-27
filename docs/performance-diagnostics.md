@@ -6,6 +6,12 @@ The [recorded findings](performance-diagnostics-findings.md) explain the selecte
 
 Here the **committed prefix** is the sequence of committed arena records ending at the Session's authoritative allocation tail. A full-prefix scan walks all of those records. It is separate from the short, reusable journal that describes a pending mutation. See the [glossary](glossary.md) for native storage terms.
 
+## Match execution settings as well as code
+
+Before/after binaries must run with the same execution permissions and restrictions, coordinator, workload and compiler settings. If setup requires elevated permissions, finish setup first and run both measurements separately under matching settings. Keep timing comparisons separate from exact work-count attribution.
+
+A step-4.21 audit found that the initial local sequential before matrices in steps 4.19–4.21 used an unrestricted execution request, while their after matrices used the default restricted request. Those timing deltas cannot isolate the optimization effect. The raw reports remain unchanged. Their adjacent normal alternating studies already launched both variants under one default coordinator, so those matched comparisons remain applicable. Step 4.21 also adds a complete [matched normal control matrix](../benchmarks/results/milestone-4-payload-preparation/matched-controls/) and explicit [execution-context provenance](../benchmarks/results/milestone-4-payload-preparation/execution-contexts.toml). No experiment here estimates the permission profile's independent performance penalty.
+
 ## Build matching normal and diagnostic executables
 
 Private instrumentation is disabled by default. Ordinary builds compile every diagnostic scope/counter macro away, including argument evaluation. The diagnostic executable is a research tool using the implemented public API. Its allocation hooks belong to that executable, not the library or primer.

@@ -73,3 +73,7 @@ python3 -B benchmarks/results/milestone-4-gate-handoff/run_interleaved.py \
 ```
 
 Temporary Session files are removed. Rebuilds may change binary hashes; retain your settings/hashes. Result directories must be new. A validated budget stop is not completion: inspect actual progress and outcomes.
+
+## Execution-context clarification
+
+A step-4.21 audit found different execution-permission requests in the initial local sequential before and after populations. Their timing deltas cannot isolate the optimization effect. Raw data remains unchanged. The primary adjacent normal alternating comparison already launched both variants under matching settings. See the [methodology correction](../../../docs/performance-diagnostics.md#match-execution-settings-as-well-as-code) for the scope and later matched controls. No permission-profile penalty is estimated.

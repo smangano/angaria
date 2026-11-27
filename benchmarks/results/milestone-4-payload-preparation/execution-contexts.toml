@@ -1,0 +1,30 @@
+# Observed tool execution requests; original population manifests remain unchanged.
+# This records the request, not an estimate of its performance penalty.
+
+[initial_sequential_before]
+populations = ["macos-arm64-before-normal", "macos-arm64-before-enabled"]
+execution_request = "require_escalated"
+reason = "Measurements followed git worktree setup in the same command."
+timing_use = "Archived observations; not a matched comparison with sequential after."
+
+[initial_sequential_after]
+populations = ["macos-arm64-after-normal", "macos-arm64-after-enabled"]
+execution_request = "use_default"
+
+[primary_alternating]
+populations = ["alternating/before-normal", "alternating/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 15
+
+[matched_controls]
+populations = ["matched-controls/before-normal", "matched-controls/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 33
+cases = 11
+repetitions = 3
+
+[linux_ci]
+population = "linux-x86_64-after"
+execution_request = "GitHub-hosted runner; not the local Codex execution profile."
