@@ -1,9 +1,10 @@
-// Private lookup qualification beneath Session/Registry inspection. These
-// fixtures append definitions directly to control batch geometry and exercise
-// record lookup independently of public registration; usage examples live in
-// test_task_registration.cpp.
+// Private lookup and read-window qualification beneath Session/Registry
+// inspection. These fixtures append definitions directly to control batch
+// geometry and exercise storage independently of public registration; usage
+// examples live in test_task_registration.cpp.
 
-#include "result_helpers.h"
+#include "native_atomic.h"
+#include "result_assertions.h"
 #include "runtime_state.h"
 
 #include <gtest/gtest.h>
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -30,7 +32,10 @@ namespace
   namespace mapped = angaria::detail::mapped;
   namespace fs = std::filesystem;
 
+  using angaria::test_support::expect_error;
   using angaria::test_support::require_value;
+
+  constexpr std::uint64_t window_bytes = 64 * 1024;
 
   template <typename Operation>
   void expect_io_error(Operation operation)
@@ -38,7 +43,7 @@ namespace
     try
     {
       operation();
-      FAIL() << "Expected an invalid record reference to fail";
+      FAIL() << "Expected the invalid metadata read to fail";
     }
     catch (const runtime::RuntimeFailure& failure)
     {
@@ -115,6 +120,51 @@ namespace
       }
       const auto result = require_value(access._journal.execute(access._guard, plan));
       _references.insert(_references.end(), result._records.begin(), result._records.end());
+    }
+
+    // Only framing/lookup qualification uses this synthetic ring. Its end is
+    // deliberately 4 KiB into a window so the final manifest and a mutable word
+    // share the recovered file's last partial window.
+    mapped::TransactionResult append_window_geometry(const std::string& document)
+    {
+      runtime::RuntimeAccess access(_state);
+      auto plan = append_plan(access);
+      const auto reference = access._snapshot._tail;
+      mapped::TaskDefinition definition;
+      definition._id = TaskId{2};
+      definition._descriptor._name = "LargeThread";
+      definition._descriptor._kind = TaskKind::Thread;
+      definition._descriptor._process = TaskId{1};
+      definition._descriptor._doc = document;
+      definition._registration = RegistrationMetadata{TaskId{1}, UtcTimestamp{std::chrono::nanoseconds{123}},
+                                                      plan._newRevision};
+      mapped::JournalRecord task;
+      task._kind = 2;
+      task._immutable = require_value(mapped::encode_task_definition(definition, reference));
+      const auto taskBytes = *mapped::checked_align(mapped::record_envelope_bytes +
+          *mapped::checked_align(task._immutable.size(), 8), mapped::section_alignment);
+      const auto ringBody = reference + taskBytes + mapped::record_envelope_bytes;
+      mapped::JournalRecord ring;
+      ring._kind = 8;
+      ring._mutable.resize(2 * window_bytes + 4096 - ringBody % window_bytes);
+      plan._records.push_back(std::move(task));
+      plan._records.push_back(std::move(ring));
+      const std::array<std::uint64_t, 4> row{2, reference, plan._newRevision, 0};
+      plan._commands.push_back(runtime::runtime_write_words(
+          access.section_offset(mapped::SectionKind::TaskIndex) + mapped::index_entry_bytes, row));
+      auto result = require_value(access._journal.execute(access._guard, plan));
+      _references.push_back(result._records.front());
+      return result;
+    }
+
+    std::string window_document() const
+    {
+      std::string result(2 * window_bytes + 257, 'a');
+      for (std::size_t index = 0; index != result.size(); ++index)
+      {
+        result[index] = static_cast<char>('a' + index % 23);
+      }
+      return result;
     }
 
     std::uint64_t append_ring_with_interior_envelope()
@@ -260,5 +310,147 @@ namespace
         access.immutable_record(_references[1], 2), _references[1]));
     EXPECT_EQ(definition._id, TaskId{2});
     EXPECT_EQ(runtime::runtime_task(access, TaskId{2})._reference, _references[1]);
+  }
+  // Runtime read windows are private storage machinery. A large, valid Task
+  // body crosses several windows; its returned copy survives eviction and the
+  // access/guard lifetime, just like the small owning definition copies.
+  TEST_F(RuntimeAccessTest, ImmutableCopiesCrossWindowsAndOutliveTheirOperation)
+  {
+    const auto document = window_document();
+    const auto accepted = append_window_geometry(document);
+    const auto reference = accepted._records.front();
+    std::vector<std::byte> retained;
+    {
+      runtime::RuntimeAccess access(_state);
+      const auto& envelope = access.record_envelope(reference, 2);
+      ASSERT_GT(envelope._immutableBytes, 2 * window_bytes);
+      retained = access.immutable_record(reference, 2);
+      EXPECT_EQ(retained.size(), envelope._immutableBytes);
+      EXPECT_EQ(require_value(mapped::decode_task_definition(retained, reference))._descriptor._doc, document);
+
+      // Visit older and newer windows after obtaining the copy. No returned
+      // vector may borrow the reader's currently retained mapping.
+      static_cast<void>(access.immutable_record(_references.front(), 2));
+      static_cast<void>(access.immutable_record(accepted._manifest, 11));
+      EXPECT_EQ(access.immutable_record(reference, 2), retained);
+
+      // Registry factories may move an access with both windows populated.
+      // Ownership must follow the guard without leaving dangling cached spans.
+      auto moved = std::move(access);
+      EXPECT_EQ(moved.immutable_record(reference, 2), retained);
+      EXPECT_EQ(moved.read_words(112, 1)[0], runtime::session_ready_flag);
+    }
+    const auto decoded = require_value(mapped::decode_task_definition(retained, reference));
+    EXPECT_EQ(decoded._id, TaskId{2});
+    EXPECT_EQ(decoded._descriptor._doc, document);
+  }
+
+  // A cached mapping must not turn mutable words into cached values. Cross an
+  // exact 64 KiB boundary, publish through the native atomic adapter, and read
+  // again while the same operation still owns the gate.
+  TEST_F(RuntimeAccessTest, ReusedWordWindowsObserveAtomicChangesAndEnforceSnapshotBounds)
+  {
+    const auto accepted = append_window_geometry(window_document());
+    runtime::RuntimeAccess access(_state);
+    const auto ringBody = accepted._records.at(1) + mapped::record_envelope_bytes;
+    const auto boundary = (ringBody / window_bytes + 1) * window_bytes;
+    const auto offset = boundary - 8;
+    auto writer = require_value(access._file->map_read_write(offset, 24));
+    auto bytes = require_value(writer.writable_bytes());
+    const std::array<std::uint64_t, 3> first{11, 22, 33};
+    for (std::size_t index = 0; index != first.size(); ++index)
+    {
+      require_value(mapped::AtomicWord::bind(bytes, index * 8)).store_release(first[index]);
+    }
+    const auto retained = access.read_words(offset, first.size());
+    EXPECT_EQ(retained, (std::vector<std::uint64_t>{11, 22, 33}));
+    require_value(mapped::AtomicWord::bind(bytes, 8)).store_release(44);
+    // The previous range ended in this window: this reload must be a cache hit.
+    EXPECT_EQ(access.read_words(boundary, 1)[0], 44u);
+    EXPECT_EQ(access.read_words(offset, first.size()), (std::vector<std::uint64_t>{11, 44, 33}));
+    EXPECT_EQ(retained, (std::vector<std::uint64_t>{11, 22, 33}));
+
+    EXPECT_TRUE(access.read_words(access._snapshot._fileBytes, 0).empty());
+    EXPECT_TRUE(access.read_bytes(access._snapshot._tail, 0).empty());
+    expect_io_error([&]
+    {
+      static_cast<void>(access.read_words(offset + 1, 1));
+    });
+    expect_io_error([&]
+    {
+      static_cast<void>(access.read_words(offset, std::numeric_limits<std::size_t>::max()));
+    });
+    expect_io_error([&]
+    {
+      static_cast<void>(access.read_words(access._snapshot._fileBytes, 1));
+    });
+    expect_io_error([&]
+    {
+      static_cast<void>(access.read_bytes(access._snapshot._tail, 1));
+    });
+    expect_io_error([&]
+    {
+      static_cast<void>(access.read_bytes(std::numeric_limits<std::uint64_t>::max(), 0));
+    });
+  }
+
+  // Retained read mappings end at the recovered snapshot, not an unaccepted
+  // append's larger EOF. Execute's real growth-error recovery must shrink back
+  // while both readers are live, and a later operation must see a successful retry.
+  TEST_F(RuntimeAccessTest, RetainedWindowsPermitAppendGrowthRollbackAndFreshRetry)
+  {
+    const auto accepted = append_window_geometry(window_document());
+    class FailAppendGrowth final : public mapped::JournalFaultInjector
+    {
+    public:
+      OperationResult checkpoint(mapped::JournalCheckpoint point, std::uint64_t) override
+      {
+        if (point == mapped::JournalCheckpoint::FileGrowth && !_fired)
+        {
+          _fired = true;
+          return Error{ErrorCode::IoError, "Injected append growth failure", "test.runtime"};
+        }
+        return std::monostate{};
+      }
+
+      bool _fired{};
+    } injector;
+    std::uint64_t newReference{};
+    {
+      runtime::RuntimeAccess access(_state, true, &injector);
+      const auto before = access._snapshot;
+      const auto ringReference = accepted._records.at(1);
+      const auto ringEnd = ringReference + access.record_envelope(ringReference, 8)._totalBytes;
+      ASSERT_EQ((ringEnd - 8) / window_bytes, (before._fileBytes - 1) / window_bytes);
+      const auto words = access.read_words(ringEnd - 8, 1);
+      const auto manifest = access.immutable_record(accepted._manifest, 11);
+      auto plan = append_plan(access);
+      mapped::JournalRecord ring;
+      ring._kind = 8;
+      ring._mutable.resize(512);
+      plan._records.push_back(std::move(ring));
+      const std::array ready{runtime::session_ready_flag};
+      plan._commands.push_back(runtime::runtime_write_words(112, ready));
+
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::IoError);
+      EXPECT_TRUE(injector._fired);
+      EXPECT_EQ(require_value(access._file->size()), before._fileBytes);
+      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), before);
+      EXPECT_EQ(access.read_words(ringEnd - 8, 1), words);
+      EXPECT_EQ(access.immutable_record(accepted._manifest, 11), manifest);
+      const auto retry = require_value(access._journal.execute(access._guard, plan));
+      newReference = retry._records.front();
+      expect_io_error([&]
+      {
+        static_cast<void>(access.read_words(before._fileBytes, 1));
+      });
+      expect_io_error([&]
+      {
+        static_cast<void>(access.read_bytes(before._tail, 1));
+      });
+    }
+    runtime::RuntimeAccess fresh(_state);
+    EXPECT_EQ(fresh.record_envelope(newReference, 8)._kind, 8u);
+    EXPECT_GT(fresh._snapshot._tail, newReference);
   }
 } // namespace
