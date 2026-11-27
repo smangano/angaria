@@ -90,8 +90,8 @@ namespace angaria::detail::mapped
       {
       }
 
-      // Manifest decoding consumes this view immediately and returns owned
-      // values. Retain the largest buffer until this scan ends; a later read
+      // Manifest validation and reference checks consume this view before the
+      // next read. Retain the largest buffer until this scan ends; a later read
       // invalidates its contents even when it does not grow the allocation.
       std::span<const std::byte> read_bytes(std::uint64_t offset, std::uint64_t length)
       {
@@ -241,15 +241,17 @@ namespace angaria::detail::mapped
                                                   record._envelope._immutableBytes), record._offset));
     }
 
-    void check_manifest_records(const Manifest& manifest, std::span<const JournalRecordRange> records)
+    template <typename ReferenceAt>
+    void check_manifest_records(std::size_t count, ReferenceAt&& referenceAt,
+                                  std::span<const JournalRecordRange> records)
     {
-      if (manifest._records.size() != records.size())
+      if (count != records.size())
       {
         fail(ErrorCode::IoError, "Manifest record count disagrees with the append batch");
       }
       for (std::size_t index = 0; index != records.size(); ++index)
       {
-        if (manifest._records[index] != records[index]._offset)
+        if (referenceAt(index) != records[index]._offset)
         {
           fail(ErrorCode::IoError, "Manifest references do not name the complete ordered batch");
         }
@@ -294,13 +296,20 @@ namespace angaria::detail::mapped
         }
         if (envelope._kind == 11)
         {
-          const auto manifest = read_manifest(reader, record);
+          // This view borrows the reader's scratch only until the next read.
+          // Consume all references here; exported prefix ranges own values.
+          const auto manifest = value_or_throw<JournalFailure>(validate_manifest_body(
+              read_bytes(reader, offset + record_envelope_bytes, envelope._immutableBytes), offset));
           if (prefix._ranges.size() == groupStart || envelope._previous != prefix._manifest ||
               manifest._baseRevision != prefix._revision || manifest._newRevision != envelope._registryRevision)
           {
             fail(ErrorCode::IoError, "Committed manifest chain or Registry revision is invalid");
           }
-          check_manifest_records(manifest, std::span{prefix._ranges}.subspan(groupStart));
+          check_manifest_records(manifest._recordReferences.size() / sizeof(std::uint64_t),
+              [&](std::size_t index)
+              {
+                return read_unsigned_le<std::uint64_t>(manifest._recordReferences, index * 8);
+              }, std::span{prefix._ranges}.subspan(groupStart));
           for (const auto& member : std::span{prefix._ranges}.subspan(groupStart))
           {
             if (member._envelope._registryRevision != manifest._newRevision)
@@ -597,7 +606,10 @@ namespace angaria::detail::mapped
         {
           fail(ErrorCode::IoError, "Accepted manifest disagrees with its journal");
         }
-        check_manifest_records(manifest, std::span{batch._records}.first(batch._records.size() - 1));
+        check_manifest_records(manifest._records.size(), [&](std::size_t index)
+        {
+          return manifest._records[index];
+        }, std::span{batch._records}.first(batch._records.size() - 1));
         batch._commands = manifest._commands;
       }
       require_fixed_compacts(batch._commands, header._kind, ErrorCode::IoError);

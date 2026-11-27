@@ -22,3 +22,6 @@ benchmarks/results/milestone-4-cachegrind/**/*.out -text -diff
 benchmarks/results/milestone-4-single-destination/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 benchmarks/results/milestone-4-single-destination/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
 benchmarks/results/milestone-4-single-destination/**/*.out -text -diff
+benchmarks/results/milestone-4-manifest-validation/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/results/milestone-4-manifest-validation/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-manifest-validation/**/*.out -text -diff
