@@ -35,24 +35,16 @@ namespace angaria::detail
     }
 
     template <typename Definition>
-    struct HistoricalDefinition
-    {
-      Definition _definition;
-      std::uint64_t _reference{};
-    };
+    using History = std::map<decltype(Definition{}._id),
+        std::vector<const RetainedTopologyDefinition<Definition>*>>;
 
     template <typename Definition>
-    using History = std::map<decltype(Definition{}._id), std::vector<HistoricalDefinition<Definition>>>;
-
-    template <typename Definition, typename Decoder>
-    History<Definition> history(RuntimeAccess& access, std::uint16_t kind, Decoder decoder)
+    History<Definition> history(std::span<const RetainedTopologyDefinition<Definition>> definitions)
     {
       History<Definition> result;
-      for (const auto reference : access.record_references(kind))
+      for (const auto& definition : definitions)
       {
-        auto definition = runtime_value(decoder(access.immutable_record(reference, kind), reference));
-        const auto id = definition._id;
-        result[id].push_back(HistoricalDefinition<Definition>{std::move(definition), reference});
+        result[definition._definition._id].push_back(&definition);
       }
       return result;
     }
@@ -65,12 +57,12 @@ namespace angaria::detail
       require(found != records.end(), "publication.topology", "Publication references an unknown topology identity");
       const auto& definitions = found->second;
       const auto after = std::lower_bound(definitions.begin(), definitions.end(), publication,
-                                          [](const auto& entry, auto offset)
+                                          [](const auto* entry, auto offset)
                                           {
-                                            return entry._reference < offset;
+                                            return entry->_reference < offset;
                                           });
       require(after != definitions.begin(), "publication.topology", "Topology did not exist before Publication acceptance");
-      const auto& definition = std::prev(after)->_definition;
+      const auto& definition = (*std::prev(after))->_definition;
       require(definition._registration._revision <= revision, "publication.topology",
               "Publication predates its effective topology definition");
       return definition;
@@ -232,7 +224,9 @@ namespace angaria::detail
     }
   } // namespace
 
-  void runtime_validate_delivery(RuntimeAccess& access, const TopologySnapshot& topology)
+  void runtime_validate_delivery(RuntimeAccess& access, const TopologySnapshot& topology,
+      std::span<const RetainedTopologyDefinition<mapped::QueueDefinition>> queues,
+      std::span<const RetainedTopologyDefinition<mapped::SourceDefinition>> sourceDefinitions)
   {
     ANGARIA_DIAGNOSTIC_SCOPE(DeliveryValidation);
     ANGARIA_DIAGNOSTIC_COUNT(DeliveryValidations, 1);
@@ -252,9 +246,9 @@ namespace angaria::detail
     {
       sources.emplace(source._definition._id, SourceContext{&source, access.read_words(source._stateOffset, 32)});
     }
-    const auto queueHistory = history<mapped::QueueDefinition>(access, 3, mapped::decode_queue_definition);
-    const auto sourceHistory = history<mapped::SourceDefinition>(access, 4, mapped::decode_source_definition);
-    const auto schemas = runtime_schemas(access);
+    const auto queueHistory = history(queues);
+    const auto sourceHistory = history(sourceDefinitions);
+    const auto schemas = runtime_schemas(access, std::span<const LoadedTask>{topology._tasks});
     std::map<std::uint64_t, const LoadedSchema*> schemaReferences;
     for (const auto& schema : schemas)
     {

@@ -30,16 +30,9 @@ namespace angaria::detail
     }
 
     template <typename Definition>
-    struct HistoricalDefinition
-    {
-      Definition _definition;
-      std::uint64_t _reference{};
-    };
-
-    template <typename Definition>
     struct History
     {
-      std::vector<HistoricalDefinition<Definition>> _records;
+      std::vector<RetainedTopologyDefinition<Definition>> _records;
       std::map<std::uint16_t, std::size_t> _latest;
       std::map<std::uint16_t, std::uint64_t> _firstRevision;
     };
@@ -165,7 +158,7 @@ namespace angaria::detail
           }
         }
         history._latest[id] = history._records.size();
-        history._records.push_back(HistoricalDefinition<Definition>{std::move(definition), reference});
+        history._records.push_back(RetainedTopologyDefinition<Definition>{std::move(definition), reference});
       }
       return history;
     }
@@ -714,7 +707,7 @@ namespace angaria::detail
     }
     if (has_native_delivery(access))
     {
-      runtime_validate_delivery(access, topology);
+      runtime_validate_delivery(access, topology, queues._records, sources._records);
     }
     return topology;
   }

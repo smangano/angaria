@@ -92,6 +92,7 @@ namespace
           return Error{ErrorCode::IoError, "Metadata inspection attempted to read payload bytes", "test.payload_read"};
         }
       }
+      _reads.emplace_back(offset, length);
       ++_calls;
       _totalBytes += length;
       _maxBytes = std::max(_maxBytes, length);
@@ -102,6 +103,7 @@ namespace
     std::uint64_t _totalBytes{};
     std::uint64_t _maxBytes{};
     std::uint64_t _rejectedReads{};
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> _reads;
 
   private:
     std::span<const StoredPublication> _publications;
@@ -526,6 +528,41 @@ namespace
     const auto historical = require_value(registry.snapshot(_draftRevision));
     ASSERT_EQ(historical._queues.size(), 1u);
     EXPECT_EQ(historical._queues.front()._state, EntityState::Draft);
+    EXPECT_EQ(image(), before);
+  }
+
+  TEST_F(DeliveryValidationTest, FullValidationReadsRetainedDefinitionsOncePerOperation)
+  {
+    // Private storage qualification: the ring has wrapped, and a later Queue
+    // definition changes documentation without changing earlier acceptance.
+    // Complete history validation must reuse those decoded definitions rather
+    // than reload them while resolving each Publication's original context.
+    create(3, 2, false, TaskKind::Process, 17);
+    revise_queue_documentation();
+    const auto before = image();
+    PayloadReadGuard observer(_publications);
+    {
+      runtime::RuntimeAccess access(_state, true, nullptr, &observer);
+      const auto topology = runtime::runtime_topology(access);
+      ASSERT_EQ(topology._queues.size(), 1u);
+      EXPECT_EQ(topology._queues.front()._definition._descriptor._doc, "Revised after publication");
+      EXPECT_EQ(topology._queues.front()._definition._registration._revision, _queueRevision + 1);
+      EXPECT_GE(access.record_references(3).size(), 3u);
+      for (const auto kind : std::array<std::uint16_t, 4>{2, 3, 4, 7})
+      {
+        const auto references = access.record_references(kind);
+        ASSERT_FALSE(references.empty());
+        for (const auto reference : references)
+        {
+          const auto offset = reference + mapped::record_envelope_bytes;
+          const auto length = access.record_envelope(reference, kind)._immutableBytes;
+          EXPECT_EQ(std::count(observer._reads.begin(), observer._reads.end(),
+              std::pair<std::uint64_t, std::uint64_t>{offset, length}), 1)
+              << "Definition kind " << kind << " at " << reference;
+        }
+      }
+      EXPECT_EQ(observer._rejectedReads, 0u);
+    }
     EXPECT_EQ(image(), before);
   }
 

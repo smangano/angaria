@@ -71,10 +71,10 @@ namespace angaria::detail
       return indexes;
     }
 
-    std::map<TaskId, std::uint64_t> creators(RuntimeAccess& access)
+    std::map<TaskId, std::uint64_t> creators(std::span<const LoadedTask> tasks)
     {
       std::map<TaskId, std::uint64_t> ids;
-      for (const auto& task : runtime_tasks(access))
+      for (const auto& task : tasks)
       {
         ids.emplace(task._definition._id, task._definition._registration._revision);
       }
@@ -140,8 +140,14 @@ namespace angaria::detail
 
   std::vector<LoadedField> runtime_fields(RuntimeAccess& access)
   {
+    const auto tasks = runtime_tasks(access);
+    return runtime_fields(access, tasks);
+  }
+
+  std::vector<LoadedField> runtime_fields(RuntimeAccess& access, std::span<const LoadedTask> tasks)
+  {
     ANGARIA_DIAGNOSTIC_SCOPE(SchemaLookup);
-    const auto actors = creators(access);
+    const auto actors = creators(tasks);
     const auto indexes = definition_indexes(access, mapped::SectionKind::FieldIndex);
     std::set<FieldId> ids;
     std::set<std::string> names;
@@ -172,14 +178,27 @@ namespace angaria::detail
 
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access)
   {
-    const auto fields = runtime_fields(access);
-    return runtime_schemas(access, fields);
+    const auto tasks = runtime_tasks(access);
+    return runtime_schemas(access, std::span<const LoadedTask>{tasks});
+  }
+
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedTask> tasks)
+  {
+    const auto fields = runtime_fields(access, tasks);
+    return runtime_schemas(access, fields, tasks);
   }
 
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields)
   {
+    const auto tasks = runtime_tasks(access);
+    return runtime_schemas(access, fields, tasks);
+  }
+
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields,
+                                            std::span<const LoadedTask> tasks)
+  {
     ANGARIA_DIAGNOSTIC_SCOPE(SchemaLookup);
-    const auto actors = creators(access);
+    const auto actors = creators(tasks);
     std::map<FieldId, const LoadedField*> fieldIds;
     for (const auto& field : fields)
     {

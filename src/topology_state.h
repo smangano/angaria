@@ -9,6 +9,15 @@
 
 namespace angaria::detail
 {
+  // Owning decoded topology history within one gate-held operation. Delivery
+  // validation borrows these records only while their checked owner is alive.
+  template <typename Definition>
+  struct RetainedTopologyDefinition
+  {
+    Definition _definition;
+    std::uint64_t _reference{};
+  };
+
   struct LoadedQueue
   {
     mapped::QueueDefinition _definition;

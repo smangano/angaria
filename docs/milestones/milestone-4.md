@@ -31,6 +31,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.17 | `milestone-4-17` | Reuse operation-entry history validation once. | Keep generic journal calls fresh, consume first-attempt reuse before failures/retries, qualify ownership/staleness/recovery, and measure duplicate-scan removal. |
 | 4.18 | `milestone-4-18` | Reuse receive selection validation during issuance. | Retain live claim/pin/Queue/receipt checks and fresh generic/cleanup paths, qualify unchanged-context reuse, and plot measured latency, throughput and validation work. |
 | 4.19 | `milestone-4-19` | Resolve the oldest pending delivery directly. | Retain full history validation and exact committed metadata/receipt checks, qualify invalid links and bounded reads, and plot latency, throughput and allocation improvements. |
+| 4.20 | `milestone-4-20` | Reuse checked definitions within an operation. | Share complete retained Queue/Source history and validated Tasks during schema/delivery checks, qualify historical attribution and fresh generic paths, and plot measured improvements. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -151,3 +152,7 @@ Publishing fan-out follows milestone 6, eventfd waiting milestone 7, segmented s
 ## Step 4.19 Direct delivery lookup
 
 The [lookup guide and risk assessment](../performance-delivery-lookup.md) replaces issuance's repeated Publication metadata search with exact resolution of the already validated oldest-pending link. The direct-send profile has one destination at a canonical position; the resolver checks subtraction, committed boundary/kind, bounded metadata and exact Queue/sequence/link identity before fresh receipt checks. Complete history validation, pin repeats and generic progress/cleanup remain. Acknowledgment still searches for its successor link. Matched normal/enabled controls and plots record the improvement without a timing threshold or a bounded-latency claim.
+
+## Step 4.20 Definition reuse
+
+The [definition reuse guide](../performance-definition-reuse.md) removes duplicate Task loading for Field/Schema creator checks and duplicate decoding of retained Queue/Source history during delivery validation. Borrowed definitions stay within the same unchanged RuntimeAccess and continuously held guard. All historical effective-definition, creator, index, schema and live delivery checks remain; generic entry points load freshly and no state is cached between operations. Focused teaching tests and matched normal/enabled measurements qualify reuse and record plots.

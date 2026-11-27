@@ -180,6 +180,132 @@ namespace
     fs::path _directory;
   };
 
+  // Private observer for logical immutable-copy requests. It counts decoded
+  // definition bodies rather than native reads or public application calls.
+  class SchemaDefinitionReads final : public runtime::RuntimeAccessReadObserver
+  {
+  public:
+    OperationResult before_read(std::uint64_t offset, std::uint64_t length) override
+    {
+      _reads.emplace_back(offset, length);
+      return std::monostate{};
+    }
+
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> _reads;
+  };
+
+  TEST_F(SchemaRegistryTest, GenericSchemaLoadingChecksEachDefinitionOnce)
+  {
+    auto created = create();
+    auto actor = created._creator.registry();
+    TaskDescriptor registrar;
+    registrar._name = "AnotherRegistrar";
+    require_value(actor.register_task(registrar));
+    const auto price = require_value(actor.register_field(field()));
+    const auto quantity = require_value(actor.register_field(field(0xee000002, "Quantity")));
+    const auto quote = message(1, 1, "Quote", {price, quantity, price});
+    const auto heartbeat = message(2, 1, "Heartbeat");
+    require_value(actor.register_message(quote));
+    require_value(actor.register_message(heartbeat));
+    const auto before = observe();
+    SchemaDefinitionReads observer;
+    {
+      // This generic entry point loads fresh Tasks, then shares that checked
+      // catalog between Field and schema validation under the same gate.
+      runtime::RuntimeAccess access(state(), true, nullptr, &observer);
+      const auto schemas = runtime::runtime_schemas(access);
+      ASSERT_EQ(schemas.size(), 2u);
+      const auto found = std::find_if(schemas.begin(), schemas.end(), [&](const auto& schema)
+      {
+        return schema._definition._descriptor._schema == quote._schema;
+      });
+      ASSERT_NE(found, schemas.end());
+      EXPECT_EQ(found->_definition._descriptor._fields, quote._fields);
+      for (const auto kind : std::array<std::uint16_t, 3>{2, 6, 7})
+      {
+        const auto references = access.record_references(kind);
+        ASSERT_EQ(references.size(), 2u);
+        for (const auto reference : references)
+        {
+          EXPECT_EQ(std::count(observer._reads.begin(), observer._reads.end(),
+              std::pair<std::uint64_t, std::uint64_t>{reference + mapped::record_envelope_bytes,
+                  access.record_envelope(reference, kind)._immutableBytes}), 1)
+              << "Definition kind " << kind << " at " << reference;
+        }
+      }
+      // Trusted overloads reuse this complete Task catalog within the same
+      // unchanged access. They produce identical schema values without another
+      // Task-definition copy; no earlier catalog crosses an operation boundary.
+      const auto tasks = runtime::runtime_tasks(access);
+      observer._reads.clear();
+      const auto fields = runtime::runtime_fields(access, tasks);
+      const auto reused = runtime::runtime_schemas(access, fields, tasks);
+      ASSERT_EQ(reused.size(), schemas.size());
+      for (std::size_t index = 0; index < schemas.size(); ++index)
+      {
+        const auto& expected = schemas[index];
+        const auto& actual = reused[index];
+        EXPECT_EQ(actual._reference, expected._reference);
+        EXPECT_EQ(actual._indexOffset, expected._indexOffset);
+        EXPECT_EQ(actual._definition._descriptor._schema, expected._definition._descriptor._schema);
+        EXPECT_EQ(actual._definition._descriptor._name, expected._definition._descriptor._name);
+        EXPECT_EQ(actual._definition._descriptor._fields, expected._definition._descriptor._fields);
+        EXPECT_EQ(actual._definition._descriptor._doc, expected._definition._descriptor._doc);
+        EXPECT_EQ(actual._definition._registration._createdBy, expected._definition._registration._createdBy);
+        EXPECT_EQ(actual._definition._registration._createdAt, expected._definition._registration._createdAt);
+        EXPECT_EQ(actual._definition._registration._revision, expected._definition._registration._revision);
+      }
+      for (const auto& task : tasks)
+      {
+        EXPECT_EQ(std::count_if(observer._reads.begin(), observer._reads.end(), [&](const auto& read)
+        {
+          return read.first == task._reference + mapped::record_envelope_bytes;
+        }), 0);
+      }
+    }
+    EXPECT_EQ(observe(), before);
+  }
+
+  TEST_F(SchemaRegistryTest, GenericSchemaLoadingRechecksTasksAfterEarlierInspection)
+  {
+    auto created = create();
+    auto actor = created._creator.registry();
+    const auto price = require_value(actor.register_field(field()));
+    require_value(actor.register_message(message(1, 1, "Quote", {price})));
+    std::uint64_t reserved{};
+    {
+      runtime::RuntimeAccess access(state());
+      ASSERT_EQ(runtime::runtime_schemas(access).size(), 1u);
+      reserved = access.section_offset(mapped::SectionKind::TaskState) + 10 * sizeof(std::uint64_t);
+    }
+    // Deliberate quiescent corruption between operations, not a supported Task
+    // update. A later generic load must inspect current Task state instead of
+    // retaining the earlier operation's valid creator catalog.
+    const auto before = read_image();
+    set_word(reserved, 1);
+    const auto evidence = read_image();
+    {
+      runtime::RuntimeAccess access(state());
+      try
+      {
+        static_cast<void>(runtime::runtime_schemas(access));
+        FAIL() << "Expected fresh Task-state validation to reject reserved data";
+      }
+      catch (const runtime::RuntimeFailure& failure)
+      {
+        EXPECT_EQ(failure._error._code, ErrorCode::IoError);
+        EXPECT_EQ(failure._error._path, "task.state");
+      }
+    }
+    EXPECT_EQ(read_image(), evidence);
+    set_word(reserved, 0);
+    EXPECT_EQ(read_image(), before);
+    {
+      runtime::RuntimeAccess access(state());
+      EXPECT_EQ(runtime::runtime_schemas(access).size(), 1u);
+    }
+  }
+
   // Start with the declared scalar widths, rather than native sizeof values.
   // IDs are application-selected full 32-bit identities: both ends of the EE
   // namespace are valid even though only a few table slots are reserved.
