@@ -34,6 +34,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.20 | `milestone-4-20` | Reuse checked definitions within an operation. | Share complete retained Queue/Source history and validated Tasks during schema/delivery checks, qualify historical attribution and fresh generic paths, and plot measured improvements. |
 | 4.21 | `milestone-4-21` | Share fresh schema preparation with payload codecs. | Reuse checked Fields during send/receive preparation, retain hook/cleanup ordering and generic fresh paths, qualify owning lifetimes and read counts, and plot measured improvements. |
 | 4.22 | `milestone-4-22` | Reuse prefix-validation buffers. | Use exact fixed-body spans and scan-local manifest scratch, retain atomic/read/recovery checks, qualify smaller reads after growth and corruption rejection, and plot matched improvements. |
+| 4.23 | `milestone-4-23` | Remove duplicate pre-lock resource checks. | Retain post-lock rejection and other resource checks, qualify delayed mismatch detection under contention, and measure native calls and full acquisition cost with matched controls. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -166,3 +167,7 @@ The [preparation guide and risk assessment](../performance-payload-preparation.m
 ## Step 4.22 Prefix-validation buffers
 
 The [prefix buffer guide](../performance-prefix-buffers.md) replaces each small fixed-body vector with a bounded local array and reuses variable manifest input within one scan. Exact requested lengths, full decoding/validation and owning results remain. A later scratch read invalidates only private input consumed immediately by an owning decoder. Scratch and mapping leases end before recovery truncation. Tests qualify small/large/small manifests, short bodies, padding rejection/repair and existing rollback behavior; matching execution settings and paired studies supply plots and work counts.
+
+## Step 4.23 Gate resource checks
+
+Framework **0.4.25** [removes the three pathname-identity checks immediately before the native gate lock](../performance-gate-resources.md). The same post-lock check must pass before a usable guard is returned; file-access, claim and ownership checks remain. The guide explicitly accepts delayed `IoError` after unsupported resource replacement: try-only callers can see Busy/public receive timeout, and a blocking caller can wait indefinitely on a held old lock. Focused contention qualification and matched syscall/acquisition measurements are required. Native hold timing begins after acquisition, so its improvement is not assumed; Cachegrind profiling remains a separate follow-up.
