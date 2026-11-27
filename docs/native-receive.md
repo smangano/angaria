@@ -19,7 +19,7 @@ Successful `acknowledge(token)` records completed processing and makes the next 
 
 While a message is in flight, repeated receive returns the same token, time, and stable payload mapping. It does not select or issue another message. This remains true if the Source gains another Active Queue or its fresh issuance counter is exhausted. Fresh selection with multiple Active Queues returns `UnsupportedPolicy`; zero Active Queues can time out, and Draft Queues are ignored.
 
-Step 4.18 [reuses selection validation during issuance](performance-receive-validation.md) inside one unchanged gate-held receive operation. Fresh live claim/pin/Queue/receipt checks remain, and generic progress/cleanup validate freshly. A successful empty allowed-loss result performs no transaction; a committed gap returns before issuance. No model is reused across an operation or mutation boundary, and the public result and borrow lifetimes above remain the same.
+Step 4.18 [reuses selection validation during issuance](performance-receive-validation.md) inside one unchanged gate-held receive operation. Fresh live claim/pin/Queue/receipt checks remain, and generic progress/cleanup validate freshly. A successful empty allowed-loss result performs no transaction; a committed gap returns before issuance. No model is reused across an operation or mutation boundary, and the public result and borrow lifetimes above remain the same. Step 4.19 [resolves issuance from the validated oldest-pending link](performance-delivery-lookup.md), checking that exact committed Publication and receipt instead of searching earlier metadata again. Complete history validation still runs.
 
 ## Borrowed bytes and owning copies
 
