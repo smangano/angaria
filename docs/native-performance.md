@@ -1,6 +1,6 @@
 # Native transport measurements
 
-The next performance workstream begins with the [nanomsg IPC comparison](nanomsg-comparison-plan.md), followed by the [recorded unacknowledged delivery plan](recorded-unacknowledged-delivery-plan.md). End-to-end latency and verified delivered throughput lead the comparison; allocation and instruction counts explain observed costs. The comparison runner and new delivery profile are planned work.
+The next performance workstream begins with the [nanomsg IPC comparison](nanomsg-comparison-plan.md), followed by the [recorded unacknowledged delivery plan](recorded-unacknowledged-delivery-plan.md). End-to-end latency and verified delivered throughput lead the comparison; allocation and instruction counts explain observed costs. Step **4.28**, framework **0.4.30**, implements the [optional 1:1 comparison runner](nanomsg-comparison.md). The new delivery profile remains planned work.
 
 Step 4.12 adds [detailed diagnostics](performance-diagnostics.md) and [recorded findings](performance-diagnostics-findings.md) from controlled experiments to explain this baseline. Milestone-4 integration into `main` is held for measured fixes and qualification.
 

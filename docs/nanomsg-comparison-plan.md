@@ -1,6 +1,6 @@
 # Plan for a controlled libnanomsg comparison
 
-Milestone 4 step **4.27**, framework **0.4.29**, records a benchmark-first execution plan. This document adds no runtime policy, benchmark adapter, dependency or CI job. Implementation and measurements belong to follow-up review steps. The existing [native measurements](native-performance.md) and [detailed diagnostics](performance-diagnostics.md) measure Angaria; they are not an existing side-by-side libnanomsg comparison.
+Milestone 4 step **4.27**, framework **0.4.29**, records a benchmark-first execution plan. That planning step added no runtime policy or benchmark adapter. Step **4.28**, framework **0.4.30**, now implements the [first runnable 1:1 comparison](nanomsg-comparison.md), with an optional pinned dependency, correctness qualification and on-demand CI. The later phases below remain planned. The existing [native measurements](native-performance.md) and [detailed diagnostics](performance-diagnostics.md) measure Angaria; they are not an existing side-by-side libnanomsg comparison.
 
 ## Questions and contract boundaries
 
@@ -8,8 +8,8 @@ The comparison should establish ordinary API cost, delivery latency, completed w
 
 | Profile | Acceptance and completion boundary | Status |
 | --- | --- | --- |
-| Current Angaria acknowledged delivery | Direct publication commits under the mutation gate; the consumer verifies a Delivery and acknowledges it. Retained history and receipts support the documented process-recovery contract. No power-loss durability is implied. | Implemented library behavior; comparison adapter planned. |
-| Classic libnanomsg IPC, unacknowledged | A successful PUSH send hands the message to the messaging implementation. Consumers verify received bytes. There is no application processing acknowledgment, durable replay ledger or atomic multi-destination publication supplied by this profile. | Library behavior available; comparison adapter planned. |
+| Current Angaria acknowledged delivery | Direct publication commits under the mutation gate; the consumer verifies a Delivery and acknowledges it. Retained history and receipts support the documented process-recovery contract. No power-loss durability is implied. | Implemented library behavior and 1:1 adapter in step 4.28. |
+| Classic libnanomsg IPC, unacknowledged | A successful PUSH send hands the message to the messaging implementation. Consumers verify received bytes. There is no application processing acknowledgment, durable replay ledger or atomic multi-destination publication supplied by this profile. | Implemented 1:1 adapter in step 4.28 using pinned classic libnanomsg 1.3.0. |
 | Optional recorded libnanomsg adapter | A separately specified recording layer would define acceptance, destination intent, restart replay and incomplete fan-out outcomes. Adding a file write around send is not sufficient qualification. | Deferred until the contract and fault tests below exist. |
 | Future Angaria recorded/unacknowledged delivery | Requires its own accepted-record, consumption/lease/reclamation and replay contract before it can enter a comparison. | Design work, not an implemented benchmark mode. |
 
@@ -23,7 +23,7 @@ Let **N** be the producer count, **C** the consumer count, and **F(p)** the fixe
 
 | Phase | Shape | Angaria boundary and treatment |
 | --- | --- | --- |
-| 1: core comparison | One producer, one consumer, one connection/Queue, IPC on one host. | Implement first using direct Queue send and a Source with one Active Queue. Qualify correctness before recording performance. |
+| 1: core comparison | One producer, one consumer, one connection/Queue, IPC on one host. | Implemented in step 4.28 using direct Queue send and a Source with one Active Queue; see the [runner and qualification guide](nanomsg-comparison.md). |
 | 2: explicit application fan-out | One producer, C=2/4/8 consumers; each logical publication is sent to every member of F(p). | Plan separate direct sends to separately owned consumer Sources/Queues. This is an application adapter with partial-send outcomes, not atomic Publishing Queue Set fan-out. Each Angaria direct send has its own library publication identity, correlated by the common benchmark identity. Qualify before running. |
 | 3: producer scaling and Source fan-in | N=2/4/8 producers, C consumers, with a declared fixed edge set and bounded aggregate resources. | A consumer Source merging multiple Active Queues requires milestone 5. Mark such current-library cells `not_run_unsupported`; do not simulate the feature and label it native Source fan-in. |
 | 4: native Publishing comparison | One logical acceptance covering a fixed destination set. | Requires milestone 6's implemented Publishing/fan-out contract. Repeated direct sends are not a substitute for atomic acceptance. |
