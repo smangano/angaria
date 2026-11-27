@@ -235,6 +235,9 @@ namespace
                       }),
               "Session payload schema does not match the requested word count");
       _task.emplace(value(_session.attach_task(options._role == ipc::Role::Producer ? "Producer" : "Consumer")));
+      // claim() authenticates through RuntimeAccess. Capture the immutable
+      // expected identity before timing; verification below only compares it.
+      _claim = _task->claim();
       if (options._role == ipc::Role::Producer)
       {
         _writer.emplace(value(_task->open_writer(_queue)));
@@ -250,6 +253,7 @@ namespace
     QueueId _queue{};
     SourceQueueSetId _sourceId{};
     TaskId _producerId{};
+    TaskClaim _claim{};
     std::optional<Task> _task;
     std::optional<QueueWriter> _writer;
     std::optional<SourceQueueSet> _source;
@@ -614,7 +618,7 @@ namespace
         require(header._schema == _angaria->_schema && header._format == PayloadFormat::Binary &&
                     header._payloadBytes == _payload.size() && header._flags == 0 &&
                     header._queue == _angaria->_queue && header._queueSequence == sample._sequence &&
-                    header._consumer == _angaria->_task->claim() &&
+                    header._consumer == _angaria->_claim &&
                     header._publication._producer._task == _angaria->_producerId &&
                     header._publication._sequence != 0 && header._publication._producer._incarnation != 0,
                 "Angaria received header/identity differs from the configured connection");

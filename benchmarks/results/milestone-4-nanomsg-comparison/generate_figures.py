@@ -81,7 +81,7 @@ def plot(directory):
                 row = dict(host=directory.name, profile=profile, payload_bytes=payload, history=history, runs=len(cells))
                 for metric, _, divisor in METRICS:
                     values = [(statistics.median_low(sorted(r['metrics'][metric])) if metric in r['metrics'] else r['rates'][metric]) / divisor for r in cells]
-                    row[metric] = statistics.median(values)
+                    row[metric[:-3] + "_us" if metric.endswith("_ns") else metric] = statistics.median(values)
                 rows.append(row)
     return rows
 
