@@ -770,6 +770,86 @@ namespace
     EXPECT_EQ(records.back()._offset, accepted._manifest);
   }
 
+  // One scan grows its manifest scratch storage for the middle batch, then
+  // decodes a small final batch. Only each requested body belongs to the
+  // decoder, and exported record ranges must own their values after the scan.
+  TEST_F(MutationJournalTest, PrefixManifestScratchHandlesSmallLargeSmallBatches)
+  {
+    constexpr std::uint64_t window_bytes = 64 * 1024;
+    _configuration._maxLogBytes = 1024 * 1024;
+    Access access(make_session());
+    const auto first = require_value(access._journal.execute(access._guard,
+        make_plan(require_value(access._journal.snapshot(access._guard)), _configuration, true)));
+    const auto large = require_value(access._journal.execute(access._guard,
+        window_crossing_plan(require_value(access._journal.snapshot(access._guard)))));
+    const auto last = require_value(access._journal.execute(access._guard,
+        make_plan(require_value(access._journal.snapshot(access._guard)), _configuration, true)));
+
+    std::vector<mapped::JournalRecordRange> records;
+    const auto before = require_value(access._journal.snapshot(access._guard, records));
+    ASSERT_EQ(records.size(), 9u);
+    EXPECT_EQ(before._manifest, last._manifest);
+    EXPECT_EQ(before._tail, last._tail);
+    EXPECT_EQ(records[1]._offset, first._manifest);
+    EXPECT_EQ(records[6]._offset, large._manifest);
+    EXPECT_EQ(records[8]._offset, last._manifest);
+    ASSERT_LT(records[1]._envelope._immutableBytes, window_bytes);
+    ASSERT_GT(records[6]._envelope._immutableBytes, window_bytes);
+    ASSERT_EQ(records[8]._envelope._immutableBytes, records[1]._envelope._immutableBytes);
+    const auto retained = records;
+
+    // The smaller body's final padding remains part of its exact decoder
+    // input, even after a much larger body occupied the same scratch storage.
+    const auto padding_offset = last._manifest + mapped::record_envelope_bytes +
+                                records.back()._envelope._immutableBytes - 1;
+    ASSERT_EQ(access.image()[padding_offset], std::byte{});
+    const std::array corrupt{std::byte{1}};
+    require_value(access.file().write_exact(padding_offset, corrupt));
+    const auto evidence = access.image();
+    expect_error(access._journal.snapshot(access._guard, records), ErrorCode::IoError);
+    EXPECT_TRUE(records.empty());
+    EXPECT_EQ(access.image(), evidence);
+
+    const std::array repaired{std::byte{0}};
+    require_value(access.file().write_exact(padding_offset, repaired));
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard, records)), before);
+    ASSERT_EQ(records.size(), retained.size());
+    for (std::size_t index = 0; index != records.size(); ++index)
+    {
+      EXPECT_EQ(records[index]._offset, retained[index]._offset);
+      EXPECT_EQ(records[index]._envelope, retained[index]._envelope);
+      EXPECT_EQ(records[index]._mutableBegin, retained[index]._mutableBegin);
+      EXPECT_EQ(records[index]._mutableBytes, retained[index]._mutableBytes);
+    }
+  }
+
+  // Deliberately shorten a committed Task's declared immutable body below its
+  // 72-byte fixed header. The scan must pass only the declared bytes to the
+  // validator, reject the prefix without writes, and inspect repaired bytes anew.
+  TEST_F(MutationJournalTest, PrefixScanRejectsAShortDeclaredFixedBodyWithoutWrites)
+  {
+    Access access(make_session());
+    const auto accepted = require_value(access._journal.execute(access._guard,
+        make_plan(require_value(access._journal.snapshot(access._guard)), _configuration, true)));
+    std::vector<mapped::JournalRecordRange> records;
+    const auto before = require_value(access._journal.snapshot(access._guard, records));
+    const auto immutable_bytes = records.front()._envelope._immutableBytes;
+    std::array<std::byte, 8> length{};
+    put_integer(length, 0, 64);
+    require_value(access.file().write_exact(accepted._records.front() + 16, length));
+    const auto evidence = access.image();
+
+    expect_error(access._journal.snapshot(access._guard, records), ErrorCode::IoError);
+    EXPECT_TRUE(records.empty());
+    EXPECT_EQ(access.image(), evidence);
+
+    put_integer(length, 0, immutable_bytes);
+    require_value(access.file().write_exact(accepted._records.front() + 16, length));
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard, records)), before);
+    ASSERT_EQ(records.size(), 2u);
+    EXPECT_EQ(records.front()._envelope._immutableBytes, immutable_bytes);
+  }
+
   // A scan of a large committed base ends at its partial final window, not at
   // an unaccepted append's longer physical EOF. Real FileGrowth failure must
   // therefore roll back without a scan mapping lease obstructing the shrink.
