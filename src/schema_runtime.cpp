@@ -277,21 +277,29 @@ namespace angaria::detail
     runtime_fail(ErrorCode::NotFound, "field.id", "Field identity is not registered");
   }
 
-  LoadedSchema runtime_schema(RuntimeAccess& access, SchemaId schema)
+  LoadedSchemaContext runtime_schema_context(RuntimeAccess& access, SchemaId schema)
   {
     if (schema._type == MessageType::Invalid || schema._version == 0)
     {
       runtime_fail(ErrorCode::InvalidArgument, "message.schema", "Message type and schema version must be nonzero");
     }
-    auto schemas = runtime_schemas(access);
+    const auto tasks = runtime_tasks(access);
+    auto fields = runtime_fields(access, tasks);
+    auto schemas = runtime_schemas(access, fields, tasks);
     for (auto& value : schemas)
     {
       if (value._definition._descriptor._schema == schema)
       {
-        return std::move(value);
+        return {std::move(value), std::move(fields)};
       }
     }
     runtime_fail(ErrorCode::NotFound, "message.schema", "Schema identity is not registered");
+  }
+
+  LoadedSchema runtime_schema(RuntimeAccess& access, SchemaId schema)
+  {
+    auto context = runtime_schema_context(access, schema);
+    return std::move(context._schema);
   }
 } // namespace angaria::detail
 

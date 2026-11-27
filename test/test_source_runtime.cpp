@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -139,6 +140,73 @@ namespace
     EXPECT_EQ(saved._header, header);
     EXPECT_EQ(std::get<std::uint32_t>(require_value(saved.decode(codec)).front()), 42u);
     EXPECT_EQ(saved.view()._header, header);
+  }
+
+  TEST_F(SourceRuntimeTest, FreshReceiveReusesCheckedFieldsWhenPreparingItsBoundCodec)
+  {
+    auto scenario = support::create_source_scenario(_directory);
+    auto writer = require_value(scenario._created._creator.open_writer(scenario._queue));
+    const auto publication = support::send_source_value(scenario, writer, 37, 0x1234);
+    const auto codec = support::source_codec(scenario);
+    auto consumer = require_value(scenario._created._session.attach_task(scenario._consumer));
+
+    // Private observation beneath a real public receive: count logical
+    // definition copies, not physical reads. Hooks are not application setup.
+    class DefinitionReads final : public runtime::RuntimeAccessReadObserver
+    {
+    public:
+      OperationResult before_read(std::uint64_t offset, std::uint64_t length) override
+      {
+        _requests.emplace_back(offset, length);
+        return std::monostate{};
+      }
+
+      std::vector<std::pair<std::uint64_t, std::uint64_t>> _requests;
+    };
+    DefinitionReads observer;
+    runtime::SourceOperationHooks hooks;
+    hooks._reads = &observer;
+    auto source = require_value(consumer.open_source_set(scenario._source));
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> field_bodies;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> task_bodies;
+    {
+      runtime::RuntimeAccess access(support::open_runtime_state(_directory));
+      for (const auto reference : access.record_references(6))
+      {
+        field_bodies.emplace_back(reference + mapped::record_envelope_bytes,
+            access.record_envelope(reference, 6)._immutableBytes);
+      }
+      for (const auto reference : access.record_references(2))
+      {
+        task_bodies.emplace_back(reference + mapped::record_envelope_bytes,
+            access.record_envelope(reference, 2)._immutableBytes);
+      }
+    }
+    ASSERT_EQ(field_bodies.size(), 1u);
+    ASSERT_EQ(task_bodies.size(), 2u);
+    runtime::SourceAccess::set_hooks(source, &hooks);
+    const auto delivery = receive_delivery(source);
+    runtime::SourceAccess::set_hooks(source, nullptr);
+
+    // Full delivery validation reads the Field once; fresh post-mapping
+    // preparation reads it once more, then shares it with codec construction.
+    // Task catalogs remain fresh for owner checks, topology and preparation.
+    for (const auto& body : field_bodies)
+    {
+      EXPECT_EQ(std::count(observer._requests.begin(), observer._requests.end(), body), 2);
+    }
+    for (const auto& body : task_bodies)
+    {
+      EXPECT_EQ(std::count(observer._requests.begin(), observer._requests.end(), body), 3);
+    }
+    EXPECT_EQ(delivery._message._header._publication, publication);
+    EXPECT_EQ(delivery._message._header._schema, scenario._schema);
+    EXPECT_EQ(delivery._message._header._flags, 0x1234u);
+    auto saved = require_value(delivery._message.copy_message(4));
+    EXPECT_EQ(saved._header, delivery._message._header);
+    require_value(source.acknowledge(delivery._token));
+    require_value(source.close());
+    EXPECT_EQ(std::get<std::uint32_t>(require_value(saved.decode(codec)).front()), 37u);
   }
 
   TEST_F(SourceRuntimeTest, RepeatedReceiveKeepsTheSameTokenTimeAndMappedAddress)

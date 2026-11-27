@@ -32,6 +32,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.18 | `milestone-4-18` | Reuse receive selection validation during issuance. | Retain live claim/pin/Queue/receipt checks and fresh generic/cleanup paths, qualify unchanged-context reuse, and plot measured latency, throughput and validation work. |
 | 4.19 | `milestone-4-19` | Resolve the oldest pending delivery directly. | Retain full history validation and exact committed metadata/receipt checks, qualify invalid links and bounded reads, and plot latency, throughput and allocation improvements. |
 | 4.20 | `milestone-4-20` | Reuse checked definitions within an operation. | Share complete retained Queue/Source history and validated Tasks during schema/delivery checks, qualify historical attribution and fresh generic paths, and plot measured improvements. |
+| 4.21 | `milestone-4-21` | Share fresh schema preparation with payload codecs. | Reuse checked Fields during send/receive preparation, retain hook/cleanup ordering and generic fresh paths, qualify owning lifetimes and read counts, and plot measured improvements. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -156,3 +157,7 @@ The [lookup guide and risk assessment](../performance-delivery-lookup.md) replac
 ## Step 4.20 Definition reuse
 
 The [definition reuse guide](../performance-definition-reuse.md) removes duplicate Task loading for Field/Schema creator checks and duplicate decoding of retained Queue/Source history during delivery validation. Borrowed definitions stay within the same unchanged RuntimeAccess and continuously held guard. All historical effective-definition, creator, index, schema and live delivery checks remain; generic entry points load freshly and no state is cached between operations. Focused teaching tests and matched normal/enabled measurements qualify reuse and record plots.
+
+## Step 4.21 Payload preparation
+
+The [preparation guide and risk assessment](../performance-payload-preparation.md) introduces an owning private schema/Field context loaded fresh at the original preparation point. Codec construction uses those checked definitions instead of reloading Fields and Tasks. Receive still maps before schema preparation and retains exact schema-reference checks, hooks, binding and failure cleanup. Non-Binary sends do not construct a Binary codec. The context stores no Task authority or cross-operation cache; public headers, formats and payload lifetimes remain. Focused teaching tests and matched normal/enabled controls qualify behavior and record plots.

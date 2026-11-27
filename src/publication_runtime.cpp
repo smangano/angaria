@@ -159,14 +159,14 @@ namespace angaria::detail
               "message.payload_bytes", "Message header byte count must equal its payload span");
       require(wire::encode(header._format, wire::payload_formats).has_value(), ErrorCode::InvalidArgument,
               "message.format", "Message payload format is unknown");
-      auto schema = runtime_schema(access, header._schema);
+      auto context = runtime_schema_context(access, header._schema);
       if (header._format == PayloadFormat::Binary)
       {
-        const auto codec = runtime_payload_codec(access, schema,
+        const auto codec = runtime_payload_codec(context._schema, context._fields,
             access._session->_controller->configuration()._maxLogBytes);
         runtime_value(codec.validate(message._payload));
       }
-      return schema;
+      return std::move(context._schema);
     }
   } // namespace
 
