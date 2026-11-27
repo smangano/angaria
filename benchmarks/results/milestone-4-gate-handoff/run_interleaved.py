@@ -35,9 +35,13 @@ def main():
     parser.add_argument("--after-executable", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new comparison directory")
     parser.add_argument("--host-label", default="")
+    parser.add_argument("--repetitions", type=int, default=5)
     args = parser.parse_args()
+    if args.repetitions <= 0:
+        parser.error("--repetitions must be positive")
+    pair_count = args.repetitions * 3
     args.output.mkdir()  # Refuse existing files/directories/symlinks.
-    options = SimpleNamespace(suite="alternating-serial-cost", repetitions=5,
+    options = SimpleNamespace(suite="alternating-serial-cost", repetitions=args.repetitions,
                               timeout=90, smoke=False, host_label=args.host_label)
     contexts = {}
     order = []
@@ -51,12 +55,12 @@ def main():
         cases = [driver.case(history=history) for history in (0, 32, 128)]
         manifest.update(status="failed", instrumentation_enabled=False,
                         comparison_harness_sha256=driver.sha256(Path(__file__)),
-                        order_method="15 adjacent pairs; AB then BA alternating; H0/32/128 in each repetition")
+                        order_method=f"{pair_count} adjacent pairs; AB then BA alternating; H0/32/128 in each repetition")
         contexts[label] = (driver, executable, folder, manifest, sources, settings, cases, [])
     try:
         pair = 0
         with tempfile.TemporaryDirectory(prefix="angaria-diagnostics-") as temporary:
-            for repetition in range(1, 6):
+            for repetition in range(1, args.repetitions + 1):
                 for history in (0, 32, 128):
                     pair += 1
                     labels = ("before", "after") if pair % 2 else ("after", "before")
@@ -75,7 +79,7 @@ def main():
                         order.append(dict(sequence=len(order) + 1, pair=pair, history=history,
                                           repetition=repetition, variant=label, started_utc=started,
                                           invocation_seconds=elapsed))
-                        print(f"pair {pair}/15 {label} H={history}: complete", flush=True)
+                        print(f"pair {pair}/{pair_count} {label} H={history}: complete", flush=True)
         for context in contexts.values():
             context[3]["status"] = "complete"
     except Exception as error:

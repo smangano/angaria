@@ -90,10 +90,19 @@ namespace angaria::detail::mapped
       {
       }
 
-      std::vector<std::byte> read_bytes(std::uint64_t offset, std::uint64_t length)
+      // Manifest decoding consumes this view immediately and returns owned
+      // values. Retain the largest buffer until this scan ends; a later read
+      // invalidates its contents even when it does not grow the allocation.
+      std::span<const std::byte> read_bytes(std::uint64_t offset, std::uint64_t length)
       {
         check_range(offset, length);
-        std::vector<std::byte> bytes(host_size(length));
+        const auto count = host_size(length);
+        if (count > _scratch.size())
+        {
+          _scratch.reserve(count);
+          _scratch.resize(count);
+        }
+        const auto bytes = std::span{_scratch}.first(count);
         copy_bytes(offset, bytes);
         return bytes;
       }
@@ -124,6 +133,7 @@ namespace angaria::detail::mapped
       std::uint64_t _arena{};
       std::uint64_t _tail{};
       MappedReadWindow _window;
+      std::vector<std::byte> _scratch;
     };
 
     std::vector<std::byte> read_bytes(NativeFile& file, std::uint64_t offset, std::uint64_t length)
@@ -137,7 +147,7 @@ namespace angaria::detail::mapped
       return bytes;
     }
 
-    std::vector<std::byte> read_bytes(PrefixReader& reader, std::uint64_t offset, std::uint64_t length)
+    std::span<const std::byte> read_bytes(PrefixReader& reader, std::uint64_t offset, std::uint64_t length)
     {
       return reader.read_bytes(offset, length);
     }
@@ -217,8 +227,10 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::IoError, "Record extends beyond its allocation plan");
       }
-      const auto body = read_bytes(file, offset + record_envelope_bytes,
-                                   std::min<std::uint64_t>(128, envelope._immutableBytes));
+      std::array<std::byte, 128> bodyBytes{};
+      const auto length = static_cast<std::size_t>(std::min<std::uint64_t>(bodyBytes.size(), envelope._immutableBytes));
+      const auto body = std::span{bodyBytes}.first(length);
+      copy_bytes(file, offset + record_envelope_bytes, body);
       return value_or_throw<JournalFailure>(validate_journal_record(offset, envelope, body, arena));
     }
 

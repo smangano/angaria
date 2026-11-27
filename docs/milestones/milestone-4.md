@@ -33,6 +33,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.19 | `milestone-4-19` | Resolve the oldest pending delivery directly. | Retain full history validation and exact committed metadata/receipt checks, qualify invalid links and bounded reads, and plot latency, throughput and allocation improvements. |
 | 4.20 | `milestone-4-20` | Reuse checked definitions within an operation. | Share complete retained Queue/Source history and validated Tasks during schema/delivery checks, qualify historical attribution and fresh generic paths, and plot measured improvements. |
 | 4.21 | `milestone-4-21` | Share fresh schema preparation with payload codecs. | Reuse checked Fields during send/receive preparation, retain hook/cleanup ordering and generic fresh paths, qualify owning lifetimes and read counts, and plot measured improvements. |
+| 4.22 | `milestone-4-22` | Reuse prefix-validation buffers. | Use exact fixed-body spans and scan-local manifest scratch, retain atomic/read/recovery checks, qualify smaller reads after growth and corruption rejection, and plot matched improvements. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -161,3 +162,7 @@ The [definition reuse guide](../performance-definition-reuse.md) removes duplica
 ## Step 4.21 Payload preparation
 
 The [preparation guide and risk assessment](../performance-payload-preparation.md) introduces an owning private schema/Field context loaded fresh at the original preparation point. Codec construction uses those checked definitions instead of reloading Fields and Tasks. Receive still maps before schema preparation and retains exact schema-reference checks, hooks, binding and failure cleanup. Non-Binary sends do not construct a Binary codec. The context stores no Task authority or cross-operation cache; public headers, formats and payload lifetimes remain. Focused teaching tests and matched normal/enabled controls qualify behavior and record plots.
+
+## Step 4.22 Prefix-validation buffers
+
+The [prefix buffer guide](../performance-prefix-buffers.md) replaces each small fixed-body vector with a bounded local array and reuses variable manifest input within one scan. Exact requested lengths, full decoding/validation and owning results remain. A later scratch read invalidates only private input consumed immediately by an owning decoder. Scratch and mapping leases end before recovery truncation. Tests qualify small/large/small manifests, short bodies, padding rejection/repair and existing rollback behavior; matching execution settings and paired studies supply plots and work counts.

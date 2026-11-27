@@ -1,0 +1,11 @@
+pair 1/60 before H=0: complete
+Traceback (most recent call last):
+  File "/Users/smangano/Documents/ChatGPT/C++/angaria/benchmarks/results/milestone-4-gate-handoff/run_interleaved.py", line 103, in <module>
+    main()
+  File "/Users/smangano/Documents/ChatGPT/C++/angaria/benchmarks/results/milestone-4-gate-handoff/run_interleaved.py", line 75, in main
+    driver.validate(report, values, False)
+  File "/Users/smangano/Documents/ChatGPT/C++/angaria/benchmarks/run_diagnostics.py", line 362, in validate
+    check(report.get("framework_version") == (ROOT / "VERSION").read_text().strip(),
+  File "/Users/smangano/Documents/ChatGPT/C++/angaria/benchmarks/run_native.py", line 32, in check
+    raise RuntimeError(message)
+RuntimeError: Framework version differs from this checkout; rebuild the executable
