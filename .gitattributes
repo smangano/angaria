@@ -19,3 +19,6 @@ benchmarks/results/milestone-4-cachegrind/**/*.txt -text whitespace=-blank-at-eo
 
 # Raw Cachegrind event tables are retained verbatim; omit their generated row diffs.
 benchmarks/results/milestone-4-cachegrind/**/*.out -text -diff
+benchmarks/results/milestone-4-single-destination/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/results/milestone-4-single-destination/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-single-destination/**/*.out -text -diff

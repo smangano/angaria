@@ -248,16 +248,29 @@ namespace angaria::detail::mapped
                              const PublicationLayout& layout, std::uint64_t offset, ErrorCode code)
     {
       check_header(publication, offset, code);
-      std::bitset<65536> queues;
       std::size_t accepted{};
-      for (std::size_t index = 0; index < destinations.size(); ++index)
+      const auto check_destination_at = [&](std::size_t index)
       {
         const auto& destination = destinations[index];
         check_destination(destination, offset, layout._receiptsOffset + index * publication_receipt_bytes, code);
-        const auto queue = static_cast<std::uint16_t>(destination._queue);
-        codec_require(!queues[queue], code, "publication.destinations", "Original destination Queues must be unique");
-        queues[queue] = true;
-        accepted += destination._status == DestinationStatus::Accepted ? 1 : 0;
+        return destination._status == DestinationStatus::Accepted;
+      };
+      if (destinations.size() == 1)
+      {
+        // One destination is unique without clearing the full Queue-ID bitmap.
+        accepted = check_destination_at(0) ? 1 : 0;
+      }
+      else
+      {
+        std::bitset<65536> queues;
+        for (std::size_t index = 0; index < destinations.size(); ++index)
+        {
+          const bool isAccepted = check_destination_at(index);
+          const auto queue = static_cast<std::uint16_t>(destinations[index]._queue);
+          codec_require(!queues[queue], code, "publication.destinations", "Original destination Queues must be unique");
+          queues[queue] = true;
+          accepted += isAccepted ? 1 : 0;
+        }
       }
       codec_require(accepted != 0, code, "publication.destinations", "Fully rejected attempts do not create Publications");
       codec_require(publication._acceptance != AcceptancePolicy::AllDestinations || accepted == destinations.size(),

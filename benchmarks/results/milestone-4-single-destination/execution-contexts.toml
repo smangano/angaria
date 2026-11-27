@@ -1,0 +1,35 @@
+# Observed execution requests, not an estimate of permission-profile overhead.
+[setup]
+execution_request = "require_escalated"
+work = "Git/worktree setup; benchmark execution was in separate default-request commands."
+
+[enabled]
+populations = ["macos-arm64-before-enabled", "macos-arm64-after-enabled"]
+execution_request = "use_default"
+order = "Before, rebuild/tests, after; attribution rather than primary timings."
+
+[alternating]
+populations = ["alternating/before-normal", "alternating/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 60
+repetitions_per_history = 20
+selection = "Twenty pairs fixed before launch; H128 operation plot selected before measurement because validated-history bitmap work grows with history."
+
+[matched_controls]
+populations = ["matched-controls/before-normal", "matched-controls/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 33
+cases = 11
+repetitions = 3
+
+[cachegrind]
+populations = ["cachegrind-comparison/before", "cachegrind-comparison/after"]
+execution_request = "Same GitHub-hosted Linux job; distinct from local execution settings."
+order = "Build both versions, profile base then head, nine cases each."
+notes = "Exact PR base/head SHA; own checkout drivers/version/source hashes; identical compiler/tools/model. Counts are not native latency."
+
+[linux_ci]
+population = "linux-x86_64-after"
+execution_request = "GitHub-hosted runner, distinct from local execution settings."

@@ -1,0 +1,28 @@
+==3975== Cachegrind, a high-precision tracing profiler
+==3975== Copyright (C) 2002-2017, and GNU GPL'd, by Nicholas Nethercote et al.
+==3975== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==3975== Command: /home/runner/work/angaria/angaria/build/profile-before/build/cachegrind/angaria_transport_diagnostics /tmp/angaria-cachegrind-bnbsmt8q/session --workload serial --collection none --messages 16 --history 128 --history-scope same --payload-bytes 8 --fields 1 --capacity-scale 1 --idle-pollers 0 --work-budget-ms 5000 --cachegrind-region cycle
+==3975== 
+--3975-- warning: L3 cache found, using its data for the LL simulation.
+--3975-- warning: specified LL cache: line_size 64  assoc 16  total_size 503,316,480
+--3975-- warning: simulated LL cache: line_size 64  assoc 30  total_size 503,316,480
+==3975== 
+==3975== I refs:        193,929,217
+==3975== I1  misses:        329,415
+==3975== LLi misses:          4,183
+==3975== I1  miss rate:        0.17%
+==3975== LLi miss rate:        0.00%
+==3975== 
+==3975== D refs:         89,431,286  (51,494,475 rd   + 37,936,811 wr)
+==3975== D1  misses:      1,038,592  (   720,859 rd   +    317,733 wr)
+==3975== LLd misses:          6,818  (     2,246 rd   +      4,572 wr)
+==3975== D1  miss rate:         1.2% (       1.4%     +        0.8%  )
+==3975== LLd miss rate:         0.0% (       0.0%     +        0.0%  )
+==3975== 
+==3975== LL refs:         1,368,007  ( 1,050,274 rd   +    317,733 wr)
+==3975== LL misses:          11,001  (     6,429 rd   +      4,572 wr)
+==3975== LL miss rate:          0.0% (       0.0%     +        0.0%  )
+==3975== 
+==3975== Branches:       39,423,095  (38,449,882 cond +    973,213 ind)
+==3975== Mispredicts:     1,335,499  ( 1,239,695 cond +     95,804 ind)
+==3975== Mispred rate:          3.4% (       3.2%     +        9.8%   )
