@@ -6,7 +6,7 @@ Milestone 4, step 4.5, framework **0.4.6**, implements private progress operatio
 
 ## Private receipt operations
 
-The [progress primitives](../src/delivery_progress.h) take a recovered, gate-bound `RuntimeAccess` and a captured claim or delivery token. The [public Source endpoints](native-receive.md) first authenticate their native Task owner. The primitives check the core capability, Session identity, current attached Task incarnation, Thread parent context, complete topology/history, and Source ownership under the guard.
+The [progress primitives](../src/delivery_progress.h) take a recovered, gate-bound `RuntimeAccess` and a captured claim or delivery token. The [public Source endpoints](native-receive.md) first authenticate their native Task owner. Generic primitives check the core capability, Session identity, current attached Task incarnation, Thread parent context, complete topology/history, and Source ownership under the guard. Step 4.18 adds a trusted [receive issuance overload](performance-receive-validation.md) that reuses the complete topology/history validation already performed during selection under the same unchanged RuntimeAccess. It retains live ownership/claim/parent and Source/Queue/receipt checks. Models cannot cross an access or mutation boundary; generic issuance and cleanup retain fresh validation.
 
 | Operation | Effect |
 | --- | --- |

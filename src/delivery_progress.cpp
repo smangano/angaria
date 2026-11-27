@@ -35,8 +35,8 @@ namespace angaria::detail
           "Delivery participant identity is empty", "Delivery participant is not registered", code, code);
     }
 
-    TopologySnapshot progress_topology(RuntimeAccess& access, const TaskClaim& consumer,
-                                         ErrorCode staleCode)
+    void check_progress_owner(RuntimeAccess& access, const TaskClaim& consumer,
+                                 ErrorCode staleCode)
     {
       runtime_value(access._guard.check_owner());
       const auto& configuration = access._session->_controller->configuration();
@@ -44,7 +44,11 @@ namespace angaria::detail
               ErrorCode::UnsupportedPolicy, "Session does not enable native delivery progress");
       require(consumer._session == configuration._session && consumer._incarnation != 0,
               staleCode, "Consumer claim belongs to another Session or is empty");
-      auto topology = runtime_topology(access);
+    }
+
+    void check_progress_claim(RuntimeAccess& access, const TopologySnapshot& topology,
+                                 const TaskClaim& consumer, ErrorCode staleCode)
+    {
       const auto& task = find_entity(topology._tasks, consumer._task, staleCode);
       const auto words = access.read_words(task._stateOffset, 32);
       require(words[0] == consumer._incarnation && (words[6] & task_attached_flag) != 0,
@@ -58,6 +62,14 @@ namespace angaria::detail
                     parentWords[3] == words[3],
                 staleCode, "Thread consumer belongs to an ended parent Process claim");
       }
+    }
+
+    TopologySnapshot progress_topology(RuntimeAccess& access, const TaskClaim& consumer,
+                                         ErrorCode staleCode)
+    {
+      check_progress_owner(access, consumer, staleCode);
+      auto topology = runtime_topology(access);
+      check_progress_claim(access, topology, consumer, staleCode);
       return topology;
     }
 
@@ -118,15 +130,11 @@ namespace angaria::detail
               ErrorCode::StaleDelivery, "Delivery token does not identify the Source's current issuance");
       return words;
     }
-  } // namespace
 
-  Result<DeliveryProgress> runtime_issue_delivery(RuntimeAccess& access, const TaskClaim& consumer,
-                                                   SourceQueueSetId source, QueueId queue,
-                                                   UtcTimestamp dequeuedAt)
-  {
-    try
+    DeliveryProgress issue_delivery(RuntimeAccess& access, const TopologySnapshot& topology,
+                                        const TaskClaim& consumer, SourceQueueSetId source,
+                                        QueueId queue, UtcTimestamp dequeuedAt)
     {
-      const auto topology = progress_topology(access, consumer, ErrorCode::WrongOwner);
       const auto& loadedSource = consumer_source(topology, consumer, source, ErrorCode::WrongOwner);
       const auto sourceWords = access.read_words(loadedSource._stateOffset, 8);
       if (sourceWords[2] != 0)
@@ -172,6 +180,33 @@ namespace angaria::detail
       commands.push_back(runtime_write_words(loadedSource._stateOffset, issuedSource));
       commit_progress(access, consumer, std::move(commands));
       return pinned_delivery(consumer, source, issuedSource);
+    }
+  } // namespace
+
+  Result<DeliveryProgress> runtime_issue_delivery(RuntimeAccess& access, const TaskClaim& consumer,
+                                                   SourceQueueSetId source, QueueId queue,
+                                                   UtcTimestamp dequeuedAt)
+  {
+    try
+    {
+      const auto topology = progress_topology(access, consumer, ErrorCode::WrongOwner);
+      return issue_delivery(access, topology, consumer, source, queue, dequeuedAt);
+    }
+    catch (...)
+    {
+      return runtime_caught_error();
+    }
+  }
+
+  Result<DeliveryProgress> runtime_issue_delivery(RuntimeAccess& access, const TopologySnapshot& topology,
+                                                   const TaskClaim& consumer, SourceQueueSetId source,
+                                                   QueueId queue, UtcTimestamp dequeuedAt)
+  {
+    try
+    {
+      check_progress_owner(access, consumer, ErrorCode::WrongOwner);
+      check_progress_claim(access, topology, consumer, ErrorCode::WrongOwner);
+      return issue_delivery(access, topology, consumer, source, queue, dequeuedAt);
     }
     catch (...)
     {

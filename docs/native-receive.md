@@ -19,6 +19,8 @@ Successful `acknowledge(token)` records completed processing and makes the next 
 
 While a message is in flight, repeated receive returns the same token, time, and stable payload mapping. It does not select or issue another message. This remains true if the Source gains another Active Queue or its fresh issuance counter is exhausted. Fresh selection with multiple Active Queues returns `UnsupportedPolicy`; zero Active Queues can time out, and Draft Queues are ignored.
 
+Step 4.18 [reuses selection validation during issuance](performance-receive-validation.md) inside one unchanged gate-held receive operation. Fresh live claim/pin/Queue/receipt checks remain, and generic progress/cleanup validate freshly. A successful empty allowed-loss result performs no transaction; a committed gap returns before issuance. No model is reused across an operation or mutation boundary, and the public result and borrow lifetimes above remain the same.
+
 ## Borrowed bytes and owning copies
 
 The Source owns a read-only mapping and a persisted **pin**, the matching Issued receipt and Source slot. Together they keep the borrowed bytes available while the application processes them outside the mutation gate. Appending messages and overwriting ring cache entries do not move an existing borrow. Recovery delivery finds the oldest pending message in retained history even after its ring entry is overwritten. Allowed loss also preserves an already issued pin.

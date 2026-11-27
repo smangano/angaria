@@ -6,6 +6,7 @@
 #include "delivery_progress.h"
 #include "delivery_progress_fixture.h"
 #include "delivery_words.h"
+#include "native_fixture.h"
 #include "result_assertions.h"
 
 #include <gtest/gtest.h>
@@ -26,6 +27,7 @@ namespace
   using angaria::test_support::DeliveryProgressFixture;
   using angaria::test_support::expect_error;
   using angaria::test_support::require_value;
+  using angaria::test_support::set_atomic_word;
 
   UtcTimestamp timestamp(std::int64_t value)
   {
@@ -95,6 +97,112 @@ namespace
       EXPECT_EQ(repeated, first);
     }
     EXPECT_EQ(fixture.image(), before);
+  }
+
+  // Receive already validated this topology under its current access. The
+  // private overload may reuse it until mutation; a later access validates the
+  // resulting pin afresh before either issuance entry point repeats that pin.
+  TEST(DeliveryProgressTest, ValidatedTopologyIssuesAndRepeatsTheSameExactPin)
+  {
+    DeliveryProgressFixture fixture;
+    fixture.mark_consumer_attached();
+    fixture.write_word(fixture._sourceState, std::numeric_limits<std::uint64_t>::max() - 1);
+    fixture.write_word(fixture._sourceState + 8, 1);
+    runtime::DeliveryProgress first;
+    {
+      runtime::RuntimeAccess access(fixture._state);
+      const auto topology = runtime::runtime_topology(access);
+      const auto before = access._snapshot;
+      first = require_value(runtime::runtime_issue_delivery(access, topology, fixture.consumer_claim(),
+          fixture._source, fixture._queue, timestamp(-7)));
+      EXPECT_EQ(first._token, (DeliveryToken{fixture.consumer_claim(), fixture._source,
+          fixture._queue, 1, std::numeric_limits<std::uint64_t>::max()}));
+      EXPECT_EQ(first._publicationReference, fixture._publications.front()._reference);
+      EXPECT_EQ(first._receiptReference, fixture._publications.front()._receipt);
+      EXPECT_EQ(first._deliveryLink, fixture._publications.front()._link);
+      EXPECT_EQ(first._dequeuedAt, timestamp(-7));
+      EXPECT_EQ(access._snapshot._generation, before._generation + 1);
+      EXPECT_EQ(access._snapshot._tail, before._tail);
+    }
+    const auto beforeRepeat = fixture.image();
+    {
+      runtime::RuntimeAccess access(fixture._state);
+      const auto topology = runtime::runtime_topology(access);
+      const auto generation = access._snapshot._generation;
+      const auto repeated = require_value(runtime::runtime_issue_delivery(access, topology,
+          fixture.consumer_claim(), fixture._source, QueueId::Invalid, timestamp(99)));
+      EXPECT_EQ(repeated, first);
+      EXPECT_EQ(require_value(runtime::runtime_issue_delivery(access, fixture.consumer_claim(),
+          fixture._source, QueueId::Invalid, timestamp(100))), first);
+      EXPECT_EQ(access._snapshot._generation, generation);
+    }
+    EXPECT_EQ(fixture.image(), beforeRepeat);
+    fixture.validate();
+  }
+
+  // Reusing whole-history validation does not authorize the caller's claim or
+  // selection. These rejected inputs leave the same validated state untouched.
+  TEST(DeliveryProgressTest, ValidatedTopologyStillChecksConsumerAndSelectedParticipants)
+  {
+    DeliveryProgressFixture fixture;
+    fixture.mark_consumer_attached();
+    const auto before = fixture.image();
+    auto wrongSession = fixture.consumer_claim();
+    ++wrongSession._session._low;
+    auto futureClaim = fixture.consumer_claim();
+    ++futureClaim._incarnation;
+    auto emptyClaim = fixture.consumer_claim();
+    emptyClaim._incarnation = 0;
+    {
+      runtime::RuntimeAccess access(fixture._state);
+      const auto topology = runtime::runtime_topology(access);
+      expect_error(runtime::runtime_issue_delivery(access, topology, wrongSession,
+          fixture._source, fixture._queue, timestamp(0)), ErrorCode::WrongOwner);
+      expect_error(runtime::runtime_issue_delivery(access, topology, futureClaim,
+          fixture._source, fixture._queue, timestamp(0)), ErrorCode::WrongOwner);
+      expect_error(runtime::runtime_issue_delivery(access, topology, emptyClaim,
+          fixture._source, fixture._queue, timestamp(0)), ErrorCode::WrongOwner);
+      expect_error(runtime::runtime_issue_delivery(access, topology, fixture.consumer_claim(),
+          fixture._otherSource, fixture._queue, timestamp(0)), ErrorCode::WrongOwner);
+      expect_error(runtime::runtime_issue_delivery(access, topology, fixture.consumer_claim(),
+          fixture._source, QueueId::Invalid, timestamp(0)), ErrorCode::NotFound);
+    }
+    EXPECT_EQ(fixture.image(), before);
+  }
+
+  // After issuance changes state, cleanup and another issuance use the generic
+  // fresh path. The deliberate receipt corruption qualifies that path; passing
+  // the earlier topology after this mutation would violate the private contract.
+  TEST(DeliveryProgressTest, GenericIssuanceRevalidatesAfterValidatedIssuanceAndCleanup)
+  {
+    DeliveryProgressFixture fixture;
+    fixture.mark_consumer_attached();
+    {
+      runtime::RuntimeAccess access(fixture._state);
+      const auto topology = runtime::runtime_topology(access);
+      const auto first = require_value(runtime::runtime_issue_delivery(access, topology,
+          fixture.consumer_claim(), fixture._source, fixture._queue, timestamp(3)));
+      require_value(runtime::runtime_release_delivery(access, first._token));
+      const auto generation = access._snapshot._generation;
+      const auto beforeCorruption = fixture.image();
+
+      // This is an atomic, gate-protected fault seam, not a journaled update.
+      const auto reserved = first._receiptReference + 15 * sizeof(std::uint64_t);
+      set_atomic_word(fixture._directory, reserved, 1);
+      expect_error(runtime::runtime_issue_delivery(access, fixture.consumer_claim(),
+          fixture._source, fixture._queue, timestamp(4)), ErrorCode::IoError);
+      EXPECT_EQ(access.read_words(120, 1)[0], generation);
+      set_atomic_word(fixture._directory, reserved, 0);
+      EXPECT_EQ(fixture.image(), beforeCorruption);
+
+      const auto second = require_value(runtime::runtime_issue_delivery(access, fixture.consumer_claim(),
+          fixture._source, fixture._queue, timestamp(17)));
+      EXPECT_EQ(second._token._sequence, first._token._sequence);
+      EXPECT_EQ(second._token._issuance, first._token._issuance + 1);
+      EXPECT_EQ(second._dequeuedAt, timestamp(17));
+      EXPECT_EQ(access._snapshot._generation, generation + 1);
+    }
+    fixture.validate();
   }
 
   TEST(DeliveryProgressTest, ReleaseRetainsHistoryAndRedeliveryGetsAFreshExactToken)

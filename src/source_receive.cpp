@@ -257,7 +257,7 @@ namespace angaria::detail
           const auto words = access.read_words(source._stateOffset, 8);
           if (words[2] != 0)
           {
-            const auto progress = runtime_value(runtime_issue_delivery(access, task->_claim,
+            const auto progress = runtime_value(runtime_issue_delivery(access, topology, task->_claim,
                 state->_id, QueueId::Invalid, UtcTimestamp{}));
             return prepare_delivery(access, state, task, progress, hooks);
           }
@@ -322,7 +322,10 @@ namespace angaria::detail
             // Save a nonallocating discovery key before the journal can commit
             // an issuance whose token never reaches this function's caller.
             state->_reservation->_pendingIssuance = counter + 1;
-            const auto progress = runtime_issue_delivery(access, task->_claim, state->_id,
+            // The gate stayed held since topology validation. A successful
+            // empty loss result made no transaction; a committed gap returned
+            // above. Issuance may therefore reuse this unchanged validation.
+            const auto progress = runtime_issue_delivery(access, topology, task->_claim, state->_id,
                 selected->_definition._id, dequeuedAt);
             if (const auto* error = std::get_if<Error>(&progress))
             {
