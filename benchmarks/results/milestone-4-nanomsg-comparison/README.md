@@ -45,7 +45,7 @@ A preliminary adapter characterization with a per-message claim lookup is preser
 
 - [Manifest](linux-x86_64/manifest.toml): host, source/executable hashes, exact dependency/runtime ABI, C/C++ flags, order and limits.
 - [All run outcomes](linux-x86_64/runs.csv), [raw reports](linux-x86_64/reports.jsonl.gz), and [all attempt files](linux-x86_64/raw-attempts.tar.gz): commands, stdout/stderr, control events, per-message timings and reports.
-- [SVG figure](comparison-linux-x86_64.svg), [derived table](comparison.csv), and [plot/validation script](generate_figures.py). CSV latency columns explicitly use microseconds.
+- [SVG figure](comparison-linux-x86_64.svg), [derived table](comparison.csv), and [plot/validation script](generate_figures.py). CSV latency columns explicitly use microseconds. Retained CSV/SVG text uses normalized line endings/whitespace; raw report and attempt archives preserve the original evidence.
 
 Follow the [build and run guide](../../../docs/nanomsg-comparison.md) to collect another matrix. To recreate the figure from retained evidence with Python and Matplotlib:
 

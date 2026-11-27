@@ -71,7 +71,10 @@ def plot(directory):
                  '16-message bursts · median across 10 runs/cell; bars show run range · logarithmic axes\n'
                  'Different guarantees; bounded-cohort rates are not sustained capacity', fontsize=12)
     for extension in ('png', 'svg'):
-        fig.savefig(HERE / f'comparison-{directory.name}.{extension}', dpi=160)
+        target = HERE / f'comparison-{directory.name}.{extension}'
+        fig.savefig(target, dpi=160)
+        if extension == 'svg':
+            target.write_text('\n'.join(line.rstrip() for line in target.read_text().splitlines()) + '\n')
     plt.close(fig)
     rows = []
     for profile in LABELS:
@@ -93,7 +96,7 @@ def main():
             rows.extend(plot(HERE / name))
     assert rows, 'No retained measurements'
     with (HERE / 'comparison.csv').open('w', newline='') as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
