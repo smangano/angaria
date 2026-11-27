@@ -1,0 +1,13 @@
+"framework_version" = "0.4.13"
+"source_commit" = "d2c728c502fc2365711f21f0f34e6980548f5293"
+"executable_sha256" = "aa4f8b6548e0fb8d0706742a0f27bf64440763544f416df5d56171152c2d96e0"
+"host" = "Apple M4; 10 logical CPUs; 16 GiB; macOS 27.0.1"
+"environment_case_arguments" = ["128", "16", "1", "8", "serial"]
+"environment_repetitions_per_context" = 3
+"environment_order" = "three managed, then three direct host; not randomized"
+"cpu_sample_benchmark_arguments" = ["384", "16", "1", "8", "serial"]
+"cpu_sample_command" = "arch -arm64 /usr/bin/sample PID 5 1 -mayDie -file OUTPUT"
+"cpu_sample_stack_observations" = 3372
+"cpu_sample_plain_sha256" = "91da115889dd8f20aacb4d63ac91a8cc528131be0b1bfab3f0e07d18659881c4"
+"resource_command" = "/usr/bin/time -l ORIGINAL_BINARY NEW_SESSION 128 16 1 8 serial"
+"notes" = "Whole-program resource/sampling observations include startup and warmup, unlike per-operation latency intervals."

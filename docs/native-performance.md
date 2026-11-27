@@ -1,6 +1,6 @@
 # Native transport measurements
 
-Step 4.12 adds [detailed diagnostics](performance-diagnostics.md) and controlled experiments to explain this baseline. Milestone-4 integration into `main` is held for measured fixes and qualification.
+Step 4.12 adds [detailed diagnostics](performance-diagnostics.md) and [recorded findings](performance-diagnostics-findings.md) from controlled experiments to explain this baseline. Milestone-4 integration into `main` is held for measured fixes and qualification.
 
 Milestone 4 step 4.11, framework **0.4.13**, measures the implemented direct Queue transport. The [completion audit](milestones/milestone-4-completion.md) records its compatibility and progress boundaries. These are measurements of a correctness baseline with a blocking Session-wide mutation gate, not a latency guarantee or a comparison with other frameworks.
 

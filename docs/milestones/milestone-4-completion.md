@@ -1,5 +1,7 @@
 # Milestone 4 completion audit
 
+**Integration hold:** the step-4.11 baseline below exposed unacceptable performance. Step [4.12 diagnostics](../performance-diagnostics-findings.md), framework **0.4.14**, records the causes and next fix candidates. Integration into `main` requires reviewed measured improvements and final qualification. This document retains the original step-4.11 scope audit.
+
 Step **4.11**, framework **0.4.13**, completes the measurement and audit work for review on `milestone-4-11`, targeting `milestone-4`. It does not integrate the milestone into `main`; that requires the separate milestone integration PR after this step is reviewed and merged. [The review plan](milestone-4.md) records the eleven development steps and intervening focused PRs.
 
 ## Implemented scope and evidence

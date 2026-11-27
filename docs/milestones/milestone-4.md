@@ -107,7 +107,7 @@ The completion review covers all eleven steps, retained native profiles and capa
 
 ## Qualification and completion
 
-The step-4.11 measurements exposed substantial preparation cost. Step **4.12**, framework **0.4.14**, adds [detailed diagnostics](../performance-diagnostics.md). Integration into `main` is held for diagnosis, focused measured fixes, and final performance/correctness qualification. Additional fix PRs will target `milestone-4`; no integration PR is opened as part of diagnostics.
+The step-4.11 measurements exposed substantial preparation cost. Step **4.12**, framework **0.4.14**, adds [detailed diagnostics](../performance-diagnostics.md). Integration into `main` is held for diagnosis, focused measured fixes, and final performance/correctness qualification. The [recorded findings](../performance-diagnostics-findings.md) retain the measured code, raw evidence, and proposed fix sequence. Additional fix PRs will target `milestone-4`; no integration PR is opened as part of diagnostics.
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.
 
