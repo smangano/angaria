@@ -150,7 +150,8 @@ namespace angaria::benchmarks
   // Worker construction precedes the common start barrier. Every failure path
   // joins started threads; phase timing stops before join overhead.
   template <typename Function>
-  std::uint64_t run_workers(std::size_t count, Function function)
+  std::uint64_t run_workers(std::size_t count, Function function,
+                            std::chrono::steady_clock::time_point* phaseStart = nullptr)
   {
     using Clock = std::chrono::steady_clock;
     require(count > 0 && count <= channel_count + 1, "Invalid benchmark worker count");
@@ -216,6 +217,10 @@ namespace angaria::benchmarks
         return ready == count;
       });
       start = Clock::now();
+      if (phaseStart)
+      {
+        *phaseStart = start;
+      }
       released = true;
     }
     condition.notify_all();

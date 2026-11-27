@@ -182,6 +182,7 @@ namespace
     std::string_view _historyScope{"same"};
     std::size_t _idlePollers{};
     std::string_view _role{};
+    std::uint64_t _workBudgetMs{5000};
   };
 
   [[noreturn]] void invalid(std::string message)
@@ -195,7 +196,7 @@ namespace
     {
       invalid("Usage: angaria_transport_diagnostics DIRECTORY [--messages N --history H --payload-bytes B "
               "--fields F --capacity-scale C --workload serial|backlog|stream|process --collection none|counts|timings "
-              "--history-scope same|other --idle-pollers K --role setup|producer|consumer]");
+              "--history-scope same|other --idle-pollers K --role setup|producer|consumer --work-budget-ms MS]");
     }
     Options result;
     result._directory = argv[1];
@@ -218,6 +219,7 @@ namespace
         const auto count = parse_count(valueText, flag);
         if (flag == "--messages") result._messages = count;
         else if (flag == "--history") result._history = count;
+        else if (flag == "--work-budget-ms") result._workBudgetMs = count;
         else if (flag == "--payload-bytes" && count <= 4096) result._payloadBytes = static_cast<std::size_t>(count);
         else if (flag == "--fields" && count <= 512) result._fields = static_cast<std::size_t>(count);
         else if (flag == "--capacity-scale" && count <= 16) result._capacityScale = static_cast<std::uint32_t>(count);
@@ -226,6 +228,7 @@ namespace
       }
     }
     if (result._messages == 0 || result._messages > 128 || result._history > 2048 ||
+        result._workBudgetMs == 0 || result._workBudgetMs > 60000 ||
         result._payloadBytes < 8 || result._fields == 0 || result._payloadBytes % result._fields != 0 ||
         (result._capacityScale != 1 && result._capacityScale != 4 && result._capacityScale != 16) ||
         (result._workload != "serial" && result._workload != "backlog" && result._workload != "stream" &&
@@ -234,7 +237,7 @@ namespace
         (result._idlePollers != 0 && result._workload != "stream"))
     {
       invalid("Require messages 1..128, history 0..2048, payload bytes 8..4096, Fields 1..512 dividing bytes, "
-              "capacity scale 1/4/16, supported workload/history scope, and idle pollers only with stream");
+              "capacity scale 1/4/16, work budget 1..60000ms, supported workload/history scope, and idle pollers only with stream");
     }
     if ((result._workload != "process" && !result._role.empty()) ||
         (result._workload == "process" && result._role != "setup" && result._role != "producer" && result._role != "consumer"))
@@ -336,8 +339,26 @@ namespace
     Clock::time_point _start;
     std::atomic<bool> _stop{};
     std::atomic<bool> _finished{};
+    std::atomic<bool> _budgetExceeded{};
+    std::uint64_t _sent{};
     std::uint64_t _completed{};
     std::uint64_t _checksum{};
+    std::uint64_t _unacknowledgedAtStop{};
+
+    bool work_budget_reached()
+    {
+      if (_stop.load(std::memory_order_acquire))
+      {
+        return true;
+      }
+      if (Clock::now() - _start >= std::chrono::milliseconds{_options._workBudgetMs})
+      {
+        _budgetExceeded.store(true, std::memory_order_release);
+        _stop.store(true, std::memory_order_release);
+        return true;
+      }
+      return false;
+    }
 
     template <typename Function>
     auto measure_record(Record& record, std::string_view operation, std::uint64_t index, Function function)
@@ -369,14 +390,25 @@ namespace
     }
 
     template <typename Channel>
-    PublicationId send(Channel& channel, Records* records, std::uint64_t sequence)
+    bool send(Channel& channel, Records* records, std::uint64_t sequence)
     {
+      const bool bounded = records && (_options._workload == "stream" || _options._workload == "process");
+      if (bounded && work_budget_reached())
+      {
+        return false;
+      }
       auto issued = records ? measure(*records, "issue", sequence, [&]
       {
         return channel._producer.next_publication_id();
       }) : channel._producer.next_publication_id();
       const auto publication = value(std::move(issued));
       require(publication == PublicationId{channel._producerClaim, sequence}, "Issued identity changed");
+      // ID issuance is already settled. If its wait consumed the remaining
+      // budget, retain that sample but do not start a new send mutation.
+      if (bounded && work_budget_reached())
+      {
+        return false;
+      }
       std::array<DestinationOutcome, 1> destinations;
       const auto report = records ? measure(*records, "send", sequence, [&]
       {
@@ -386,23 +418,41 @@ namespace
       const auto accepted = _accepted.fetch_add(1, std::memory_order_release) + 1;
       if (records)
       {
+        ++_sent;
         auto& sample = records->_records[records->_used - 1];
         sample._historyAfter = accepted;
         sample._historyUpperBound = accepted;
       }
-      return publication;
+      return true;
     }
 
     template <typename Channel>
     bool receive(Channel& channel, Records* records, std::uint64_t sequence, std::uint64_t queueSequence = 0)
     {
+      const bool bounded = records && (_options._workload == "stream" || _options._workload == "process");
+      if (bounded && work_budget_reached())
+      {
+        return false;
+      }
+      auto receiveTimeout = std::chrono::duration_cast<std::chrono::nanoseconds>(5s);
+      if (bounded)
+      {
+        const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::milliseconds{_options._workBudgetMs} - (Clock::now() - _start));
+        if (remaining <= 0ns)
+        {
+          (void)work_budget_reached();
+          return false;
+        }
+        receiveTimeout = std::min(receiveTimeout, remaining);
+      }
       if (queueSequence == 0)
       {
         queueSequence = sequence;
       }
       auto received = records ? measure(*records, "receive", sequence, [&]
       {
-        return channel._source.receive(5s);
+        return channel._source.receive(receiveTimeout);
       }) : channel._source.receive(5s);
       if (const auto* error = std::get_if<Error>(&received))
       {
@@ -443,6 +493,14 @@ namespace
               "Received payload changed");
       std::uint64_t checksum{};
       for (const auto byte : delivery->_message._payload) checksum += std::to_integer<std::uint8_t>(byte);
+      if (bounded && work_budget_reached())
+      {
+        // The receive mutation finished and its borrow remains valid. Close
+        // after the measured phase releases this exact unfinished pin; no
+        // acknowledgment is started after the work budget has expired.
+        _unacknowledgedAtStop = 1;
+        return false;
+      }
       auto acknowledged = records ? measure(*records, "acknowledge", sequence, [&]
       {
         return channel._source.acknowledge(token);
@@ -553,6 +611,7 @@ namespace
            << ",\"capacity_scale\":" << options._capacityScale << ",\"history_scope\":\"" << options._historyScope
            << "\",\"idle_pollers\":" << options._idlePollers << ",\"channels\":" << channel_count
            << ",\"ring_capacity\":" << ring_capacity;
+    output << ",\"work_budget_ms\":" << options._workBudgetMs;
   }
 
   std::string framework_version(const Session& session)
@@ -645,6 +704,8 @@ namespace
                        std::uint64_t before, std::uint64_t phase, const Workload& workload)
   {
     const auto identity = session.identity();
+    const bool producer = options._role == "producer";
+    const bool complete = producer ? workload._sent == options._messages : workload._completed == options._messages;
     std::ostringstream output;
     output.exceptions(std::ios::badbit | std::ios::failbit);
     output << '{';
@@ -654,12 +715,17 @@ namespace
            << ",\"worker_incarnation\":" << claim._incarnation
            << ",\"session_high\":" << identity._high << ",\"session_low\":" << identity._low
            << ",\"history_bounds_exact\":false,\"history_before\":" << options._history
-           << ",\"history_after\":" << options._history + options._messages
+           << ",\"history_after\":" << workload._accepted.load(std::memory_order_acquire)
            << ",\"file_bytes_before\":" << before
            << ",\"file_bytes_after\":" << std::filesystem::file_size(options._directory / "session.ang")
            << ",\"work_phase_ns\":" << phase
-           << ",\"sent\":" << (options._role == "producer" ? options._messages : 0)
+           << ",\"outcome\":\"" << (complete ? "complete" : "budget_exceeded") << '\"'
+           << ",\"sent\":" << workload._sent
            << ",\"completed\":" << workload._completed << ",\"checksum\":" << workload._checksum
+           << ",\"unacknowledged_at_stop\":" << workload._unacknowledgedAtStop
+           << ",\"controls\":{\"status\":" << (producer && workload._sent != 0 ? "true" : "false")
+           << ",\"identical_retry\":" << (producer && workload._sent != 0 ? "true" : "false")
+           << ",\"empty_receive\":" << (!producer && workload._completed == options._messages ? "true" : "false") << '}'
            << ",\"samples\":[";
     for (std::size_t index = 0; index < records._used; ++index)
     {
@@ -703,24 +769,32 @@ namespace
       workload._start = Clock::now();
       for (std::uint64_t sequence = 1; sequence <= options._messages; ++sequence)
       {
-        workload.send(endpoint, &records, sequence);
+        if (!workload.send(endpoint, &records, sequence))
+        {
+          break;
+        }
       }
       const auto phase = elapsed_ns(workload._start, Clock::now());
       process_barrier("DONE");
-      const PublicationId last{claim, options._messages};
-      std::array<DestinationOutcome, 1> destinations;
-      const auto status = workload.measure(records, "status", last._sequence, [&]
+      if (workload._sent != 0)
       {
-        return endpoint._producer.publication_status(last, destinations);
-      });
-      check_report(status, last, queue);
-      records._records[records._used - 1]._result = "accepted";
-      const auto retry = workload.measure(records, "identical_retry", last._sequence, [&]
-      {
-        return endpoint._writer.send(last, workload._outgoing, destinations);
-      });
-      check_report(retry, last, queue);
-      records._records[records._used - 1]._result = "accepted";
+        const PublicationId last{claim, workload._sent};
+        std::array<DestinationOutcome, 1> destinations;
+        const auto status = workload.measure(records, "status", last._sequence, [&]
+        {
+          return endpoint._producer.publication_status(last, destinations);
+        });
+        check_report(status, last, queue);
+        records._records[records._used - 1]._result = "accepted";
+        const auto retry = workload.measure(records, "identical_retry", last._sequence, [&]
+        {
+          return endpoint._writer.send(last, workload._outgoing, destinations);
+        });
+        check_report(retry, last, queue);
+        records._records[records._used - 1]._result = "accepted";
+      }
+      require(workload._sent == options._messages || workload._budgetExceeded.load(),
+              "Process producer stopped without exhausting its budget");
       worker_report(options, session, claim, records, before, phase, workload);
     }
     else
@@ -731,32 +805,34 @@ namespace
       Records records(2 * options._messages + 17, 1);
       process_barrier("READY");
       workload._start = Clock::now();
-      const auto deadline = workload._start + 30s;
       const auto offset = options._historyScope == "same" ? options._history : 0;
-      for (std::uint64_t sequence = 1; sequence <= options._messages;)
+      for (std::uint64_t sequence = 1; sequence <= options._messages && !workload.work_budget_reached();)
       {
         if (workload.receive(endpoint, &records, sequence, offset + sequence))
         {
           ++sequence;
         }
-        require(Clock::now() < deadline, "Process receive exceeded its bounded run budget");
       }
       const auto phase = elapsed_ns(workload._start, Clock::now());
       process_barrier("DONE");
       const auto observed = value(registry.task_status(producer));
       require(observed._task == producer && observed._incarnation == producerClaim._incarnation,
               "Process producer identity changed during the measurement");
-      auto empty = workload.measure(records, "empty_receive", 1, [&]
+      if (workload._completed == options._messages)
       {
-        return endpoint._source.receive();
-      });
-      if (const auto* error = std::get_if<Error>(&empty))
-      {
-        throw BenchmarkFailure{*error};
+        auto empty = workload.measure(records, "empty_receive", 1, [&]
+        {
+          return endpoint._source.receive();
+        });
+        if (const auto* error = std::get_if<Error>(&empty))
+        {
+          throw BenchmarkFailure{*error};
+        }
+        require(std::holds_alternative<ReceiveTimeout>(empty), "Process consumer left an unexpected delivery");
+        records._records[records._used - 1]._result = "timeout";
       }
-      require(std::holds_alternative<ReceiveTimeout>(empty), "Process consumer left an unexpected delivery");
-      records._records[records._used - 1]._result = "timeout";
-      require(workload._completed == options._messages && workload._checksum == options._messages * options._payloadBytes * 65,
+      require((workload._completed == options._messages || workload._budgetExceeded.load()) &&
+                  workload._checksum == workload._completed * options._payloadBytes * 65,
               "Process completion count or payload checksum changed");
       value(endpoint._source.close());
       worker_report(options, session, claim, records, before, phase, workload);
@@ -840,18 +916,19 @@ namespace
         {
           if (actor == 0)
           {
-            for (std::uint64_t index = 1; index <= options._messages && !workload._stop.load(); ++index)
+            for (std::uint64_t index = 1; index <= options._messages; ++index)
             {
-              workload.send(*streamProducer, &producer, index);
+              if (!workload.send(*streamProducer, &producer, index))
+              {
+                break;
+              }
             }
           }
           else if (actor == 1)
           {
-            const auto deadline = Clock::now() + 30s;
-            for (std::uint64_t index = 1; index <= options._messages && !workload._stop.load();)
+            for (std::uint64_t index = 1; index <= options._messages && !workload.work_budget_reached();)
             {
               if (workload.receive(*streamConsumer, &consumer, index, offset + index)) ++index;
-              require(Clock::now() < deadline, "Streaming workload exceeded its bounded run budget");
             }
             workload._finished.store(true, std::memory_order_release);
           }
@@ -863,15 +940,23 @@ namespace
             Record overflowRecord;
             overflowRecord._actor = actor;
             for (std::uint64_t index = 1; !workload._finished.load(std::memory_order_acquire) &&
-                 !workload._stop.load(); ++index)
+                 !workload.work_budget_reached(); ++index)
             {
+              const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::milliseconds{options._workBudgetMs} - (Clock::now() - workload._start));
+              if (remaining <= 0ns)
+              {
+                (void)workload.work_budget_reached();
+                break;
+              }
+              const auto timeout = std::min(std::chrono::duration_cast<std::chrono::nanoseconds>(1ms), remaining);
               // Retain a bounded prefix of raw polls, then reuse one scratch
               // sample while continuing to poll and aggregate every call.
               auto& record = records._used < records._records.size()
                   ? records.next("idle_empty_receive", index) : overflowRecord;
               auto result = workload.measure_record(record, "idle_empty_receive", index, [&]
               {
-                return source.receive(1ms);
+                return source.receive(timeout);
               });
               if (const auto* error = std::get_if<Error>(&result))
               {
@@ -889,7 +974,7 @@ namespace
           workload._stop.store(true, std::memory_order_release);
           throw;
         }
-      });
+      }, &workload._start);
       afterPublish = std::filesystem::file_size(file);
     }
     else if (options._workload == "backlog")
@@ -920,8 +1005,14 @@ namespace
       afterPublish = std::filesystem::file_size(file);
     }
     const auto afterDrain = std::filesystem::file_size(file);
-    require(afterPublish == afterDrain && afterDrain > before, "Draining changed physical append accounting");
-    require(workload._completed == options._messages && workload._checksum == options._messages * options._payloadBytes * 65,
+    const auto accepted = workload._sent;
+    const bool complete = workload._completed == options._messages && accepted == options._messages;
+    require(afterPublish == afterDrain && afterDrain >= before && ((accepted == 0) == (afterDrain == before)),
+            "Draining changed physical append accounting");
+    require(workload._completed <= accepted && accepted <= options._messages &&
+                workload._completed + workload._unacknowledgedAtStop <= accepted &&
+                (complete || workload._budgetExceeded.load()) &&
+                workload._checksum == workload._completed * options._payloadBytes * 65,
             "Measured completion or checksum changed");
     auto& producerTask = streamProducer ? streamProducer->_producer : channels[0]._producer;
     auto& writer = streamProducer ? streamProducer->_writer : channels[0]._writer;
@@ -929,27 +1020,36 @@ namespace
     const auto producerClaim = streamProducer ? streamProducer->_producerClaim : channels[0]._producerClaim;
     const auto consumerClaim = streamConsumer ? streamConsumer->_consumerClaim : channels[0]._consumerClaim;
     const auto queue = streamProducer ? streamProducer->_queue : channels[0]._queue;
-    const PublicationId last{producerClaim, (streamProducer ? 0 : offset) + options._messages};
-    std::array<DestinationOutcome, 1> destinations;
-    const auto status = workload.measure(producer, "status", last._sequence, [&]
+    if (accepted != 0)
     {
-      return producerTask.publication_status(last, destinations);
-    });
-    check_report(status, last, queue);
-    producer._records[producer._used - 1]._result = "accepted";
-    const auto repeated = workload.measure(producer, "identical_retry", last._sequence, [&]
+      const PublicationId last{producerClaim, (streamProducer ? 0 : offset) + accepted};
+      std::array<DestinationOutcome, 1> destinations;
+      const auto status = workload.measure(producer, "status", last._sequence, [&]
+      {
+        return producerTask.publication_status(last, destinations);
+      });
+      check_report(status, last, queue);
+      producer._records[producer._used - 1]._result = "accepted";
+      const auto repeated = workload.measure(producer, "identical_retry", last._sequence, [&]
+      {
+        return writer.send(last, workload._outgoing, destinations);
+      });
+      check_report(repeated, last, queue);
+      producer._records[producer._used - 1]._result = "accepted";
+    }
+    if (workload._completed == accepted)
     {
-      return writer.send(last, workload._outgoing, destinations);
-    });
-    check_report(repeated, last, queue);
-    producer._records[producer._used - 1]._result = "accepted";
-    auto empty = workload.measure(consumer, "empty_receive", 1, [&]
-    {
-      return reader.receive();
-    });
-    if (const auto* error = std::get_if<Error>(&empty)) throw BenchmarkFailure{*error};
-    require(std::holds_alternative<ReceiveTimeout>(empty), "Unexpected delivery remained after draining");
-    consumer._records[consumer._used - 1]._result = "timeout";
+      auto empty = workload.measure(consumer, "empty_receive", 1, [&]
+      {
+        return reader.receive();
+      });
+      if (const auto* error = std::get_if<Error>(&empty))
+      {
+        throw BenchmarkFailure{*error};
+      }
+      require(std::holds_alternative<ReceiveTimeout>(empty), "Unexpected delivery remained after draining");
+      consumer._records[consumer._used - 1]._result = "timeout";
+    }
     require(std::filesystem::file_size(file) == afterDrain, "Lookup/retry/empty poll unexpectedly appended bytes");
     for (auto& channel : channels) value(channel._source.close());
     if (streamConsumer)
@@ -983,12 +1083,19 @@ namespace
            << ",\"consumer_incarnation\":" << consumerClaim._incarnation
            << ",\"active_claims\":" << (streamProducer ? 2 + options._idlePollers : 9)
            << ",\"history_before\":" << options._history
-           << ",\"history_after\":" << options._history + options._messages
+           << ",\"history_after\":" << options._history + accepted
            << ",\"history_bounds_exact\":" << (options._workload == "stream" ? "false" : "true")
            << ",\"file_bytes_before\":" << before << ",\"file_bytes_after_publish\":" << afterPublish
            << ",\"file_bytes_after_drain\":" << afterDrain << ",\"append_bytes\":" << afterDrain - before
            << ",\"publish_phase_ns\":" << publishPhase << ",\"drain_phase_ns\":" << drainPhase
-           << ",\"cycle_phase_ns\":" << cyclePhase << ",\"completed\":" << workload._completed
+           << ",\"cycle_phase_ns\":" << cyclePhase
+           << ",\"outcome\":\"" << (complete ? "complete" : "budget_exceeded") << '\"'
+           << ",\"accepted\":" << accepted << ",\"completed\":" << workload._completed
+           << ",\"pending\":" << accepted - workload._completed
+           << ",\"unacknowledged_at_stop\":" << workload._unacknowledgedAtStop
+           << ",\"controls\":{\"status\":" << (accepted != 0 ? "true" : "false")
+           << ",\"identical_retry\":" << (accepted != 0 ? "true" : "false")
+           << ",\"empty_receive\":" << (workload._completed == accepted ? "true" : "false") << '}'
            << ",\"checksum\":" << workload._checksum << ",\"samples\":[";
     for (std::size_t index = 0; index < ordered.size(); ++index)
     {

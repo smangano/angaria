@@ -26,8 +26,9 @@ from run_native import ROOT, check, metadata, sha256
 
 
 DIMENSIONS = ("workload", "collection", "messages", "history", "history_scope",
-              "payload_bytes", "fields", "capacity_scale", "idle_pollers")
-SUMMARY_DIMENSIONS = ("instrumentation_enabled", "active_claims", "producer_incarnation", "consumer_incarnation") + DIMENSIONS
+              "payload_bytes", "fields", "capacity_scale", "idle_pollers", "work_budget_ms")
+PROGRESS = ("outcome", "accepted", "completed", "pending", "unacknowledged_at_stop")
+SUMMARY_DIMENSIONS = ("instrumentation_enabled", "active_claims", "producer_incarnation", "consumer_incarnation") + DIMENSIONS + PROGRESS
 OPERATIONS = {"issue", "send", "receive", "acknowledge", "status", "identical_retry",
               "empty_receive", "idle_empty_receive"}
 RESULTS = {"issue": {"ok"}, "send": {"ok"}, "acknowledge": {"ok"},
@@ -49,7 +50,7 @@ PHASES = {"journal_open", "recovery", "snapshot", "prefix_scan", "record_index",
 def case(**overrides):
     values = dict(workload="serial", collection="none", messages=16, history=0,
                   history_scope="same", payload_bytes=8, fields=1,
-                  capacity_scale=1, idle_pollers=0)
+                  capacity_scale=1, idle_pollers=0, work_budget_ms=5000)
     values.update(overrides)
     return values
 
@@ -189,17 +190,33 @@ def invoke_process(executable, directory, values, timeout):
             after = (directory / "session.ang").stat().st_size
             check(after == after_done, "Post-work process controls changed the append length")
             producer, consumer = workers["producer"], workers["consumer"]
-            check(producer.get("sent") == values["messages"] and producer.get("completed") == producer.get("checksum") == 0,
+            accepted = number(producer.get("sent"), "producer accepted publications")
+            completed = number(consumer.get("completed"), "consumer acknowledgments")
+            unacknowledged = number(consumer.get("unacknowledged_at_stop"), "unfinished delivery")
+            check(accepted <= values["messages"] and completed + unacknowledged <= accepted and unacknowledged <= 1 and
+                  producer.get("completed") == producer.get("checksum") == 0,
                   "Producer completion accounting changed")
+            for role, worker in workers.items():
+                count = accepted if role == "producer" else completed
+                check(worker.get("outcome") == ("complete" if count == values["messages"] else "budget_exceeded"),
+                      "Worker outcome disagrees with its recorded progress")
+                expected_controls = dict(status=role == "producer" and accepted > 0,
+                                         identical_retry=role == "producer" and accepted > 0,
+                                         empty_receive=role == "consumer" and completed == values["messages"])
+                check(worker.get("controls") == expected_controls and
+                      all(type(flag) is bool for flag in worker["controls"].values()), "Worker control flags changed")
+            outcome = "complete" if completed == accepted == values["messages"] else "budget_exceeded"
+            controls = dict(status=accepted > 0, identical_retry=accepted > 0, empty_receive=completed == values["messages"])
             return dict(values, framework_version=setup["framework_version"],
                         instrumentation_enabled=setup["instrumentation_enabled"], channels=4, ring_capacity=8,
-                        history_before=values["history"], history_after=values["history"] + values["messages"],
+                        history_before=values["history"], history_after=values["history"] + accepted,
                         history_bounds_exact=False, clock_scope="actor_relative", active_claims=2,
                         producer_incarnation=2, consumer_incarnation=2, file_bytes_before=before,
                         file_bytes_after_publish=after_done, file_bytes_after_drain=after, append_bytes=after - before,
                         publish_phase_ns=0, drain_phase_ns=0, cycle_phase_ns=0,
                         process_phase_ns=done_ns - release_ns, process_exit_ns=time.monotonic_ns() - release_ns,
-                        completed=consumer["completed"], checksum=consumer["checksum"],
+                        outcome=outcome, accepted=accepted, completed=completed, pending=accepted - completed,
+                        unacknowledged_at_stop=unacknowledged, controls=controls, checksum=consumer["checksum"],
                         worker_processes=[dict(role=role, pid=processes[role].pid, task=workers[role]["worker_task"],
                                                incarnation=workers[role]["worker_incarnation"],
                                                work_phase_ns=workers[role]["work_phase_ns"]) for role in roles],
@@ -268,7 +285,9 @@ def matrix(options, enabled):
                         collection="timings" if enabled else "none")]
                 + [case(messages=2, workload="stream", idle_pollers=count,
                         collection="counts" if enabled else "none") for count in (0, 1)]
-                + [case(messages=2, history=4, workload="process")])
+                + [case(messages=2, history=4, workload="process")]
+                + [case(messages=2, workload="stream", idle_pollers=1, work_budget_ms=1,
+                        collection="timings" if enabled else "none")])
     if options.suite == "ci":
         collections = ("none", "timings") if enabled else ("none",)
     messages = 8 if options.suite == "ci" else 16
@@ -349,9 +368,18 @@ def validate(report, values, enabled=None):
         check(report["instrumentation_enabled"] == enabled, "Instrumentation flag changed within the matrix")
     check(report["instrumentation_enabled"] or values["collection"] == "none", "Disabled build collected observations")
     n, history = values["messages"], values["history"]
+    accepted = number(report.get("accepted"), "accepted publications")
+    completed = number(report.get("completed"), "completed acknowledgments")
+    pending = number(report.get("pending"), "pending publications")
+    unfinished = number(report.get("unacknowledged_at_stop"), "unfinished delivery")
+    check(completed + unfinished <= accepted <= n and unfinished <= 1 and pending == accepted - completed,
+          "Publication/acknowledgment progress is inconsistent")
+    outcome = "complete" if completed == accepted == n else "budget_exceeded"
+    check(report.get("outcome") == outcome and
+          (outcome == "complete" or values["workload"] in ("stream", "process")), "Invalid work-budget outcome")
     for name, expected in dict(channels=4, ring_capacity=8, history_before=history,
-                               history_after=history + n, completed=n,
-                               checksum=n * values["payload_bytes"] * 65).items():
+                               history_after=history + accepted,
+                               checksum=completed * values["payload_bytes"] * 65).items():
         check(type(report.get(name)) is int and report[name] == expected, f"Invalid {name}")
     process_case = values["workload"] == "process"
     replacement = values["workload"] in ("stream", "process")
@@ -367,7 +395,8 @@ def validate(report, values, enabled=None):
                  "publish_phase_ns", "drain_phase_ns", "cycle_phase_ns"):
         number(report.get(name), name)
     before, after = report["file_bytes_before"], report["file_bytes_after_publish"]
-    check(before > 0 and after == report["file_bytes_after_drain"] and after - before == report["append_bytes"] > 0,
+    check(before > 0 and after == report["file_bytes_after_drain"] and after - before == report["append_bytes"] and
+          (report["append_bytes"] > 0 if accepted else report["append_bytes"] == 0),
           "Append/drain file accounting changed")
     check(all(count % 64 == 0 for count in (before, after, report["append_bytes"])), "Unaligned file accounting")
     if process_case:
@@ -388,7 +417,7 @@ def validate(report, values, enabled=None):
         check(report["cycle_phase_ns"] > 0 and report["publish_phase_ns"] == report["drain_phase_ns"] == 0,
               "Invalid cycle phase timing")
     samples = report.get("samples")
-    check(type(samples) is list and 4 * n + 3 <= len(samples) <= 4 * n + 19 + values["idle_pollers"] * (16 * n + 64),
+    check(type(samples) is list and len(samples) <= 4 * n + 19 + values["idle_pollers"] * (16 * n + 64),
           "Unexpected or unbounded sample count")
     operations = {name: [] for name in OPERATIONS}
     last_start = {}
@@ -400,7 +429,8 @@ def validate(report, values, enabled=None):
         clock = sample.get("actor") if process_case else "shared"
         check(sample["start_ns"] >= last_start.get(clock, 0), "Samples are not ordered within their clock domain")
         last_start[clock] = sample["start_ns"]
-        check(history <= sample["history_before"] <= sample["history_after"] <= sample["history_upper_bound"] <= history + n,
+        check(history <= sample["history_before"] <= sample["history_after"] <= sample["history_upper_bound"] <= history + n and
+              sample["history_after"] <= history + accepted,
               "Invalid operation history bounds")
         if report["history_bounds_exact"]:
             check(sample["history_after"] == sample["history_upper_bound"], "Inexact history in a nonstreaming case")
@@ -410,20 +440,29 @@ def validate(report, values, enabled=None):
         if sample["operation"] in ("status", "identical_retry", "empty_receive", "idle_empty_receive"):
             check(sample["counters"]["file_grow_calls"] == 0, "Observational operation grew the file")
         operations[sample["operation"]].append(sample)
-    for name in ("issue", "send", "acknowledge"):
-        check(len(operations[name]) == n, f"Missing {name} samples")
+    issued = len(operations["issue"])
+    check(accepted <= issued <= min(n, accepted + 1), "Invalid issued-but-unsent publication accounting")
+    check(len(operations["send"]) == accepted and len(operations["acknowledge"]) == completed,
+          "Send/acknowledgment samples disagree with progress")
     offset = history if values["history_scope"] == "same" and not replacement else 0
-    expected_indexes = list(range(offset + 1, offset + n + 1))
-    for name in ("issue", "send", "acknowledge"):
-        check(sorted(s["index"] for s in operations[name]) == expected_indexes, f"Invalid {name} sequence samples")
-    for name in ("status", "identical_retry", "empty_receive"):
-        check(len(operations[name]) == 1, f"Missing {name} control")
+    for name, count in (("issue", issued), ("send", accepted), ("acknowledge", completed)):
+        check(sorted(s["index"] for s in operations[name]) == list(range(offset + 1, offset + count + 1)),
+              f"Invalid {name} sequence samples")
+    controls = dict(status=accepted > 0, identical_retry=accepted > 0,
+                    empty_receive=completed == (n if process_case else accepted))
+    check(type(report.get("controls")) is dict and report["controls"] == controls and
+          all(type(flag) is bool for flag in report["controls"].values()), "Control presence/skipping is inconsistent")
+    for name, performed in controls.items():
+        check(len(operations[name]) == int(performed), f"Invalid {name} control count")
+        if performed and name != "empty_receive":
+            check(operations[name][0]["index"] == offset + accepted, "Control lookup changed publication identity")
     receives = operations["receive"]
-    check(sum(s["result"] == "delivery" for s in receives) == n and
+    check(sum(s["result"] == "delivery" for s in receives) == completed + unfinished and
           all(s["result"] in ("delivery", "timeout") for s in receives), "Receive outcomes/counts changed")
-    check(sorted(s["index"] for s in receives if s["result"] == "delivery") == expected_indexes,
+    check(sorted(s["index"] for s in receives if s["result"] == "delivery") == list(range(offset + 1, offset + completed + unfinished + 1)),
           "Delivery sample sequence changed")
-    check(n <= len(receives) <= n + (16 if values["workload"] in ("stream", "process") else 0), "Unexpected receive retries")
+    check(completed + unfinished <= len(receives) <= completed + unfinished + (16 if replacement else 0),
+          "Unexpected receive retries")
     idle = operations["idle_empty_receive"]
     check(len(idle) <= values["idle_pollers"] * (16 * n + 64) and
           all(s["result"] == "timeout" for s in idle), "Invalid idle polling samples")
@@ -512,6 +551,20 @@ def write_artifacts(directory, reports, manifest, sources, settings, cases, exec
     with gzip.open(directory / "reports.jsonl.gz", "wt", encoding="utf-8") as output:
         for report in reports:
             output.write(json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n")
+    rows = []
+    for report in reports:
+        row = {name: report[name] for name in SUMMARY_DIMENSIONS}
+        row.update(repetition=report["repetition"], operations_recorded=len(report["samples"]),
+                   checksum=report["checksum"], append_bytes=report["append_bytes"],
+                   cycle_phase_ns=report["cycle_phase_ns"], publish_phase_ns=report["publish_phase_ns"],
+                   drain_phase_ns=report["drain_phase_ns"], process_phase_ns=report.get("process_phase_ns", ""),
+                   process_exit_ns=report.get("process_exit_ns", ""))
+        rows.append(row)
+    with (directory / "runs.csv").open("w", newline="", encoding="utf-8") as output:
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
     for name, rows in zip(("summary.csv", "phases.csv"), summarize(reports)):
         with (directory / name).open("w", newline="", encoding="utf-8") as output:
             if rows:
@@ -527,7 +580,7 @@ def smoke_rejections(executable, temporary, timeout, existing):
     invalid = [dict(messages=0), dict(messages=129), dict(history=2049), dict(payload_bytes=0),
                dict(payload_bytes=4097), dict(fields=0), dict(fields=513), dict(fields=3),
                dict(capacity_scale=2), dict(workload="unknown"), dict(collection="unknown"),
-               dict(history_scope="unknown"), dict(idle_pollers=1)]
+               dict(history_scope="unknown"), dict(idle_pollers=1), dict(work_budget_ms=0), dict(work_budget_ms=60001)]
     for index, overrides in enumerate(invalid):
         path = temporary / f"invalid-{index}"
         invoke(command(executable, path, dict(valid, **overrides)), timeout, succeeds=False)
@@ -587,6 +640,13 @@ def parse_arguments():
     return options, executable
 
 
+def progress(index, cases, repetition, repetitions, report):
+    print(f"case {index + 1}/{cases} repeat {repetition}/{repetitions}: {report['workload']} "
+          f"history={report['history']} collection={report['collection']} {report['outcome']} "
+          f"accepted={report['accepted']}/{report['messages']} completed={report['completed']}/{report['messages']}",
+          file=sys.stderr, flush=True)
+
+
 def main():
     options, executable = parse_arguments()
     reports, sources, settings = [], {}, {}
@@ -612,6 +672,7 @@ def main():
                     manifest["instrumentation_enabled"] = enabled
                     cases = matrix(options, enabled)
                     check(cases[0] == first, "Discovery run differs from first matrix case")
+                    progress(0, len(cases), 1, repetitions, reports[-1])
                     if options.smoke:
                         smoke_rejections(executable, temporary, options.timeout, directory)
                 for index, values in enumerate(cases):
@@ -622,6 +683,7 @@ def main():
                             report = execute_case(executable, Path(run_name) / "session", values, options.timeout)
                             validate(report, values, enabled)
                             reports.append(dict(report, repetition=repetition + 1))
+                            progress(index, len(cases), repetition + 1, repetitions, reports[-1])
             manifest["status"] = "complete"
         except Exception as error:
             manifest["failure"] = str(error)
@@ -629,6 +691,9 @@ def main():
         finally:
             manifest["finished_utc"] = datetime.now(timezone.utc).isoformat()
             manifest["completed_runs"] = len(reports)
+            manifest["recorded_runs"] = len(reports)
+            manifest["budget_exceeded_runs"] = sum(report["outcome"] == "budget_exceeded" for report in reports)
+            manifest["completed_workloads"] = sum(report["outcome"] == "complete" for report in reports)
             if output:
                 write_artifacts(output, reports, manifest, sources, settings, cases, executable)
         print(f"Validated {len(reports)} diagnostic runs" + (f"; reports retained at {output}" if output else " (smoke)."))
