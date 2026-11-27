@@ -57,6 +57,8 @@ The separate [Cachegrind workflow](../.github/workflows/cachegrind.yml) runs on 
 
 Add the **`profile-cachegrind`** label to a pull request to request a run for that PR's head commit. The trigger is the `labeled` activity, so later pushes do not automatically repeat the profile. Remove and reapply the label to request the newer commit. Manual dispatch requires the workflow to exist on the default branch; then select the intended ref. GitHub documents the [event and manual-dispatch rules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
 
+Step 4.25 adds the alternative label **`profile-cachegrind-compare`** for a [matched base/head profile](performance-single-destination.md#matched-measurements). Both immutable SHAs are checked out and built on the same job with the same flags, tools, model and nine cases per version. Each checkout uses its own runner. The artifact contains separate `before/` and `after/` directories under `build/cachegrind-results/`, each with its own manifest and nine raw profiles. The base must include the profiling hooks and runner. The original label and manual dispatch retain the single-version root layout. Reapply the comparison label after a newer commit when another run is wanted.
+
 The workflow uses read-only repository permissions and checkout without persisted credentials. It does not use `pull_request_target`, secrets or repository-write permissions. Ordinary CI remains responsible for tests and its existing diagnostic matrix; this optional profile is not a speed gate. The seventeen primer programs use the same public calls and require no changes for this research tool.
 
 ## Recorded first run

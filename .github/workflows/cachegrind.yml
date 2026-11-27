@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cycle-profile:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'profile-cachegrind'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'profile-cachegrind' || github.event.label.name == 'profile-cachegrind-compare'
     name: Linux x86_64 cycle profile
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -39,16 +39,41 @@ jobs:
           -DANGARIA_ENABLE_CACHEGRIND=ON
       - name: Build profiling executable
         run: cmake --build build/cachegrind --target angaria_transport_diagnostics --parallel 3
-      - name: Profile nine serial cycle cases
-        id: profile
+      - name: Check out comparison base
+        if: github.event_name == 'pull_request' && github.event.label.name == 'profile-cachegrind-compare'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: build/profile-before
+          persist-credentials: false
+      - name: Build comparison base
+        if: github.event_name == 'pull_request' && github.event.label.name == 'profile-cachegrind-compare'
+        working-directory: build/profile-before
+        run: |
+          cmake -S . -B build/cachegrind -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-g -DBUILD_TESTING=OFF -DANGARIA_BUILD_BENCHMARKS=ON -DANGARIA_ENABLE_DIAGNOSTICS=OFF -DANGARIA_ENABLE_CACHEGRIND=ON
+          cmake --build build/cachegrind --target angaria_transport_diagnostics --parallel 3
+      - name: Profile comparison base
+        if: github.event_name == 'pull_request' && github.event.label.name == 'profile-cachegrind-compare'
+        id: profile_before
+        working-directory: build/profile-before
         run: >-
           python3 -B benchmarks/run_cachegrind.py
           build/cachegrind/angaria_transport_diagnostics
-          --output build/cachegrind-results
+          --output "$GITHUB_WORKSPACE/build/cachegrind-results/before"
+          --repetitions 3
+          --host-label "GitHub hosted Ubuntu 24.04 x86_64; fixed simulated cache model; comparison base"
+      - name: Profile nine serial cycle cases
+        id: profile
+        env:
+          ANGARIA_PROFILE_OUTPUT: ${{ github.event.label.name == 'profile-cachegrind-compare' && 'build/cachegrind-results/after' || 'build/cachegrind-results' }}
+        run: >-
+          python3 -B benchmarks/run_cachegrind.py
+          build/cachegrind/angaria_transport_diagnostics
+          --output "$ANGARIA_PROFILE_OUTPUT"
           --repetitions 3
           --host-label "GitHub hosted Ubuntu 24.04 x86_64; fixed simulated cache model"
       - name: Retain raw profiles and matrix
-        if: always() && steps.profile.outcome != 'skipped'
+        if: always() && (steps.profile.outcome != 'skipped' || steps.profile_before.outcome != 'skipped')
         uses: actions/upload-artifact@v7.0.2
         with:
           name: cachegrind-linux-x86_64-cycle

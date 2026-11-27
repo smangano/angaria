@@ -1,0 +1,35 @@
+# Avoiding uniqueness scratch for one Publication destination
+
+Milestone 4 step **4.25**, framework **0.4.27**, follows [Cachegrind profiling](performance-cachegrind.md). It removes an unnecessary uniqueness bitmap from validation of a Publication with exactly one destination. Public APIs, stored formats, synchronization, ownership and validation frequency are unchanged. Measured effects and final qualification are pending; this step makes no speed claim before matched evidence is retained.
+
+## What changes
+
+A **Publication** is the retained record of an accepted message and its original destination outcomes. A destination names one Queue and its preallocated receipt. Publication validation checks each destination's identity, receipt reference, acceptance/rejection fields and historical links. It also requires destination Queue IDs to be unique. See the [native message and receipt contract](native-transport.md).
+
+The first [Cachegrind results](../benchmarks/results/milestone-4-cachegrind/README.md#a-concrete-avoidable-initialization) identified an 8 KiB bitmap initialized inside `check_publication` in [publication_metadata.cpp](../src/publication_metadata.cpp). The bitmap has one bit for every possible 16-bit Queue ID. Clearing it is useful for checking several destinations, but one element cannot duplicate another element in the same list. The existing direct-send workload repeatedly paid this initialization cost while validating single-destination history.
+
+`check_publication` now handles a destination count of exactly one without constructing the bitmap. A small local helper performs the same destination validation and reports whether that row was accepted. The general branch retains the bitmap and original per-row uniqueness checks for every other count. Header validation still precedes row inspection; shared accepted-count, acceptance-policy, direct-send cardinality and timestamp checks still follow it at their existing boundaries.
+
+The sole row still passes the full `check_destination` logic. A zero Queue ID, invalid status/reason, malformed sequence/predecessor, wrong receipt reference or invalid rejection metadata still rejects. A one-row list does not become valid merely because uniqueness is automatic. Count/layout bounds remain at the existing entry points; the private empty-list path still fails its accepted-count check before accessing the first row. Multi-destination duplicate rejection remains after each row's validation and before that row contributes to the accepted count.
+
+## Risk assessment and qualification
+
+The [performance/correctness guidance](../AGENTS.md#performance-and-correctness) supports removing work whose condition is already established by the checked count. The proof here is narrow: a list of one destination contains no duplicate pair. It does not establish the row's validity, delivery ownership, current topology or receipt state. Those checks remain independent.
+
+The specialized path applies to any structurally valid one-destination Publication, including a Publication with a Publishing Set identity. It does not enable Publishing/fan-out runtime behavior that belongs to later milestones. Lists with two or more rows retain complete uniqueness checking, including Queue IDs near the 16-bit bound. No persistent cache, new heap allocation or borrowed lifetime is introduced. Complete history scans, generic encoders/decoders, error codes and recovery boundaries retain their contracts.
+
+Two focused codec tests qualify one-destination Publishing snapshots under both acceptance policies through the encoder, full decoder and metadata-only decoder, plus five malformed sole-row variants. Existing sparse-ID multi-destination duplicate and valid-distinct cases exercise the general branch. Existing direct publication, receipt, allowed-loss, history corruption, ownership, failure cleanup and interrupted recovery qualification remains relevant. These private codec fixtures supplement the public usage shown in the primer.
+
+The seventeen primer programs continue using the same public calls and owning/borrowing rules. Review of the lessons requires no source or lesson change for this internal uniqueness specialization.
+
+## Matched measurements
+
+The earlier profile selected this candidate, but a prior job's artifact alone is not its controlled before/after comparison. The optional [Cachegrind workflow](../.github/workflows/cachegrind.yml) now accepts the PR label **`profile-cachegrind-compare`**. It checks out the immutable PR base SHA and head SHA, builds both on the same Ubuntu x86_64 job with identical Release `-O3 -g` settings, profiling hooks ON and private diagnostics OFF, then runs each checkout's own runner.
+
+Each version contributes nine fresh-Session profiles: three repetitions at H=0, 32 and 128, with 16 new issue/send/receive/acknowledge cycles, eight payload bytes and one Field. H means messages already sent and acknowledged before the new cycles. Both use the [same fixed cache/branch model and cold measured region](performance-cachegrind.md#fixed-simulation-model-and-interpretation). Setup/preload, later controls and teardown stay outside instrumentation. The comparison retains **18 profiles**, separate before/after manifests, source/executable hashes, exact commands, versions, raw counts and annotations. Profiling wall time is not ordinary latency evidence.
+
+The base checkout lives in `build/profile-before`, under the existing ignored build directory, so its presence does not mark the head checkout's source as untracked. Its own runner writes `build/cachegrind-results/before` in the main workspace; the head runner writes `build/cachegrind-results/after`. Both checkouts disable persisted credentials and use read-only repository permissions. The artifact keeps the whole comparison root, including a failed profiling attempt. The ordinary **`profile-cachegrind`** label and manual dispatch retain their existing single-version root layout and nine-case behavior. Later pushes do not automatically rerun either label request; reapply the chosen label for a newer commit.
+
+Normal before/after builds must also run under matching execution settings. Adjacent alternating public-operation timings and complete controls establish ordinary latency/throughput effects; enabled diagnostics attribute unchanged or reduced work. Allocation, native calls and full-scan counts must be reported without assuming that avoiding stack initialization changes them. Simulated instruction/data-write changes cannot predict a matching percentage speedup, particularly because Cachegrind counts x86 REP iterations differently from hardware retirement.
+
+The [step result directory](../benchmarks/results/milestone-4-single-destination/README.md) will retain the matched profiles, ordinary measurements, qualification and plots. Local strict Release diagnostics OFF/ON each pass **825/825 tests** (17.83/18.24 seconds); performance measurements and CI qualification remain pending. The Session-wide gate, repeated history validation, owning manifest/command decoding, allocator work and native mapping checks remain separate costs.

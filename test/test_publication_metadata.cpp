@@ -164,6 +164,91 @@ TEST(PublicationMetadata, PartialSnapshotPreservesOrderAndRejectedReceiptReserva
   EXPECT_EQ(require_value(mapped::decode_publication_body(golden, record_offset, 576)), publication);
 }
 
+TEST(PublicationMetadata, SingleDestinationPublishingSnapshotsPreservePoliciesAndMetadata)
+{
+  // Private stored-format snapshots, not public Publishing fan-out. A single
+  // accepted Queue is valid under either policy, and a Publishing snapshot's
+  // enqueue time need not share the direct-send timestamp sample.
+  for (const auto policy : {AcceptancePolicy::AllDestinations, AcceptancePolicy::Partial})
+  {
+    SCOPED_TRACE(policy == AcceptancePolicy::Partial ? "Partial" : "AllDestinations");
+    auto publication = direct_publication();
+    publication._publishingSet = PublishingQueueSetId{9};
+    publication._acceptance = policy;
+    publication._destinations.front()._enqueuedAt = UtcTimestamp{std::chrono::nanoseconds{-6}};
+    auto golden = golden_direct();
+    put_integer(golden, 2, 9, 2);
+    put_integer(golden, 112, policy == AcceptancePolicy::Partial ? 2 : 1, 2);
+    put_integer(golden, 152, 0xfffffffffffffffau, 8);
+
+    EXPECT_EQ(require_value(mapped::encode_publication_body(publication, record_offset, record_limit)), golden);
+    EXPECT_EQ(require_value(mapped::decode_publication_body(golden, record_offset, record_limit)), publication);
+    const auto metadata = require_value(mapped::decode_publication_metadata(
+        std::span{golden}.first(128), std::span{golden}.subspan(128, 48),
+        std::span{golden}.subspan(179, 5), 184, record_offset, record_limit));
+    EXPECT_EQ(static_cast<const mapped::PublicationHeader&>(metadata),
+              static_cast<const mapped::PublicationHeader&>(publication));
+    EXPECT_EQ(metadata._destinations, publication._destinations);
+    EXPECT_EQ(metadata._payloadBytes, 3u);
+  }
+}
+
+TEST(PublicationMetadata, SingleDestinationPublishingSnapshotsRejectInvalidRowsAndFullyRejectedAttempts)
+{
+  // Deliberately corrupt independent bytes as well as typed input. Omitting a
+  // uniqueness bitmap for one row must retain row validation and the rule that
+  // even a Partial snapshot must contain an accepted destination.
+  for (unsigned variant = 0; variant != 5; ++variant)
+  {
+    SCOPED_TRACE(variant);
+    auto publication = direct_publication();
+    publication._publishingSet = PublishingQueueSetId{9};
+    publication._acceptance = AcceptancePolicy::Partial;
+    auto golden = golden_direct();
+    put_integer(golden, 2, 9, 2);
+    put_integer(golden, 112, 2, 2);
+    auto& destination = publication._destinations.front();
+    switch (variant)
+    {
+    case 0:
+      destination._queue = QueueId::Invalid;
+      put_integer(golden, 128, 0, 2);
+      break;
+    case 1:
+      destination._status = DestinationStatus::Unknown;
+      put_integer(golden, 130, 0, 2);
+      break;
+    case 2:
+      destination._reason = ErrorCode::LogFull;
+      put_integer(golden, 132, 14, 2);
+      break;
+    case 3:
+      destination._receiptReference = 8448;
+      put_integer(golden, 160, 8448, 8);
+      break;
+    case 4:
+      // This row is a valid rejection in isolation, but cannot constitute a
+      // committed Publication without any accepted Queue.
+      destination._status = DestinationStatus::Rejected;
+      destination._reason = ErrorCode::LogFull;
+      destination._queueSequence = 0;
+      destination._previousDelivery = 0;
+      destination._enqueuedAt = UtcTimestamp{};
+      put_integer(golden, 130, 2, 2);
+      put_integer(golden, 132, 14, 2);
+      put_integer(golden, 136, 0, 8);
+      put_integer(golden, 144, 0, 8);
+      put_integer(golden, 152, 0, 8);
+      break;
+    }
+    expect_error(mapped::encode_publication_body(publication, record_offset, record_limit), ErrorCode::InvalidArgument);
+    expect_error(mapped::decode_publication_body(golden, record_offset, record_limit), ErrorCode::IoError);
+    expect_error(mapped::decode_publication_metadata(
+        std::span{golden}.first(128), std::span{golden}.subspan(128, 48),
+        std::span{golden}.subspan(179, 5), 184, record_offset, record_limit), ErrorCode::IoError);
+  }
+}
+
 TEST(PublicationMetadata, DestinationCodecMatchesIndependentRow)
 {
   const auto golden = golden_direct();
