@@ -148,9 +148,17 @@ namespace angaria::detail
   void runtime_validate_task_state(std::span<const std::uint64_t> words, TaskKind kind);
   LoadedTask runtime_task(RuntimeAccess& access, TaskId task);
   std::vector<LoadedField> runtime_fields(RuntimeAccess& access);
+  // Trusted operation-local overloads accept the complete unmodified Tasks
+  // returned by runtime_tasks(access) under this same continuously held gate,
+  // without intervening Session mutation. No cross-operation cache is added;
+  // generic overloads continue loading and checking current Tasks.
+  std::vector<LoadedField> runtime_fields(RuntimeAccess& access, std::span<const LoadedTask> tasks);
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access);
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedTask> tasks);
   // Reuse Fields already validated under this access's held mutation gate.
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields);
+  std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields,
+                                              std::span<const LoadedTask> tasks);
   LoadedField runtime_field(RuntimeAccess& access, FieldId field);
   LoadedSchema runtime_schema(RuntimeAccess& access, SchemaId schema);
   void runtime_validate_field_policy(const FieldDescriptor& descriptor, ErrorCode invalidCode);

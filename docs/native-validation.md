@@ -30,6 +30,8 @@ Session attachment, topology reads, and current/historical Registry snapshots va
 
 Publication IDs may be accepted in a different order from their issuance: a producer can issue IDs 1 and 2, then send 2 before 1. Queue sequences describe acceptance order; publication sequences distinguish requests. Validation enforces uniqueness and issued bounds without confusing those two orders.
 
+Step 4.20 [reuses complete checked definitions within the same unchanged operation](performance-definition-reuse.md). Delivery validation borrows retained Queue/Source histories already decoded by topology, preserving historical effective-definition rules. Schema validation reuses the checked Task catalog for creator attribution. Mutable delivery state and complete Publication history are still checked; no model survives an operation or mutation boundary.
+
 The implemented native profiles support direct acceptance only. A native Publishing acceptance or Retry requires later capability work, even though the private record codecs can represent broader snapshots. Multiple Active Queues in one Source remain valid Registry topology; fresh Source selection currently supports at most one Active Queue. An existing pin remains usable during membership growth. Multiple-Queue selection follows milestone 5.
 
 ## Core progress words
