@@ -1,5 +1,7 @@
 #include "mutation_journal.h"
 
+#include "performance_diagnostics.h"
+
 #include "angaria/detail/append_layout.h"
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/checked_arithmetic.h"
@@ -174,6 +176,8 @@ namespace angaria::detail::mapped
     PrefixRecords scan_prefix(NativeFile& file, std::uint64_t arena, std::uint64_t tail,
                                std::uint64_t generation)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(PrefixScan);
+      ANGARIA_DIAGNOSTIC_COUNT(PrefixScans, 1);
       PrefixRecords prefix;
       if (tail < arena || tail % section_alignment != 0 || tail > value_or_throw<JournalFailure>(file.size()))
       {
@@ -184,6 +188,7 @@ namespace angaria::detail::mapped
       std::uint64_t previousGeneration{};
       for (auto offset = arena; offset < tail;)
       {
+        ANGARIA_DIAGNOSTIC_COUNT(PrefixRecords, 1);
         auto record = read_range(file, offset, tail, arena);
         const auto& envelope = record._envelope;
         if (envelope._readiness != 2 || envelope._generation > generation)
@@ -301,6 +306,7 @@ namespace angaria::detail::mapped
 
     JournalSnapshot clean_snapshot(MutationJournalState& state, NativeFile& file)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(Snapshot);
       if (control(state) != JournalControl::Idle)
       {
         fail(ErrorCode::IoError, "Journal recovery is required");
@@ -460,6 +466,7 @@ namespace angaria::detail::mapped
     AcceptedBatch validate_accepted(MutationJournalState& state, NativeFile& file,
                                     const JournalHeader& header, const PrefixRecords& prefix)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(Materialize);
       AcceptedBatch batch;
       auto allRecords = prefix._ranges;
       if (header._kind == JournalKind::FixedState)
@@ -523,6 +530,7 @@ namespace angaria::detail::mapped
     void apply_accepted(MutationJournalState& state, NativeFile& file, const JournalHeader& header,
                          const PrefixRecords& prefix, const AcceptedBatch& batch)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(CommitApply);
       std::uint64_t word{};
       for (const auto& command : batch._commands)
       {
@@ -566,11 +574,16 @@ namespace angaria::detail::mapped
 
     void recover_journal(MutationJournalState& state, NativeFile& file)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(Recovery);
+      ANGARIA_DIAGNOSTIC_COUNT(RecoveryChecks, 1);
       const auto observed = control(state);
       if (observed == JournalControl::Idle)
       {
         return;
       }
+      // Count non-idle recovery attempts, including Prepared rollback. This is
+      // distinct from the inexpensive Idle check made by healthy operations.
+      ANGARIA_DIAGNOSTIC_COUNT(RecoveryReplays, 1);
       const auto header = read_header(state, observed);
       validate_header_context(state, header);
       const auto prefix = scan_prefix(file, fixed_layout(state)._arenaBegin, header._baseTail, header._generation - 1);
@@ -669,6 +682,7 @@ namespace angaria::detail::mapped
 
     PreparedOperation preflight(MutationJournalState& state, NativeFile& file, const TransactionPlan& plan)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(JournalPreflight);
       const auto current = clean_snapshot(state, file);
       if (plan._base != current)
       {
@@ -826,6 +840,7 @@ namespace angaria::detail::mapped
 
     void execute_prepared(MutationJournalState& state, NativeFile& file, const PreparedOperation& operation)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(JournalBody);
       std::array<std::byte, journal_bytes> bytes{};
       std::copy(operation._headerBytes.begin(), operation._headerBytes.end(), bytes.begin());
       if (operation._header._kind == JournalKind::FixedState)
@@ -841,6 +856,7 @@ namespace angaria::detail::mapped
       publish(state, JournalControl::Prepared, JournalCheckpoint::Prepared);
       if (operation._header._kind == JournalKind::Append)
       {
+        ANGARIA_DIAGNOSTIC_SCOPE(Materialize);
         value_or_throw<JournalFailure>(file.resize(operation._header._newFileBytes));
         checkpoint(state, JournalCheckpoint::FileGrowth);
         // This mapping is released on every return/unwind before rollback can shrink.
@@ -886,6 +902,7 @@ namespace angaria::detail::mapped
   Result<MutationJournal> MutationJournal::open(std::shared_ptr<SessionController> controller,
                                                const MutationGuard& guard, JournalFaultInjector* injector)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(JournalOpen);
     try
     {
       if (!controller)

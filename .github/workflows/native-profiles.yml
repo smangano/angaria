@@ -42,10 +42,10 @@ jobs:
         run: brew install boost googletest
       - name: Configure Linux
         if: runner.os == 'Linux'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DANGARIA_ENABLE_DIAGNOSTICS=ON
       - name: Configure macOS
         if: runner.os == 'macOS'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DANGARIA_ENABLE_DIAGNOSTICS=ON -DCMAKE_PREFIX_PATH="$(brew --prefix)"
       - name: Build
         run: cmake --build build --parallel 3
       - name: Run native tests and walkthroughs

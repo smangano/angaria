@@ -18,10 +18,23 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libboost-dev libgtest-dev python3
+          sudo apt-get install --yes libboost-dev libgtest-dev python3 strace
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DANGARIA_ENABLE_DIAGNOSTICS=ON
       - name: Build
         run: cmake --build build --parallel 3
       - name: Test including endpoint restart walkthrough
         run: ctest --test-dir build --output-on-failure
+      - name: Record bounded diagnostic measurements
+        id: measurements
+        run: python3 benchmarks/run_diagnostics.py build/angaria_transport_diagnostics --suite ci --repetitions 3 --output build/diagnostic-results --host-label "GitHub hosted Linux x86_64"
+      - name: Corroborate native system calls
+        run: strace -f -c -o build/diagnostic-results/syscalls.txt build/angaria_transport_diagnostics build/syscall-profile-session --messages 8 --history 32 --collection none > build/diagnostic-results/syscall-profile-report.json
+      - name: Retain diagnostic measurements
+        if: always() && steps.measurements.outcome != 'skipped'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: native-diagnostics-linux-x86_64
+          path: build/diagnostic-results/
+          if-no-files-found: error
+          retention-days: 14

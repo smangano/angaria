@@ -50,6 +50,8 @@ Test support remains separate from production encoding so expected bytes cannot 
 
 The runnable primer intentionally spells out public configuration and result checks in each lesson. Its former generic result/configuration wrappers and shared presentation header have been removed. Application-specific functions may propagate an `Error` through `Result<T>` or `OperationResult`; output-only formatting uses the standard library locally. This keeps each teaching program self-contained without depending on Angaria's private helpers.
 
+Step 4.12 adds [transport_support.h](../benchmarks/transport_support.h) for the original benchmark and diagnostic workload: shared error conversion, unsigned argument parsing, Session/channel setup, publication report checks, and worker startup/join handling. These are research-tool helpers, separate from the explicit primer examples and independent wire fixtures. [performance_diagnostics.h](../src/performance_diagnostics.h) groups the private, optional collector, phase/counter vocabulary, and instrumentation macros; normal builds compile those observations away.
+
 ## Intentional local adapters
 
 Some similarly named functions have different responsibilities. Their shared mechanics now live in the headers above; small adapters remain where they bind those mechanics to a contract:

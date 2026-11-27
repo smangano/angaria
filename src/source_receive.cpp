@@ -1,5 +1,7 @@
 #include "source_runtime_state.h"
 
+#include "performance_diagnostics.h"
+
 #include "delivery_loss.h"
 #include "message_retention.h"
 #include "payload_runtime.h"
@@ -244,6 +246,7 @@ namespace angaria::detail
         }
         else
         {
+          ANGARIA_DIAGNOSTIC_SCOPE(ReceiveSelect);
           RuntimeAccess access(task->_session, std::get<mapped::MutationGuard>(std::move(acquired)),
                                  true, hooks ? hooks->_journal : nullptr, hooks ? hooks->_reads : nullptr);
           runtime_check_task(access, task);
@@ -331,6 +334,7 @@ namespace angaria::detail
             }
             return prepare_delivery(access, state, task, std::get<DeliveryProgress>(progress), hooks);
           }
+          ANGARIA_DIAGNOSTIC_COUNT(EmptyPolls, 1);
           if (!deadline)
           {
             return ReceiveTimeout{};

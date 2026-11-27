@@ -1,5 +1,7 @@
 #include "runtime_state.h"
 
+#include "performance_diagnostics.h"
+
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/field_representation.h"
 #include "angaria/detail/identity_helpers.h"
@@ -138,6 +140,7 @@ namespace angaria::detail
 
   std::vector<LoadedField> runtime_fields(RuntimeAccess& access)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(SchemaLookup);
     const auto actors = creators(access);
     const auto indexes = definition_indexes(access, mapped::SectionKind::FieldIndex);
     std::set<FieldId> ids;
@@ -175,6 +178,7 @@ namespace angaria::detail
 
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(SchemaLookup);
     const auto actors = creators(access);
     std::map<FieldId, const LoadedField*> fieldIds;
     for (const auto& field : fields)

@@ -1023,6 +1023,8 @@ Acknowledgment and other reserved progress operations do not append log bytes. T
 
 A finite receive can time out while a producer is competing for that same gate. The timeout does not prove that no message will arrive later. Continue your application's receive loop as needed; a later poll can still receive the publication after the producer accepts it.
 
+The [detailed diagnostics guide](performance-diagnostics.md) explains the investigation of these costs. The [recorded findings](performance-diagnostics-findings.md) show why repeatedly checking old messages makes even small operations slow, and how idle consumers can delay producers. It separates work such as scanning history, checking definitions, mapping files, and waiting for the gate. Diagnostic collection is an optional research build; your application continues using the public API taught here. It adds no new application lesson or delivery behavior.
+
 ## How this guide will grow
 
 The learning sequence completes milestone 3 and introduces native sending and receiving in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.

@@ -1,5 +1,7 @@
 #include "angaria/payload.h"
 
+#include "performance_diagnostics.h"
+
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/checked_arithmetic.h"
 
@@ -465,6 +467,7 @@ namespace angaria
   Result<BinaryPayloadCodec> BinaryPayloadCodec::from_snapshot(const RegistrySnapshot& snapshot, SchemaId schema,
                                                                std::uint64_t maxPayloadBytes)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(CodecBuild);
     try
     {
       if (schema._type == MessageType::Invalid || schema._version == 0)
@@ -650,6 +653,7 @@ namespace angaria
 
   OperationResult BinaryPayloadCodec::validate(std::span<const std::byte> payload) const
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(PayloadValidation);
     try
     {
       check_valid();

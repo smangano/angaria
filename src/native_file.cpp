@@ -1,4 +1,5 @@
 #include "native_file_state.h"
+#include "performance_diagnostics.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -116,6 +117,7 @@ namespace angaria::detail::mapped
       }
 
       struct stat info{};
+      ANGARIA_DIAGNOSTIC_COUNT(FileStatCalls, 1);
       if (::fstat(state->_fd, &info) == -1)
       {
         return native_io_error(path, "stat native file", errno);
@@ -196,7 +198,9 @@ namespace angaria::detail::mapped
 
   Result<std::uint64_t> file_size_locked(const NativeFileState& state)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(NativeStat);
     struct stat info{};
+    ANGARIA_DIAGNOSTIC_COUNT(FileStatCalls, 1);
     if (::fstat(state._fd, &info) == -1)
     {
       return native_io_error(state._path, "stat native file", errno);
@@ -269,6 +273,7 @@ namespace angaria::detail::mapped
 
   OperationResult NativeFile::resize(std::uint64_t bytes)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(FileGrowth);
     if (const auto error = check_file_owner(_state))
     {
       return *error;
@@ -298,6 +303,7 @@ namespace angaria::detail::mapped
     int result;
     do
     {
+      ANGARIA_DIAGNOSTIC_COUNT(FileGrowCalls, 1);
       result = ::ftruncate(_state->_fd, static_cast<off_t>(bytes));
     } while (result == -1 && errno == EINTR);
     if (result == -1)
@@ -309,6 +315,7 @@ namespace angaria::detail::mapped
 
   OperationResult NativeFile::read_exact(std::uint64_t offset, std::span<std::byte> output) const
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(NativeRead);
     if (const auto error = check_file_owner(_state))
     {
       return *error;
@@ -327,9 +334,11 @@ namespace angaria::detail::mapped
     {
       const auto chunk = static_cast<std::size_t>(std::min<std::uint64_t>(
           output.size(), static_cast<std::uint64_t>(std::numeric_limits<ssize_t>::max())));
+      ANGARIA_DIAGNOSTIC_COUNT(NativeReadCalls, 1);
       const auto count = ::pread(_state->_fd, output.data(), chunk, static_cast<off_t>(offset));
       if (count > 0)
       {
+        ANGARIA_DIAGNOSTIC_COUNT(NativeReadBytes, static_cast<std::uint64_t>(count));
         offset += static_cast<std::uint64_t>(count);
         output = output.subspan(static_cast<std::size_t>(count));
       }

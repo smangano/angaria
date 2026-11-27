@@ -6,6 +6,7 @@
 #include "delivery_state.h"
 #include "mapped_payload.h"
 #include "payload_runtime.h"
+#include "performance_diagnostics.h"
 #include "registry_access.h"
 #include "source_runtime_state.h"
 #include "topology_state.h"
@@ -90,8 +91,11 @@ namespace angaria::detail
 
     std::optional<StoredPublication> find_publication(RuntimeAccess& access, PublicationId publication)
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(PublicationLookup);
+      ANGARIA_DIAGNOSTIC_COUNT(PublicationLookups, 1);
       for (const auto reference : access.record_references(9))
       {
+        ANGARIA_DIAGNOSTIC_COUNT(LookupPublications, 1);
         auto metadata = runtime_publication_metadata(access, reference);
         if (metadata._producer == publication._producer._task &&
             metadata._producerIncarnation == publication._producer._incarnation &&
@@ -171,6 +175,7 @@ namespace angaria::detail
                                     std::span<DestinationOutcome> outcomes,
                                     const std::shared_ptr<TaskState>& actor)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(PublicationPlan);
     const auto context = producer_context(access, producer);
     if (actor)
     {

@@ -1,2 +1,5 @@
 assets/logos/*.png binary
 assets/logos/*.pdf binary
+
+# Retain standard CSV CRLF bytes in the recorded diagnostic artifacts.
+benchmarks/results/milestone-4-diagnostics/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

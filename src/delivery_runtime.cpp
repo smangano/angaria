@@ -1,5 +1,7 @@
 #include "delivery_runtime.h"
 
+#include "performance_diagnostics.h"
+
 #include "angaria/detail/byte_operations.h"
 #include "delivery_access.h"
 #include "delivery_state.h"
@@ -232,6 +234,8 @@ namespace angaria::detail
 
   void runtime_validate_delivery(RuntimeAccess& access, const TopologySnapshot& topology)
   {
+    ANGARIA_DIAGNOSTIC_SCOPE(DeliveryValidation);
+    ANGARIA_DIAGNOSTIC_COUNT(DeliveryValidations, 1);
     const auto& configuration = access._session->_controller->configuration();
     require((configuration._requiredFeatures & mapped::native_delivery_feature) != 0,
             "publication.feature", "Delivery history requires native_delivery_v1");
@@ -264,6 +268,7 @@ namespace angaria::detail
     std::map<SourceQueueSetId, std::pair<QueueId, std::size_t>> pins;
     for (const auto reference : access.record_references(9))
     {
+      ANGARIA_DIAGNOSTIC_COUNT(ValidatedPublications, 1);
       const auto& envelope = access.record_envelope(reference, 9);
       const auto publication = runtime_publication_metadata(access, reference);
       const auto batch = batches.find(envelope._generation);

@@ -23,6 +23,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.9 | `milestone-4-9` | Complete failure and exhaustion qualification. | Combine producer/consumer termination, interrupted/repeated recovery, wraparound, full logs, counter boundaries, and unchanged-request rejection. Focused fault tests also accompany earlier mutation steps. |
 | 4.10 | `milestone-4-10` | Add a native multi-process primer application. | Independent producers/consumers exercise the real public mapped path, exact schemas, backlog, acknowledgment/redelivery, and replacement, using at most one Active Queue per Source. |
 | 4.11 | `milestone-4-11` | Measure and finish the milestone. | Record reproducible latency, throughput, and allocation/commit contention baselines; audit progress guarantees, compatibility, documentation, and the full primer before integration. |
+| 4.12 | `milestone-4-12` | Diagnose the measured performance before integration. | Split public-operation costs, count repeated work, record history/capacity/schema/stream controls, quantify observation overhead, and identify measured optimization candidates without changing transport algorithms. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -105,6 +106,8 @@ Framework **0.4.13** adds the [measurement guide and baseline](../native-perform
 The completion review covers all eleven steps, retained native profiles and capability-before-recovery rejection, current/future API boundaries, blocking progress guarantees, full-log reserved work, and all seventeen primer lessons. It corrects stale future-tense descriptions and identifies v0 examples as legacy. This step targets staging; the milestone integration into `main` is a separate PR after this review is merged.
 
 ## Qualification and completion
+
+The step-4.11 measurements exposed substantial preparation cost. Step **4.12**, framework **0.4.14**, adds [detailed diagnostics](../performance-diagnostics.md). Integration into `main` is held for diagnosis, focused measured fixes, and final performance/correctness qualification. The [recorded findings](../performance-diagnostics-findings.md) retain the measured code, raw evidence, and proposed fix sequence. Additional fix PRs will target `milestone-4`; no integration PR is opened as part of diagnostics.
 
 Completion requires real mapped publication and delivery across independent processes, retained-log recovery after ring overwrite, optional gap reporting, full-log progress, and repeatable producer/consumer recovery. Benchmarks report the cost of the existing blocking session gate; no lock-free, starvation-free, hard-real-time, or power-loss claim is introduced.
 
