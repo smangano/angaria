@@ -32,7 +32,11 @@ Before/after executables must use the same execution settings, workload and comp
 
 The **gate acquisition** phase starts before the removed checks and includes local coordination, resource checks, native locking and scheduling. It is not a pure lock-wait counter. The **native gate ownership** interval starts only after successful `flock`; the removed checks were outside it. A shorter acquisition interval therefore need not produce a shorter native hold interval. Compare both boundaries without adding overlapping timings.
 
-Strict local Release builds with diagnostics OFF and ON each pass **823/823 tests** (18.47/18.54 seconds), including the new three-resource contention case. The [result directory](../benchmarks/results/milestone-4-gate-resources/README.md) will retain qualification, work counts and matched timing observations. Measurements and CI qualification are pending; no speedup is asserted here.
+Strict local Release builds with diagnostics OFF and ON each pass **823/823 tests** (18.47/18.54 seconds), including the new three-resource contention case. Measured-source CI passes on Linux x86_64, Linux ARM64 and macOS ARM64; all 54 Linux diagnostic workloads complete, including six loaded cases. The [full results and plots](../benchmarks/results/milestone-4-gate-resources/README.md) retain 336 local plus 54 Linux runs, source/executable/harness hashes, execution settings, controls and complete observed ranges.
+
+Each of 603 matching local counted samples saves exactly three stats, six allocation requests and 1,152 requested bytes; every other work counter remains unchanged. The separate Linux trace saves 723 `newfstatat` calls (6,107→5,384), while fstat, read, map/unmap and getpid totals stay unchanged. These whole-program traced totals include startup/preload and must not be divided by the eight-message window.
+
+Twenty alternating normal pairs per history show complete-cycle rate gains **4.09%/3.97%/1.51%** at H0/32/128, improving 19/20, 20/20 and 16/20 pairs. H0 operation p50 falls **7.65%/2.05%/4.68%/5.05%** for ID/send/receive/acknowledge. All observed cycle-rate ranges overlap, and slower pairs remain. Enabled sequential attribution shows full acquisition means around 12→6 microseconds, with nearly unchanged native hold means. These are modest host-specific observations, not universal or production-tail guarantees; a fixed acquisition saving does not remove history-scaling costs.
 
 ## Follow-up scope
 

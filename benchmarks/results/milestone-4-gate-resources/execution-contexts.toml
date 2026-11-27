@@ -1,0 +1,29 @@
+# Observed execution requests, not an estimate of permission-profile overhead.
+[setup]
+execution_request = "require_escalated"
+work = "Git/worktree setup and copies of preserved executables/caches; measurements were separate."
+
+[enabled]
+populations = ["macos-arm64-before-enabled", "macos-arm64-after-enabled"]
+execution_request = "use_default"
+order = "Before, rebuild and tests, then after; attribution rather than headline timing."
+
+[alternating]
+populations = ["alternating/before-normal", "alternating/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 60
+repetitions_per_history = 20
+selection = "Twenty pairs fixed before launch; H0 operation latency selected before measurements because removed work is fixed per acquisition."
+
+[matched_controls]
+populations = ["matched-controls/before-normal", "matched-controls/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 33
+cases = 11
+repetitions = 3
+
+[linux_ci]
+population = "linux-x86_64-after"
+execution_request = "GitHub-hosted runner, distinct from local execution settings."

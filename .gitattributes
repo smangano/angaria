@@ -13,3 +13,4 @@ benchmarks/results/milestone-4-delivery-lookup/**/*.csv -text whitespace=blank-a
 benchmarks/results/milestone-4-definition-reuse/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 benchmarks/results/milestone-4-payload-preparation/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 benchmarks/results/milestone-4-prefix-buffers/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/results/milestone-4-gate-resources/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
