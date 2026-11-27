@@ -87,6 +87,13 @@ if(ANGARIA_ENABLE_DIAGNOSTICS)
 endif()
 
 option(ANGARIA_BUILD_BENCHMARKS "Build native transport measurement tools" ON)
+option(ANGARIA_BUILD_IPC_COMPARISON "Build the optional classic nanomsg IPC comparison" OFF)
+if(ANGARIA_BUILD_IPC_COMPARISON AND NOT ANGARIA_BUILD_BENCHMARKS)
+  message(FATAL_ERROR "ANGARIA_BUILD_IPC_COMPARISON requires ANGARIA_BUILD_BENCHMARKS=ON")
+endif()
+if(ANGARIA_BUILD_IPC_COMPARISON AND (ANGARIA_ENABLE_DIAGNOSTICS OR ANGARIA_ENABLE_CACHEGRIND))
+  message(FATAL_ERROR "Ordinary IPC comparison requires diagnostics and Cachegrind instrumentation OFF")
+endif()
 if(ANGARIA_ENABLE_CACHEGRIND AND NOT ANGARIA_BUILD_BENCHMARKS)
   message(FATAL_ERROR "ANGARIA_ENABLE_CACHEGRIND requires ANGARIA_BUILD_BENCHMARKS=ON")
 endif()
@@ -133,6 +140,44 @@ if(ANGARIA_BUILD_BENCHMARKS)
   endif()
 endif()
 
+if(ANGARIA_BUILD_IPC_COMPARISON)
+  if(NOT UNIX)
+    message(FATAL_ERROR "The initial IPC comparison supports POSIX local processes only")
+  endif()
+  enable_language(C)
+  # The dependency is confined to this opt-in tool. Its fixed source checksum
+  # and static linkage make the compared library part of the executable's hash.
+  set(NN_STATIC_LIB ON CACHE BOOL "Build the comparison's static nanomsg" FORCE)
+  set(NN_TESTS OFF CACHE BOOL "Omit upstream nanomsg tests" FORCE)
+  set(NN_TOOLS OFF CACHE BOOL "Omit upstream nanomsg tools" FORCE)
+  set(NN_ENABLE_NANOCAT OFF CACHE BOOL "Omit upstream nanocat" FORCE)
+  set(NN_ENABLE_DOC OFF CACHE BOOL "Omit upstream nanomsg documentation" FORCE)
+  if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+  endif()
+  FetchContent_Declare(angaria_nanomsg
+    URL https://github.com/nanomsg/nanomsg/archive/refs/tags/1.3.0.tar.gz
+    URL_HASH SHA256=acf65c0ef312f431aa3c4cb114326781c999ec0c977067f3a1f0c81b5ec8710f
+  )
+  FetchContent_MakeAvailable(angaria_nanomsg)
+  # Upstream's build interface does not install-style-prefix its public headers.
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/comparison-include/nanomsg")
+  foreach(header IN ITEMS nn.h pipeline.h)
+    configure_file("${angaria_nanomsg_SOURCE_DIR}/src/${header}"
+      "comparison-include/nanomsg/${header}" COPYONLY)
+  endforeach()
+  add_executable(angaria_ipc_comparison benchmarks/ipc_comparison.cpp)
+  target_include_directories(angaria_ipc_comparison PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_include_directories(angaria_ipc_comparison SYSTEM PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/comparison-include")
+  target_link_libraries(angaria_ipc_comparison PRIVATE angaria nanomsg)
+  target_compile_definitions(angaria_ipc_comparison PRIVATE
+    ANGARIA_NANOMSG_VERSION="1.3.0"
+    ANGARIA_NANOMSG_COMMIT="73e89d2ca28d11cbd39bb15e8d2e1edeb7eec68a"
+    ANGARIA_NANOMSG_ARCHIVE_SHA256="acf65c0ef312f431aa3c4cb114326781c999ec0c977067f3a1f0c81b5ec8710f")
+endif()
+
 add_executable(angaria_queue_demo examples/queue_demo.cpp)
 target_link_libraries(angaria_queue_demo PRIVATE angaria)
 
@@ -163,6 +208,18 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+
+  if(ANGARIA_BUILD_IPC_COMPARISON)
+    add_executable(angaria_ipc_comparison_tests test/test_ipc_comparison_deadlines.cpp)
+    target_include_directories(angaria_ipc_comparison_tests PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(angaria_ipc_comparison_tests PRIVATE angaria GTest::gtest_main)
+    add_test(NAME ipc_comparison_deadlines COMMAND angaria_ipc_comparison_tests)
+    add_test(NAME ipc_comparison_smoke
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/ipc_comparison.py"
+              "$<TARGET_FILE:angaria_ipc_comparison>")
+    set_tests_properties(ipc_comparison_smoke PROPERTIES TIMEOUT 120)
+  endif()
 
   # Validate the measurement tool's results, never a machine's speed.
   if(ANGARIA_BUILD_BENCHMARKS)

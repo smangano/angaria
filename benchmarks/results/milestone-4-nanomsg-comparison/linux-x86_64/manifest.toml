@@ -1,0 +1,150 @@
+"started_utc" = "2026-11-27T20:14:47.434766+00:00"
+"host_label" = "GitHub hosted Ubuntu 24.04 x86_64; ordinary IPC comparison"
+"platform" = "Linux-7.0.0-1018-aws-x86_64-with-glibc2.39"
+"machine" = "x86_64"
+"cpu" = "Intel(R) Xeon(R) 6975P-C"
+"python" = "3.12.3"
+"git_head" = "05f1858876e38d4fd3bebe1022c96b963e816d75"
+"git_dirty" = false
+"git_tracked_dirty" = false
+"executable" = "/home/runner/work/angaria/angaria/build/ipc/angaria_ipc_comparison"
+"executable_sha256" = "e52461e7f6a75f91c7a9f160bac4235d0d866ecc64a2f1a66996c3122b7e782b"
+"compiler_version" = "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+"cmake_cache" = "/home/runner/work/angaria/angaria/build/ipc/CMakeCache.txt"
+"smoke" = false
+"timeout_seconds" = 30
+"repetitions" = 10
+"runner_arguments" = ["build/ipc/angaria_ipc_comparison", "--output", "build/ipc-results", "--blocks", "5", "--host-label", "GitHub hosted Ubuntu 24.04 x86_64; ordinary IPC comparison"]
+"summary_method" = "Median/min/max of separate-run nearest-rank p50; qualified pooled tails only within identical complete fresh-cohort cells"
+"status" = "complete"
+"suite" = "ipc-comparison-1-to-1"
+"format_version" = 1
+"planned_runs" = 180
+"blocks" = 5
+"participant_processes" = 2
+"producers" = 1
+"consumers" = 1
+"start_lead_ms" = 100
+"clock_id" = "CLOCK_MONOTONIC"
+"clock_resolution_ns" = 1
+"cpu_scope" = "Worker PROCESS CPU after START receipt before T0 wait through FINISH includes lead/control waits and library background threads; lifetime child CPU and coordinator CPU retained separately"
+"throughput_scope" = "Bounded cohort, not sustained capacity; common T0 and active intervals reported separately"
+"p99_min_samples" = 10000
+"p999_min_samples" = 1000000
+"semantic_profiles" = ["Angaria acknowledged retained delivery", "classic libnanomsg IPC unacknowledged observed delivery"]
+"nanomsg_version" = "1.3.0"
+"nanomsg_commit" = "73e89d2ca28d11cbd39bb15e8d2e1edeb7eec68a"
+"nanomsg_archive_sha256" = "acf65c0ef312f431aa3c4cb114326781c999ec0c977067f3a1f0c81b5ec8710f"
+"nanomsg_runtime_abi_current" = 7
+"nanomsg_runtime_abi_revision" = 0
+"nanomsg_runtime_abi_age" = 2
+"nanomsg_header_abi_current" = 7
+"nanomsg_header_abi_revision" = 0
+"nanomsg_header_abi_age" = 2
+"finished_utc" = "2026-11-27T20:15:56.529583+00:00"
+"recorded_runs" = 180
+"completed_runs" = 180
+"budget_exceeded_runs" = 0
+"failed_runs" = 0
+
+[source_sha256]
+"CMakeLists.txt" = "08bbbc46ce35a1660a450cad2415b81d14a4cb5ea337696f67a2e8e5a2a5959d"
+"VERSION" = "6028dc76386f65f57a4e92607c78ea99f5fa4085426ee6f3c7fe0564dc2b2485"
+"benchmarks/native_transport.cpp" = "083f4fa8d806a96218f32da8fe24df88e591f17f75f406b3fd7f76d4b3742bbc"
+"benchmarks/run_native.py" = "8ab629b462ae65554d7b2c642e64f0c269c8db69079903d3708c808ce8104787"
+"benchmarks/ipc_comparison.cpp" = "bb13dd720b4ea540f3ee3c1dd9ce42cad35c1ca03e4d9164a1187c0041d25e8d"
+"benchmarks/ipc_comparison_support.h" = "3c2f78f86931cfb0d61a44b15527bfe5af4219ce62a91a47e0c3dc99a42759eb"
+"benchmarks/run_ipc_comparison.py" = "01e7a5f694eb63c147de3220749ac4fa62e83ebcb7c3834d9fcd30c404e99a2d"
+"test/ipc_comparison.py" = "6786cf47a1756898e627bb427bb79d25dde1d4795989333965f95c31873b785b"
+
+[cmake]
+"CMAKE_BUILD_TYPE" = "Release"
+"CMAKE_CXX_COMPILER" = "/usr/bin/c++"
+"CMAKE_CXX_FLAGS" = "-g"
+"CMAKE_CXX_FLAGS_DEBUG" = "-g"
+"CMAKE_CXX_FLAGS_MINSIZEREL" = "-Os -DNDEBUG"
+"CMAKE_CXX_FLAGS_RELEASE" = "-O3 -DNDEBUG"
+"CMAKE_CXX_FLAGS_RELWITHDEBINFO" = "-O2 -g -DNDEBUG"
+"ANGARIA_BUILD_BENCHMARKS" = "ON"
+"ANGARIA_BUILD_IPC_COMPARISON" = "ON"
+"ANGARIA_ENABLE_CACHEGRIND" = "OFF"
+"ANGARIA_ENABLE_DIAGNOSTICS" = "OFF"
+"CMAKE_C_COMPILER" = "/usr/bin/cc"
+"CMAKE_C_FLAGS" = "-g"
+"CMAKE_C_FLAGS_DEBUG" = "-g"
+"CMAKE_C_FLAGS_MINSIZEREL" = "-Os -DNDEBUG"
+"CMAKE_C_FLAGS_RELEASE" = "-O3 -DNDEBUG"
+"CMAKE_C_FLAGS_RELWITHDEBINFO" = "-O2 -g -DNDEBUG"
+"CMAKE_C_COMPILER_VERSION" = "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+
+[[cases]]
+"messages" = 16
+"history" = 0
+"payload_bytes" = 64
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 0
+"payload_bytes" = 256
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 0
+"payload_bytes" = 1024
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 32
+"payload_bytes" = 64
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 32
+"payload_bytes" = 256
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 32
+"payload_bytes" = 1024
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 128
+"payload_bytes" = 64
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 128
+"payload_bytes" = 256
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
+
+[[cases]]
+"messages" = 16
+"history" = 128
+"payload_bytes" = 1024
+"interval_ns" = 0
+"socket_buffer_bytes" = 131072
+"budget_ms" = 10000
