@@ -30,6 +30,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.16 | `milestone-4-16` | Reuse bounded mappings for runtime metadata. | Share the journal window mechanism, retain fresh atomic loads and owning copies, qualify boundary/rollback behavior, and record matched measurements. |
 | 4.17 | `milestone-4-17` | Reuse operation-entry history validation once. | Keep generic journal calls fresh, consume first-attempt reuse before failures/retries, qualify ownership/staleness/recovery, and measure duplicate-scan removal. |
 | 4.18 | `milestone-4-18` | Reuse receive selection validation during issuance. | Retain live claim/pin/Queue/receipt checks and fresh generic/cleanup paths, qualify unchanged-context reuse, and plot measured latency, throughput and validation work. |
+| 4.19 | `milestone-4-19` | Resolve the oldest pending delivery directly. | Retain full history validation and exact committed metadata/receipt checks, qualify invalid links and bounded reads, and plot latency, throughput and allocation improvements. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -146,3 +147,7 @@ Automatic CI runs Linux x86_64, Linux ARM64, and macOS ARM64. Intel Mac qualific
 Publishing fan-out follows milestone 6, eventfd waiting milestone 7, segmented storage/reclamation milestone 8, advanced Fields/serializers milestone 9, and generalized native export/replay/migration tools milestone 10.
 
 [Roadmap](../../ROADMAP.md) · [Native transport contract](../native-transport.md) · [Completed milestone 3](milestone-3.md)
+
+## Step 4.19 Direct delivery lookup
+
+The [lookup guide and risk assessment](../performance-delivery-lookup.md) replaces issuance's repeated Publication metadata search with exact resolution of the already validated oldest-pending link. The direct-send profile has one destination at a canonical position; the resolver checks subtraction, committed boundary/kind, bounded metadata and exact Queue/sequence/link identity before fresh receipt checks. Complete history validation, pin repeats and generic progress/cleanup remain. Acknowledgment still searches for its successor link. Matched normal/enabled controls and plots record the improvement without a timing threshold or a bounded-latency claim.

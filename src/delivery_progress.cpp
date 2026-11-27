@@ -154,9 +154,7 @@ namespace angaria::detail
       require(counter != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
               "Source issuance counter is exhausted for this consumer claim");
       const auto sequence = queueWords[8] + 1;
-      const auto delivery = runtime_queue_delivery(access, queue, sequence);
-      require(delivery._link == queueWords[9], ErrorCode::IoError,
-              "Queue oldest pending link disagrees with its receipt");
+      const auto delivery = runtime_queue_delivery_at_link(access, queue, sequence, queueWords[9]);
       const auto oldReceipt = runtime_value(mapped::decode_receipt_words(access.read_words(delivery._receipt, 16)));
       require(oldReceipt._state == mapped::ReceiptState::Pending, ErrorCode::IoError,
               "Oldest Queue delivery is not pending");

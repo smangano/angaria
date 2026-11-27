@@ -3,6 +3,7 @@
 // claim without fabricating an OS lease. Public callers must authenticate their
 // Task owner before invoking these gate-bound primitives in later steps.
 
+#include "delivery_history.h"
 #include "delivery_progress.h"
 #include "delivery_progress_fixture.h"
 #include "delivery_words.h"
@@ -14,9 +15,12 @@
 #include <array>
 #include <bit>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <span>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace
@@ -77,6 +81,120 @@ namespace
     EXPECT_EQ(after._fileBytes, before._fileBytes);
     EXPECT_EQ(after._generation, before._generation + 1);
     fixture.validate();
+  }
+
+  // This observer is private qualification plumbing. It records logical
+  // immutable-copy requests, not physical reads, mappings, or a public API.
+  class DeliveryMetadataReads final : public runtime::RuntimeAccessReadObserver
+  {
+  public:
+    OperationResult before_read(std::uint64_t offset, std::uint64_t length) override
+    {
+      if (_recording)
+      {
+        _reads.emplace_back(offset, length);
+      }
+      return std::monostate{};
+    }
+
+    bool _recording{};
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> _reads;
+  };
+
+  TEST(DeliveryProgressTest, ExactPendingLinksResolveRetainedDeliveriesWithoutScanning)
+  {
+    // A Queue's pending link can name old history after the two-slot ring has
+    // wrapped. Compare the exact resolver with the retained scan at early,
+    // middle, and late positions. Neither resolver copies application bytes.
+    DeliveryProgressFixture fixture(9, TaskKind::Process, 4097);
+    const auto before = fixture.image();
+    DeliveryMetadataReads observer;
+    {
+      runtime::RuntimeAccess access(fixture._state, true, nullptr, &observer);
+      (void)runtime::runtime_topology(access);
+      observer._recording = true;
+      for (const auto index : std::array<std::size_t, 3>{0, 4, 8})
+      {
+        const auto& stored = fixture._publications[index];
+        observer._reads.clear();
+        const auto exact = runtime::runtime_queue_delivery_at_link(access, fixture._queue,
+            index + 1, stored._link);
+        EXPECT_EQ(exact._publication, stored._reference);
+        EXPECT_EQ(exact._link, stored._link);
+        EXPECT_EQ(exact._receipt, stored._receipt);
+        // The selected record needs only fixed metadata, one destination row,
+        // and immutable alignment padding, regardless of its position/size.
+        ASSERT_EQ(observer._reads.size(), 3u);
+        EXPECT_EQ(observer._reads[0], (std::pair<std::uint64_t, std::uint64_t>{
+            stored._reference + mapped::record_envelope_bytes, mapped::publication_fixed_bytes}));
+        EXPECT_EQ(observer._reads[1], (std::pair<std::uint64_t, std::uint64_t>{
+            stored._link, mapped::destination_row_bytes}));
+        const auto payloadEnd = stored._payloadOffset + stored._payloadBytes;
+        EXPECT_EQ(observer._reads[2], (std::pair<std::uint64_t, std::uint64_t>{
+            payloadEnd, stored._receipt - payloadEnd}));
+        for (const auto& [offset, length] : observer._reads)
+        {
+          EXPECT_FALSE(length != 0 && offset < payloadEnd &&
+                       stored._payloadOffset < offset + length);
+        }
+
+        observer._reads.clear();
+        const auto scanned = runtime::runtime_queue_delivery(access, fixture._queue, index + 1);
+        EXPECT_EQ(scanned._publication, exact._publication);
+        EXPECT_EQ(scanned._link, exact._link);
+        EXPECT_EQ(scanned._receipt, exact._receipt);
+        EXPECT_EQ(observer._reads.size(), 3 * (index + 1));
+      }
+    }
+    EXPECT_EQ(fixture.image(), before);
+  }
+
+  TEST(DeliveryProgressTest, ExactPendingLinksRejectInvalidLocationsAndIdentityWithoutWrites)
+  {
+    // These are deliberately invalid private helper inputs. Public receive
+    // first validates the entire history and then reads the Queue's live link;
+    // the direct resolver still checks its boundary, kind, and exact identity.
+    DeliveryProgressFixture fixture;
+    const auto before = fixture.image();
+    {
+      runtime::RuntimeAccess access(fixture._state);
+      const auto& first = fixture._publications.front();
+      constexpr auto prefixBytes = mapped::record_envelope_bytes + mapped::publication_fixed_bytes;
+      struct LookupRequest
+      {
+        QueueId _queue;
+        std::uint64_t _sequence;
+        std::uint64_t _link;
+      };
+      const std::array requests{
+          LookupRequest{fixture._queue, 1, 0},
+          LookupRequest{fixture._queue, 1, prefixBytes - 1},
+          LookupRequest{fixture._queue, 1, first._link + 8},
+          LookupRequest{fixture._queue, 1, first._link + mapped::section_alignment},
+          LookupRequest{fixture._queue, 1, fixture._schemaReference + prefixBytes},
+          LookupRequest{fixture._queue, 1, access._snapshot._tail + prefixBytes},
+          LookupRequest{fixture._queue, 1, std::numeric_limits<std::uint64_t>::max()},
+          LookupRequest{QueueId::Invalid, 1, first._link},
+          LookupRequest{fixture._queue, 0, first._link},
+          LookupRequest{fixture._queue, 2, first._link},
+          LookupRequest{fixture._queue, 1, fixture._publications.back()._link}};
+      for (const auto& request : requests)
+      {
+        try
+        {
+          (void)runtime::runtime_queue_delivery_at_link(access, request._queue,
+              request._sequence, request._link);
+          FAIL() << "Expected the invalid exact delivery lookup to fail";
+        }
+        catch (const runtime::RuntimeFailure& failure)
+        {
+          EXPECT_EQ(failure._error._code, ErrorCode::IoError);
+          EXPECT_FALSE(failure._error._path.empty());
+          EXPECT_FALSE(failure._error._message.empty());
+        }
+      }
+    }
+    EXPECT_EQ(fixture.image(), before);
   }
 
   TEST(DeliveryProgressTest, RepeatedIssuanceReturnsTheSamePinBeforeFreshSelectionOrCounterChecks)
