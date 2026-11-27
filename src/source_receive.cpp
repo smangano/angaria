@@ -116,12 +116,12 @@ namespace angaria::detail
         }
         auto payload = runtime_value(map_publication_payload(access, progress._publicationReference));
         const auto bytes = runtime_value(payload.bytes());
-        auto schema = runtime_schema(access, metadata._schema);
-        if (schema._reference != metadata._schemaReference)
+        auto context = runtime_schema_context(access, metadata._schema);
+        if (context._schema._reference != metadata._schemaReference)
         {
           runtime_fail(ErrorCode::IoError, "source.schema", "Pinned Publication does not retain its exact schema");
         }
-        auto codec = runtime_payload_codec(access, schema,
+        auto codec = runtime_payload_codec(context._schema, context._fields,
             access._session->_controller->configuration()._maxLogBytes);
         MessageHeader header;
         header._schema = metadata._schema;

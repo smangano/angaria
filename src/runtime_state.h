@@ -144,6 +144,14 @@ namespace angaria::detail
     std::uint64_t _indexOffset{};
   };
 
+  // Owning metadata for one freshly resolved schema and its checked Fields.
+  // This carries no Task ownership or authority to mutate the live Session.
+  struct LoadedSchemaContext
+  {
+    LoadedSchema _schema;
+    std::vector<LoadedField> _fields;
+  };
+
   std::vector<LoadedTask> runtime_tasks(RuntimeAccess& access);
   void runtime_validate_task_state(std::span<const std::uint64_t> words, TaskKind kind);
   LoadedTask runtime_task(RuntimeAccess& access, TaskId task);
@@ -160,6 +168,7 @@ namespace angaria::detail
   std::vector<LoadedSchema> runtime_schemas(RuntimeAccess& access, std::span<const LoadedField> fields,
                                               std::span<const LoadedTask> tasks);
   LoadedField runtime_field(RuntimeAccess& access, FieldId field);
+  LoadedSchemaContext runtime_schema_context(RuntimeAccess& access, SchemaId schema);
   LoadedSchema runtime_schema(RuntimeAccess& access, SchemaId schema);
   void runtime_validate_field_policy(const FieldDescriptor& descriptor, ErrorCode invalidCode);
   mapped::SessionDefinition runtime_session_definition(RuntimeAccess& access);

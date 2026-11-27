@@ -6,6 +6,7 @@
 #include "result_assertions.h"
 #include "angaria/runtime.h"
 #include "native_atomic.h"
+#include "payload_runtime.h"
 #include "runtime_state.h"
 
 #include <gtest/gtest.h>
@@ -264,6 +265,85 @@ namespace
       }
     }
     EXPECT_EQ(observe(), before);
+  }
+
+  TEST_F(SchemaRegistryTest, SchemaContextReadsEachDefinitionOnceAndMatchesGenericHelpers)
+  {
+    auto created = create();
+    auto actor = created._creator.registry();
+    const auto price = require_value(actor.register_field(field()));
+    const auto quantity = require_value(actor.register_field(field(0xee000002, "Quantity")));
+    const auto quote = message(1, 1, "Quote", {price, quantity, price});
+    require_value(actor.register_message(quote));
+    SchemaDefinitionReads observer;
+    // Private operation plumbing: one fresh context checks the complete catalog
+    // once, including Fields that appear repeatedly in the selected schema.
+    runtime::RuntimeAccess access(state(), true, nullptr, &observer);
+    const auto context = runtime::runtime_schema_context(access, quote._schema);
+    ASSERT_EQ(context._fields.size(), 2u);
+    for (const auto kind : std::array<std::uint16_t, 3>{2, 6, 7})
+    {
+      for (const auto reference : access.record_references(kind))
+      {
+        EXPECT_EQ(std::count(observer._reads.begin(), observer._reads.end(),
+            std::pair<std::uint64_t, std::uint64_t>{reference + mapped::record_envelope_bytes,
+                access.record_envelope(reference, kind)._immutableBytes}), 1)
+            << "Definition kind " << kind << " at " << reference;
+      }
+    }
+    const auto generic_schema = runtime::runtime_schema(access, quote._schema);
+    EXPECT_EQ(context._schema._reference, generic_schema._reference);
+    EXPECT_EQ(context._schema._indexOffset, generic_schema._indexOffset);
+    EXPECT_EQ(context._schema._definition._descriptor._schema, generic_schema._definition._descriptor._schema);
+    EXPECT_EQ(context._schema._definition._descriptor._fields, generic_schema._definition._descriptor._fields);
+    EXPECT_EQ(context._schema._definition._descriptor._name, generic_schema._definition._descriptor._name);
+    EXPECT_EQ(context._schema._definition._descriptor._doc, generic_schema._definition._descriptor._doc);
+    observer._reads.clear();
+    const auto reused = runtime::runtime_payload_codec(context._schema, context._fields, 24);
+    EXPECT_TRUE(observer._reads.empty());
+    const auto generic = runtime::runtime_payload_codec(access, generic_schema, 24);
+    EXPECT_FALSE(observer._reads.empty());
+    const auto bytes = require_value(reused.encode({std::int64_t{42}, std::int64_t{7}, std::int64_t{43}}));
+    EXPECT_EQ(bytes, require_value(generic.encode({std::int64_t{42}, std::int64_t{7}, std::int64_t{43}})));
+    EXPECT_EQ(require_value(reused.decode(bytes)), require_value(generic.decode(bytes)));
+  }
+
+  TEST_F(SchemaRegistryTest, FreshSchemaContextsAndCompiledCodecsOwnTheirDefinitions)
+  {
+    auto created = create();
+    auto actor = created._creator.registry();
+    const auto descriptor = field();
+    const auto price = require_value(actor.register_field(descriptor));
+    const auto quote = message(1, 1, "Quote", {price});
+    require_value(actor.register_message(quote));
+    std::optional<runtime::LoadedSchemaContext> earlier;
+    const auto codec = [&]
+    {
+      // These are private owning metadata helpers, not application handles or
+      // permission to reuse checked catalog spans in another live operation.
+      runtime::RuntimeAccess access(state());
+      earlier = runtime::runtime_schema_context(access, quote._schema);
+      return runtime::runtime_payload_codec(earlier->_schema, earlier->_fields, 8);
+    }();
+    const auto quantity = require_value(actor.register_field(field(0xee000002, "Quantity")));
+    require_value(actor.register_message(message(2, 1, "Trade", {quantity})));
+    {
+      runtime::RuntimeAccess access(state());
+      const auto fresh = runtime::runtime_schema_context(access, quote._schema);
+      EXPECT_EQ(fresh._fields.size(), 2u);
+      ASSERT_EQ(earlier->_fields.size(), 1u);
+      EXPECT_EQ(earlier->_fields.front()._definition._descriptor._id, price);
+      EXPECT_EQ(earlier->_fields.front()._definition._descriptor._name, descriptor._name);
+      EXPECT_EQ(earlier->_schema._definition._descriptor._fields, quote._fields);
+    }
+    // The compiled codec keeps its own descriptors after both the original
+    // access and context are gone; later registration cannot invalidate them.
+    earlier.reset();
+    ASSERT_EQ(codec.fields().size(), 1u);
+    EXPECT_EQ(codec.fields().front()._name, descriptor._name);
+    EXPECT_EQ(codec.fields().front()._doc, descriptor._doc);
+    const auto bytes = require_value(codec.encode({std::int64_t{42}}));
+    EXPECT_EQ(std::get<std::int64_t>(require_value(codec.decode(bytes)).front()), 42);
   }
 
   TEST_F(SchemaRegistryTest, GenericSchemaLoadingRechecksTasksAfterEarlierInspection)

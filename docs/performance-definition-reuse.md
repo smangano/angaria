@@ -69,6 +69,8 @@ Across all **603 samples in nine matched counted runs**, only the Task-slot, all
 
 ### Controls and limits
 
+**Execution-context clarification, step 4.21:** the initial sequential before and after matrices used different execution-permission requests. Their timing deltas below remain archived observations and cannot isolate the optimization. The primary adjacent alternating comparison ran both versions under matching settings. See the [methodology correction](performance-diagnostics.md#match-execution-settings-as-well-as-code). This is a provenance correction; raw reports and source measurements are unchanged.
+
 The initial sequential matrices are retained. Their receive medians rise **14.2%/14.5%/5.0%** at H=0/32/128. Untargeted ID medians also rise substantially: 0.048875→0.076459 ms, 0.061042→0.083084 ms and 0.097959→0.119125 ms. This is consistent with host/ordering variation; that explanation is an inference, not an established cause. Alternating adjacent pairs reduce this confound without controlling scheduling, heat, frequency, cache state or code-layout effects. No report or outlier was discarded.
 
 At H=128, sequential receive rises 4.2% with unrelated history, 3.5% with a 256-byte payload, 3.5% with 32 Fields and 3.2% with backlog. The sixteen-times-capacity control falls 8.7%; its send/ack medians fall 7.6%/5.5%. These controls are not additional controlled alternating comparisons.
