@@ -25,6 +25,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.11 | `milestone-4-11` | Measure and finish the milestone. | Record reproducible latency, throughput, and allocation/commit contention baselines; audit progress guarantees, compatibility, documentation, and the full primer before integration. |
 | 4.12 | `milestone-4-12` | Diagnose the measured performance before integration. | Split public-operation costs, count repeated work, record history/capacity/schema/stream controls, quantify observation overhead, and identify measured optimization candidates without changing transport algorithms. |
 | 4.13 | `milestone-4-13` | Reuse validated record information. | Adopt the journal's validated record ranges for runtime lookup and reuse preflight's own prefix scan; qualify behavior and record measured improvement before further optimizations. |
+| 4.14 | `milestone-4-14` | Reuse bounded mappings while scanning history. | Replace per-record native reads/mappings with scan-local windows, retain atomic readiness and complete validation, qualify boundary/rollback behavior, and record matched measurements. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -109,6 +110,10 @@ The completion review covers all eleven steps, retained native profiles and capa
 ## Step 4.13 First performance optimization
 
 Framework **0.4.15** removes redundant record reads through [validated-prefix reuse](../performance-prefix-reuse.md). The runtime adopts framing already checked by the journal; preflight reuses its own validated ranges. Snapshot and execute entry points still validate freshly. This step also records the project's equal priority for performance and correctness, with explicit risk assessment of defensive costs.
+
+## Step 4.14 Bounded metadata scan windows
+
+Framework **0.4.16** introduces [scan-local mapped windows](../performance-prefix-windows.md) for committed history. Each scan retains at most one bounded mapping and releases it before recovery can shrink a provisional append. The change preserves full validation and atomic readiness while reducing repeated native calls. The guide records the explicit mapped-I/O tradeoff, qualification, and measurements.
 
 ## Qualification and completion
 
