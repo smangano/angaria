@@ -999,6 +999,8 @@ The log stores persistent definitions and updates. Registry entries can fit with
 
 Exact registration retries are useful because they preserve the existing definition without appending another copy. In contrast, repeated topology edits can consume log space. Claims and incarnation replacement use reserved state, allowing Task replacement even when append space is exhausted.
 
+Keep the Session's files and lock files in place while programs use it. Angaria checks that their names still refer to the expected files after taking its mutation gate. If another program deletes or replaces `mutation.lock` while someone holds that old lock, receive can time out and a blocking operation can keep waiting before Angaria can report `IoError`. Obtaining the lock still requires the file checks to pass before the operation can use the gate. Step **4.23**, version **0.4.25**, [removes only a repeated check before that lock attempt](performance-gate-resources.md); your application uses the same calls and error handling.
+
 ### When an operation is interrupted
 
 A process can stop after Angaria commits a change but before the application sees its result. **Recovery** finishes or rolls back that interrupted operation before another participant starts new work. A failed call therefore needs more care than allocating another identity and trying again.

@@ -693,10 +693,10 @@ namespace angaria::detail::mapped
       return storage_error(ErrorCode::OwnershipBusy, _state->_directory,
                            "Mutation gate is already held on this thread");
     }
-    if (auto result = check_resources(*_state); std::holds_alternative<Error>(result))
-    {
-      return std::get<Error>(std::move(result));
-    }
+    // Coordination names must remain stable while attached. Check them once
+    // after native acquisition, before returning a usable guard. If an external
+    // actor replaces a name while the old lock is held, detection can wait for
+    // that lock; a nonblocking attempt reports Busy until it can check the names.
     if (lock_file(_state->_mutationFd->_fd, LOCK_EX | (nonblocking ? LOCK_NB : 0)) == -1)
     {
       if (lock_busy(errno))

@@ -997,6 +997,60 @@ namespace
     expect_error(mapped::SessionController::open_existing(_directory), ErrorCode::IoError);
   }
 
+  // Private corruption fixture: a separate process already owns the original
+  // gate when a resource name is replaced. Busy takes precedence until that
+  // native lock becomes available; acquisition must then reject the changed
+  // namespace without returning a guard or writing the retained Session.
+  TEST_F(SessionControllerTest, ContendedGateDefersReplacedResourceErrorsUntilNativeAcquisition)
+  {
+    auto controller = open_controller();
+    auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang",
+                                                               mapped::FileAccess::ReadOnly));
+    const auto file_bytes = require_value(file.size());
+    std::vector<std::byte> before(static_cast<std::size_t>(file_bytes));
+    require_value(file.read_exact(0, before));
+
+    for (const auto* name : {"mutation.lock", "claims", "session.ang"})
+    {
+      SCOPED_TRACE(name);
+      Worker owner(_directory, "block_gate");
+      ASSERT_EQ(owner.receive(), 'S');
+      ASSERT_EQ(owner.receive(), 'A');
+      const auto path = _directory / name;
+      const auto retained = _root / (std::string{"old-"} + name);
+      const bool is_directory = fs::is_directory(path);
+      fs::rename(path, retained);
+      if (is_directory)
+      {
+        ASSERT_TRUE(fs::create_directory(path));
+      }
+      else
+      {
+        require_value(mapped::NativeFile::create_exclusive(path));
+      }
+
+      expect_error(controller->try_acquire_mutation(), ErrorCode::OwnershipBusy);
+      EXPECT_EQ(owner.finish(), 0);
+      expect_error(controller->try_acquire_mutation(), ErrorCode::IoError);
+      std::vector<std::byte> after(before.size());
+      require_value(file.read_exact(0, after));
+      EXPECT_EQ(require_value(file.size()), file_bytes);
+      EXPECT_EQ(after, before);
+      EXPECT_TRUE(fs::is_empty(path));
+
+      ASSERT_TRUE(fs::remove(path));
+      fs::rename(retained, path);
+      // Probe from another process before reacquiring on the shared parent
+      // descriptor: failure after flock must have released the native lock,
+      // as well as restoring this controller's local ownership bookkeeping.
+      Worker released(_directory, "try_gate");
+      EXPECT_EQ(released.receive(), 'A');
+      EXPECT_EQ(released.finish(), 0);
+      auto guard = require_value(controller->try_acquire_mutation());
+      require_value(guard.check_owner());
+    }
+  }
+
   // Guards and claims retain their controller and descriptors until their last
   // owner closes. Exec closes these descriptors so another executable cannot
   // accidentally keep the Session's native locks alive.
