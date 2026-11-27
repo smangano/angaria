@@ -6,6 +6,8 @@
 
 namespace angaria::detail
 {
+  struct TopologySnapshot;
+
   struct DeliveryProgress
   {
     DeliveryToken _token;
@@ -18,9 +20,11 @@ namespace angaria::detail
   };
 
   // Private reserved-state primitives, not public receive/acknowledge methods.
-  // The future endpoint caller must authenticate its Task's native owner before
-  // constructing RuntimeAccess. These functions recheck the captured claim and
-  // complete recovered topology under its guard. They do not acquire mappings.
+  // The endpoint caller must authenticate its Task's native owner before
+  // constructing RuntimeAccess. These functions recheck the captured claim;
+  // generic forms validate complete recovered topology under its guard. The
+  // trusted receive overload below reuses that validation. These primitives
+  // do not acquire borrowed-payload mappings.
   // An existing Source pin is authoritative: issue returns it unchanged before
   // considering a fresh Queue selection, log space, or exhausted counters.
   // Success advances access's operation generation for same-guard cleanup.
@@ -28,6 +32,14 @@ namespace angaria::detail
   Result<DeliveryProgress> runtime_issue_delivery(RuntimeAccess& access, const TaskClaim& consumer,
                                                    SourceQueueSetId source, QueueId queue,
                                                    UtcTimestamp dequeuedAt);
+  // Trusted receive-only reuse: topology must be the complete result of
+  // runtime_topology(access) under this same continuously held guard, with no
+  // intervening Session mutation. Do not supply an arbitrary/stale snapshot.
+  // Live guard, claim/parent, Source, Queue and receipt checks still run; only
+  // the duplicate complete topology/delivery validation is omitted.
+  Result<DeliveryProgress> runtime_issue_delivery(RuntimeAccess& access, const TopologySnapshot& topology,
+                                                   const TaskClaim& consumer, SourceQueueSetId source,
+                                                   QueueId queue, UtcTimestamp dequeuedAt);
   OperationResult runtime_acknowledge_delivery(RuntimeAccess& access, const DeliveryToken& token,
                                                  UtcTimestamp acknowledgedAt);
   OperationResult runtime_release_delivery(RuntimeAccess& access, const DeliveryToken& token);
