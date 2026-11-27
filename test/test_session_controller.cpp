@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <future>
 #include <memory>
@@ -258,6 +259,125 @@ namespace
     bool _hasForkChild{};
   };
 
+  // Private scheduling fixture: pause one attempt at the controller's local
+  // lock boundary, and keep any acquired guard on its acquiring thread. The
+  // deadlines detect a broken handshake; they are not performance assertions.
+  class PausedGateAttempt final : public mapped::GateAcquireObserver
+  {
+  public:
+    PausedGateAttempt(std::shared_ptr<mapped::SessionController> controller,
+                       mapped::MutationGuard& outer, bool nonblocking, bool reject = false)
+        : _controller(std::move(controller)), _outer(outer), _nonblocking(nonblocking),
+          _reject(reject), _arrival(_arrivalPromise.get_future()),
+          _resume(_resumePromise.get_future()), _release(_releasePromise.get_future()),
+          _result(_resultPromise.get_future())
+    {
+      _thread = std::thread([this]
+      {
+        try
+        {
+          auto attempt = _nonblocking ? _controller->try_acquire_mutation(this) :
+                                        _controller->acquire_mutation(this);
+          if (const auto* error = std::get_if<Error>(&attempt))
+          {
+            _resultPromise.set_value(*error);
+          }
+          else
+          {
+            _resultPromise.set_value(std::monostate{});
+            // A failed assertion elsewhere must not leave another fixture
+            // waiting forever for a worker-owned guard to be released.
+            (void)_release.wait_for(3s);
+          }
+        }
+        catch (...)
+        {
+          _resultPromise.set_exception(std::current_exception());
+        }
+      });
+    }
+
+    ~PausedGateAttempt()
+    {
+      finish();
+    }
+
+    OperationResult before_local_lock(bool nonblocking) override
+    {
+      if (nonblocking != _nonblocking)
+      {
+        return Error{ErrorCode::IoError, "Unexpected private acquisition mode", "test.gate"};
+      }
+      _arrivalPromise.set_value();
+      if (_resume.wait_for(3s) != std::future_status::ready)
+      {
+        return Error{ErrorCode::IoError, "Private gate pause deadline expired", "test.gate"};
+      }
+      if (_reject)
+      {
+        return Error{ErrorCode::IoError, "Injected gate registration failure", "test.gate"};
+      }
+      return std::monostate{};
+    }
+
+    bool wait_until_paused()
+    {
+      return _arrival.wait_for(3s) == std::future_status::ready;
+    }
+
+    void resume()
+    {
+      if (!_resumed)
+      {
+        _resumed = true;
+        _resumePromise.set_value();
+      }
+    }
+
+    OperationResult result()
+    {
+      if (_result.wait_for(3s) != std::future_status::ready)
+      {
+        throw std::runtime_error("private gate attempt did not complete");
+      }
+      return _result.get();
+    }
+
+    void finish()
+    {
+      // This fixture is destroyed on the main thread, which owns outer.
+      // Release it before joining even when an ASSERT abandons the scenario.
+      _outer = mapped::MutationGuard{};
+      resume();
+      if (!_released)
+      {
+        _released = true;
+        _releasePromise.set_value();
+      }
+      if (_thread.joinable())
+      {
+        _thread.join();
+      }
+    }
+
+  private:
+    std::shared_ptr<mapped::SessionController> _controller;
+    mapped::MutationGuard& _outer;
+    bool _nonblocking{};
+    bool _reject{};
+    std::promise<void> _arrivalPromise;
+    std::promise<void> _resumePromise;
+    std::promise<void> _releasePromise;
+    std::promise<OperationResult> _resultPromise;
+    std::future<void> _arrival;
+    std::future<void> _resume;
+    std::future<void> _release;
+    std::future<OperationResult> _result;
+    bool _resumed{};
+    bool _released{};
+    std::thread _thread;
+  };
+
   class SessionControllerTest : public testing::Test
   {
   protected:
@@ -397,6 +517,78 @@ namespace
     contender.join();
     expect_error(first, ErrorCode::OwnershipBusy);
     require_value(completion.get());
+  }
+
+  // A blocking request has announced itself but is deliberately paused before
+  // locking. Even with the mutex free, a fresh poll must leave it available for
+  // that request rather than repeatedly overtaking the waiting operation.
+  TEST_F(SessionControllerTest, AnnouncedBlockingRequestKeepsAnAvailableGateForItsHandoff)
+  {
+    auto controller = open_controller();
+    auto outer = require_value(controller->acquire_mutation());
+    PausedGateAttempt blocking(controller, outer, false);
+    ASSERT_TRUE(blocking.wait_until_paused());
+    outer = mapped::MutationGuard{};
+
+    {
+      const auto poll = controller->try_acquire_mutation();
+      expect_error(poll, ErrorCode::OwnershipBusy);
+    }
+    blocking.resume();
+    require_value(blocking.result());
+    expect_error(controller->try_acquire_mutation(), ErrorCode::OwnershipBusy);
+    blocking.finish();
+    require_value(controller->try_acquire_mutation());
+  }
+
+  // Force the race in which a poll saw no waiter, then a blocking request
+  // registered before the poll actually won the local mutex. A second check
+  // must relinquish that win and permit the announced request to proceed.
+  TEST_F(SessionControllerTest, PollRechecksForBlockingRequestsAfterWinningTheLocalMutex)
+  {
+    auto controller = open_controller();
+    auto outer = require_value(controller->acquire_mutation());
+    PausedGateAttempt poll(controller, outer, true);
+    ASSERT_TRUE(poll.wait_until_paused());
+    PausedGateAttempt blocking(controller, outer, false);
+    ASSERT_TRUE(blocking.wait_until_paused());
+    outer = mapped::MutationGuard{};
+
+    poll.resume();
+    expect_error(poll.result(), ErrorCode::OwnershipBusy);
+    poll.finish();
+    blocking.resume();
+    require_value(blocking.result());
+    blocking.finish();
+    require_value(controller->try_acquire_mutation());
+  }
+
+  // A private injected error abandons an announced request before local lock
+  // acquisition. Returned errors and exception unwinding must withdraw that
+  // request so later polls are not left permanently busy.
+  TEST_F(SessionControllerTest, FailedBlockingRegistrationDoesNotPoisonLaterAcquisition)
+  {
+    auto controller = open_controller();
+    auto outer = require_value(controller->acquire_mutation());
+    PausedGateAttempt failed(controller, outer, false, true);
+    ASSERT_TRUE(failed.wait_until_paused());
+    outer = mapped::MutationGuard{};
+    failed.resume();
+    expect_error(failed.result(), ErrorCode::IoError);
+    failed.finish();
+    require_value(controller->try_acquire_mutation());
+    require_value(controller->acquire_mutation());
+
+    class ThrowingObserver final : public mapped::GateAcquireObserver
+    {
+    public:
+      OperationResult before_local_lock(bool) override
+      {
+        throw std::runtime_error("Injected acquisition exception");
+      }
+    } observer;
+    EXPECT_THROW(controller->acquire_mutation(&observer), std::runtime_error);
+    require_value(controller->try_acquire_mutation());
   }
 
   // A nested gate-taking operation must fail without weakening the original

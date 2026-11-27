@@ -4,7 +4,9 @@
 #include "native_file_state.h"
 #include "performance_diagnostics.h"
 
+#include <atomic>
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <map>
@@ -227,6 +229,41 @@ namespace angaria::detail::mapped
       } while (result == -1 && errno == EINTR);
       return result;
     }
+
+    // Announce blocking local requests until they own the mutex. Try callers
+    // then leave a handoff opportunity instead of repeatedly winning its race.
+    class BlockingGateRequest
+    {
+    public:
+      BlockingGateRequest(std::atomic<std::size_t>& requests, bool blocking) noexcept
+          : _requests(blocking ? &requests : nullptr)
+      {
+        if (_requests)
+        {
+          _requests->fetch_add(1);
+        }
+      }
+
+      ~BlockingGateRequest()
+      {
+        finish_waiting();
+      }
+
+      BlockingGateRequest(const BlockingGateRequest&) = delete;
+      BlockingGateRequest& operator=(const BlockingGateRequest&) = delete;
+
+      void finish_waiting() noexcept
+      {
+        if (_requests)
+        {
+          _requests->fetch_sub(1);
+          _requests = nullptr;
+        }
+      }
+
+    private:
+      std::atomic<std::size_t>* _requests{};
+    };
   } // namespace
 
   struct SessionControllerState
@@ -240,6 +277,7 @@ namespace angaria::detail::mapped
     std::unique_ptr<CoordinationDescriptor> _claimsFd;
     std::unique_ptr<CoordinationDescriptor> _mutationFd;
     std::recursive_mutex _gateMutex;
+    std::atomic<std::size_t> _blockingGateRequests{};
     std::thread::id _gateOwner;
     std::mutex _claimMutex;
     std::map<TaskId, std::weak_ptr<TaskLease>> _claims;
@@ -589,17 +627,18 @@ namespace angaria::detail::mapped
     return _state->_configuration;
   }
 
-  Result<MutationGuard> SessionController::acquire_mutation()
+  Result<MutationGuard> SessionController::acquire_mutation(GateAcquireObserver* observer)
   {
-    return acquire_mutation(false);
+    return acquire_mutation(false, observer);
   }
 
-  Result<MutationGuard> SessionController::try_acquire_mutation()
+  Result<MutationGuard> SessionController::try_acquire_mutation(GateAcquireObserver* observer)
   {
-    return acquire_mutation(true);
+    return acquire_mutation(true, observer);
   }
 
-  Result<MutationGuard> SessionController::acquire_mutation(bool nonblocking)
+  Result<MutationGuard> SessionController::acquire_mutation(bool nonblocking,
+                                                           GateAcquireObserver* observer)
   {
     ANGARIA_DIAGNOSTIC_SCOPE(GateAcquire);
     ANGARIA_DIAGNOSTIC_COUNT(GateAttempts, 1);
@@ -607,10 +646,24 @@ namespace angaria::detail::mapped
     {
       return std::get<Error>(std::move(result));
     }
+    if (nonblocking && _state->_blockingGateRequests.load() != 0)
+    {
+      ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
+      return storage_error(ErrorCode::OwnershipBusy, _state->_directory,
+                           "Mutation gate has a queued blocking request");
+    }
     auto guard = std::make_unique<MutationGuardState>();
     guard->_controller = shared_from_this();
     guard->_thread = std::this_thread::get_id();
     guard->_localLock = std::unique_lock<std::recursive_mutex>(_state->_gateMutex, std::defer_lock);
+    BlockingGateRequest request(_state->_blockingGateRequests, !nonblocking);
+    if (observer)
+    {
+      if (auto result = observer->before_local_lock(nonblocking); std::holds_alternative<Error>(result))
+      {
+        return std::get<Error>(std::move(result));
+      }
+    }
     if (nonblocking)
     {
       if (!guard->_localLock.try_lock())
@@ -618,11 +671,20 @@ namespace angaria::detail::mapped
         ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
         return storage_error(ErrorCode::OwnershipBusy, _state->_directory, "Mutation gate is busy in this process");
       }
+      // A blocker may have registered after the first probe but before this
+      // mutex win. Give it the same opportunity rather than overtaking it.
+      if (_state->_blockingGateRequests.load() != 0)
+      {
+        ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
+        return storage_error(ErrorCode::OwnershipBusy, _state->_directory,
+                             "Mutation gate has a queued blocking request");
+      }
     }
     else
     {
       guard->_localLock.lock();
     }
+    request.finish_waiting();
     if (_state->_gateOwner != std::thread::id{})
     {
       ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
