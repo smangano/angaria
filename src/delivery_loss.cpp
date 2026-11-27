@@ -91,7 +91,7 @@ namespace angaria::detail
       {
         return std::optional<DeliveryGap>{};
       }
-      const auto committed = runtime_value(access._journal.execute(access._guard, plan));
+      const auto committed = runtime_value(access.execute(plan));
       access._snapshot._generation = committed._generation;
       return std::optional<DeliveryGap>{DeliveryGap{queue, first, lastLost}};
     }

@@ -241,7 +241,7 @@ namespace angaria::detail
         const std::array<std::uint64_t, 2> geometry{prepared._references[recordIndex], *ringCapacity};
         prepared._plan._commands.push_back(runtime_write_words(queue->_current->_stateOffset + 16, geometry));
       }
-      runtime_value(access._journal.execute(access._guard, prepared._plan));
+      runtime_value(access.execute(prepared._plan));
       return std::monostate{};
     }
 

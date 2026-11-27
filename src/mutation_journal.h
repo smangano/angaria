@@ -7,7 +7,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
+
+namespace angaria::detail
+{
+  class RuntimeAccess;
+}
 
 namespace angaria::detail::mapped
 {
@@ -104,6 +110,16 @@ namespace angaria::detail::mapped
     Result<TransactionResult> execute(const MutationGuard& guard, const TransactionPlan& plan);
 
   private:
+    friend class angaria::detail::RuntimeAccess;
+    // RuntimeAccess alone supplies framing from its fresh validation under the
+    // same continuously held guard. It consumes that privilege before trying.
+    Result<TransactionResult> execute_validated(const MutationGuard& guard,
+                                                const TransactionPlan& plan,
+                                                const JournalSnapshot& validated,
+                                                std::span<const JournalRecordRange> records);
+    Result<TransactionResult> execute_impl(const MutationGuard& guard, const TransactionPlan& plan,
+                                           const JournalSnapshot* validated,
+                                           std::span<const JournalRecordRange> records);
     explicit MutationJournal(std::unique_ptr<MutationJournalState> state) noexcept;
     std::unique_ptr<MutationJournalState> _state;
   };

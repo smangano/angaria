@@ -144,7 +144,7 @@ namespace angaria::detail
       prepared._plan._records.push_back(std::move(record));
       add_index(prepared, access.section_offset(mapped::SectionKind::SourceIndex) + slot * mapped::index_entry_bytes,
                 static_cast<std::uint16_t>(id), prepared._references[0]);
-      runtime_value(access._journal.execute(access._guard, prepared._plan));
+      runtime_value(access.execute(prepared._plan));
       return id;
     }
     catch (...)
@@ -255,7 +255,7 @@ namespace angaria::detail
                           priorities.at(updated._members[member]), prepared._plan._newRevision);
         }
       }
-      runtime_value(access._journal.execute(access._guard, prepared._plan));
+      runtime_value(access.execute(prepared._plan));
       return id;
     }
     catch (...)
@@ -349,7 +349,7 @@ namespace angaria::detail
       {
         add_membership(prepared, access, limits._sourceSets + slot, member, descriptor._destinations[member], 0, 1);
       }
-      runtime_value(access._journal.execute(access._guard, prepared._plan));
+      runtime_value(access.execute(prepared._plan));
       return id;
     }
     catch (...)

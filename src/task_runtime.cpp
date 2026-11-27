@@ -232,7 +232,7 @@ namespace angaria::detail
       require_cleanup_state(access);
       auto plan = fixed_plan(access, _claim._task, _claim._incarnation);
       plan._commands.push_back(release_claim(loaded._stateOffset, _claim._incarnation, runtime_now_ns()));
-      runtime_value(access._journal.execute(access._guard, plan));
+      runtime_value(access.execute(plan));
       _attached.store(false, std::memory_order_release);
     }
     catch (...)
@@ -377,7 +377,7 @@ namespace angaria::detail
         plan._commands.push_back(runtime_write_words(112, ready));
       }
       reserve_task(state);
-      runtime_value(access._journal.execute(access._guard, plan));
+      runtime_value(access.execute(plan));
       state->_attached.store(true, std::memory_order_release);
       return state;
     }
@@ -403,7 +403,7 @@ namespace angaria::detail
       auto plan = fixed_plan(access, task->_claim._task, task->_claim._incarnation);
       const std::array next{publication._sequence};
       plan._commands.push_back(runtime_write_words(loaded._stateOffset + 8, next));
-      runtime_value(access._journal.execute(access._guard, plan));
+      runtime_value(access.execute(plan));
       return publication;
     }
     catch (...)

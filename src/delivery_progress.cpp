@@ -88,7 +88,7 @@ namespace angaria::detail
       plan._actorIncarnation = consumer._incarnation;
       plan._newRevision = access._snapshot._revision;
       plan._commands = std::move(commands);
-      const auto result = runtime_value(access._journal.execute(access._guard, plan));
+      const auto result = runtime_value(access.execute(plan));
       // FixedState does not append or replace record boundaries. Retain the
       // completed generation so this same guard can prepare immediate cleanup
       // if later local mapping/result preparation fails.

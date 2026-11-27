@@ -335,7 +335,7 @@ namespace angaria
         plan._records.push_back(mapped::JournalRecord{1, 1, 0, std::move(sessionBody), {}});
         plan._records.push_back(mapped::JournalRecord{2, 1, 0, std::move(taskBody), {}});
         plan._commands = std::move(manifest._commands);
-        runtime_value(access._journal.execute(access._guard, plan));
+        runtime_value(access.execute(plan));
       }
       auto taskState = runtime_value(attach_runtime_task(state, TaskId{1}, true, std::move(creatorLease)));
       // Prepare every owning return object before the final publication syscall.
