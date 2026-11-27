@@ -26,6 +26,22 @@ namespace
 
   using angaria::test_support::require_value;
 
+  template <typename T, typename U>
+  void expect_matching_error(const Result<T>& decoded, const Result<U>& validated,
+                             const char* path, const char* message)
+  {
+    const auto* owning_error = std::get_if<Error>(&decoded);
+    const auto* validation_error = std::get_if<Error>(&validated);
+    ASSERT_NE(owning_error, nullptr);
+    ASSERT_NE(validation_error, nullptr);
+    EXPECT_EQ(owning_error->_code, ErrorCode::IoError);
+    EXPECT_EQ(validation_error->_code, owning_error->_code);
+    EXPECT_EQ(owning_error->_path, path);
+    EXPECT_EQ(validation_error->_path, owning_error->_path);
+    EXPECT_EQ(owning_error->_message, message);
+    EXPECT_EQ(validation_error->_message, owning_error->_message);
+  }
+
   template <typename T>
   void expect_error(const Result<T>& result, ErrorCode code = ErrorCode::IoError)
   {
@@ -84,6 +100,34 @@ namespace
             std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0},
             std::byte{0x88}, std::byte{0x77}, std::byte{0x66}, std::byte{0x55},
             std::byte{0x44}, std::byte{0x33}, std::byte{0x22}, std::byte{0x11}};
+  }
+
+  std::vector<std::byte> mixed_command_fixture()
+  {
+    // Independent frames: WriteRange(24), ResetBudgets(40), LoseRange(48),
+    // ReleaseClaim(32). Spell out stored codes, lengths and payload fields;
+    // production encoders must not supply the expected wire representation.
+    auto bytes = command_fixture();
+    bytes.resize(144);
+    angaria::test_support::put_integer(bytes, 24, 2, 2);
+    angaria::test_support::put_integer(bytes, 28, 24, 4);
+    put_word(bytes, 32, 8192);
+    angaria::test_support::put_integer(bytes, 40, 2, 2);
+    put_word(bytes, 48, 12288);
+    put_word(bytes, 56, 7);
+    angaria::test_support::put_integer(bytes, 64, 3, 2);
+    angaria::test_support::put_integer(bytes, 68, 32, 4);
+    put_word(bytes, 72, 16384);
+    put_word(bytes, 80, 1);
+    put_word(bytes, 88, 5);
+    put_word(bytes, 96, std::numeric_limits<std::uint64_t>::max());
+    angaria::test_support::put_integer(bytes, 104, 2, 2);
+    angaria::test_support::put_integer(bytes, 112, 4, 2);
+    angaria::test_support::put_integer(bytes, 116, 16, 4);
+    put_word(bytes, 120, 20480);
+    put_word(bytes, 128, 3);
+    put_word(bytes, 136, std::uint64_t{1} << 63);
+    return bytes;
   }
 
   mapped::RedoCommand write_command()
@@ -287,6 +331,101 @@ namespace
     expect_error(mapped::encode_commands(std::array{invalid}), ErrorCode::InvalidArgument);
   }
 
+  // Validation-only scanning must reach every command without constructing
+  // owning payloads. The ordinary decoder still returns independent copies;
+  // both routes accept all four independently specified command frames.
+  TEST(JournalFormat, CommandValidationAcceptsEveryGoldenFrameAndPreservesOwningDecode)
+  {
+    auto bytes = mixed_command_fixture();
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::validate_commands(bytes)));
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::validate_commands({})));
+    const auto decoded = require_value(mapped::decode_commands(bytes));
+    ASSERT_EQ(decoded.size(), 4u);
+    const std::array opcodes{mapped::RedoOpcode::WriteRange, mapped::RedoOpcode::ResetBudgets,
+                             mapped::RedoOpcode::LoseRange, mapped::RedoOpcode::ReleaseClaim};
+    const std::array<std::uint64_t, 4> targets{4096, 8192, 16384, 20480};
+    const std::array<std::size_t, 4> starts{16, 40, 80, 128};
+    const std::array<std::size_t, 4> lengths{8, 24, 32, 16};
+    for (std::size_t index = 0; index != decoded.size(); ++index)
+    {
+      EXPECT_EQ(decoded[index]._opcode, opcodes[index]);
+      EXPECT_EQ(decoded[index]._target, targets[index]);
+      EXPECT_EQ(decoded[index]._payload, (std::vector<std::byte>{bytes.begin() + starts[index],
+                                                                 bytes.begin() + starts[index] + lengths[index]}));
+    }
+    const auto retained = decoded;
+    std::fill(bytes.begin(), bytes.end(), std::byte{0xff});
+    EXPECT_EQ(decoded, retained);
+  }
+
+  // A valid first frame cannot hide malformed later framing or compact intent.
+  // Exact diagnostics also pin the existing first-error order when a frame has
+  // both flags and an unknown opcode, rather than merely checking rejection.
+  TEST(JournalFormat, CommandValidationMatchesOwningErrorsForMalformedLaterFrames)
+  {
+    for (unsigned variant = 0; variant != 13; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      auto invalid = mixed_command_fixture();
+      const char* message = "Invalid command flags or truncated payload";
+      switch (variant)
+      {
+      case 0:
+        invalid.resize(127); // The last frame has only fifteen header bytes.
+        message = "Truncated redo command header";
+        break;
+      case 1:
+        invalid.pop_back();
+        break;
+      case 2:
+        invalid[26] = std::byte{1};
+        break;
+      case 3:
+        invalid[42] = std::byte{1}; // ResetBudgets reserved payload byte.
+        message = "Invalid ResetBudgets payload";
+        break;
+      case 4:
+        put_word(invalid, 88, 0); // LoseRange last precedes its first sequence.
+        message = "Invalid LoseRange payload";
+        break;
+      case 5:
+        invalid[106] = std::byte{1};
+        message = "Invalid LoseRange payload";
+        break;
+      case 6:
+        put_word(invalid, 128, 0);
+        message = "Invalid ReleaseClaim payload";
+        break;
+      case 7:
+        invalid[112] = std::byte{99};
+        message = "Unknown redo opcode";
+        break;
+      case 8:
+        put_word(invalid, 120, 20481);
+        message = "Redo target or payload length exceeds the format bounds";
+        break;
+      case 9:
+        invalid.push_back(std::byte{});
+        message = "Truncated redo command header";
+        break;
+      case 10:
+        invalid[0] = std::byte{99};
+        invalid[2] = std::byte{1};
+        break;
+      case 11:
+        angaria::test_support::put_integer(invalid, 4, 0, 4);
+        message = "WriteRange requires a positive aligned byte range";
+        break;
+      case 12:
+        put_word(invalid, 120, std::numeric_limits<std::uint64_t>::max() - 7);
+        message = "Redo target or payload length exceeds the format bounds";
+        break;
+      }
+      expect_matching_error(mapped::decode_commands(invalid), mapped::validate_commands(invalid),
+                              "journal.commands", message);
+    }
+  }
+
   // The envelope locates a record body and records its generation, revision, and readiness.
   // Ready describes materialization; the enclosing journal commit still determines acceptance.
   TEST(JournalFormat, RecordEnvelopeMatchesIndependentGoldenBytes)
@@ -416,5 +555,157 @@ namespace
     expect_error(mapped::decode_manifest_body(invalid, 8192));
     value._records = {8192};
     expect_error(mapped::encode_manifest_body(value, 8192), ErrorCode::InvalidArgument);
+  }
+
+  // The validation view borrows only the exact reference bytes from its input;
+  // the established decoder still owns both references and command payloads.
+  // Displace every golden body by one byte to avoid relying on struct alignment.
+  TEST(JournalFormat, ManifestValidationReturnsExactBorrowedReferencesForGoldenBodies)
+  {
+    for (unsigned variant = 0; variant != 4; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      auto fixture = manifest_fixture();
+      auto expected = manifest();
+      if (variant == 1)
+      {
+        fixture.resize(128);
+      }
+      else if (variant == 2)
+      {
+        const auto commands = mixed_command_fixture();
+        fixture.resize(256);
+        put_word(fixture, 56, 144);
+        std::copy(commands.begin(), commands.end(), fixture.begin() + 80);
+        expected._commands = require_value(mapped::decode_commands(commands));
+      }
+      else if (variant == 3)
+      {
+        fixture.resize(64);
+        std::fill(fixture.begin() + 32, fixture.end(), std::byte{});
+        expected._records.clear();
+        expected._commands.clear();
+      }
+      std::vector<std::byte> displaced(fixture.size() + 1);
+      std::copy(fixture.begin(), fixture.end(), displaced.begin() + 1);
+      const auto input = std::span<const std::byte>{displaced}.subspan(1);
+      const auto view = require_value(mapped::validate_manifest_body(input, 8192));
+      const auto decoded = require_value(mapped::decode_manifest_body(input, 8192));
+      EXPECT_EQ(view._subtype, mapped::TransactionSubtype::Registry);
+      EXPECT_EQ(view._actor, static_cast<TaskId>(1));
+      EXPECT_EQ(view._actorIncarnation, 3u);
+      EXPECT_EQ(view._baseRevision, 4u);
+      EXPECT_EQ(view._newRevision, 5u);
+      ASSERT_EQ(view._recordReferences.size(), expected._records.size() * 8);
+      if (!expected._records.empty())
+      {
+        EXPECT_EQ(view._recordReferences.data(), input.data() + 64);
+        const std::array reference_bytes{std::byte{0}, std::byte{0x10}, std::byte{0}, std::byte{0},
+                                         std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0},
+                                         std::byte{0x80}, std::byte{0x10}, std::byte{0}, std::byte{0},
+                                         std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}};
+        EXPECT_TRUE(std::equal(view._recordReferences.begin(), view._recordReferences.end(), reference_bytes.begin()));
+      }
+      EXPECT_EQ(decoded, expected);
+      std::fill(displaced.begin(), displaced.end(), std::byte{0xff});
+      EXPECT_EQ(decoded, expected); // The borrowed view is no longer used after this input change.
+    }
+  }
+
+  // Validation-only traversal must reject the same hostile slices, records,
+  // padding and commands as owning decode. Multiple defects pin the existing
+  // order: allocation padding precedes manifest fields, and references precede
+  // command parsing. Each fixture is edited directly, without an encoder.
+  TEST(JournalFormat, ManifestValidationMatchesOwningErrorsAndFirstFailureOrder)
+  {
+    for (unsigned variant = 0; variant != 18; ++variant)
+    {
+      SCOPED_TRACE(variant);
+      auto invalid = manifest_fixture();
+      const char* path = "journal.manifest";
+      const char* message = "Manifest record references must name an ordered earlier batch";
+      switch (variant)
+      {
+      case 0:
+        invalid.resize(63);
+        message = "Invalid manifest body range";
+        break;
+      case 1:
+        invalid[4] = std::byte{1};
+        message = "Manifest flags are reserved";
+        break;
+      case 2:
+        put_word(invalid, 40, std::numeric_limits<std::uint64_t>::max());
+        message = "Invalid manifest reference slice";
+        break;
+      case 3:
+        put_word(invalid, 48, 8320); // Commands overlap the canonical reference slice.
+        message = "Invalid manifest command slice";
+        break;
+      case 4:
+        put_word(invalid, 56, std::numeric_limits<std::uint64_t>::max());
+        message = "Invalid manifest command slice";
+        break;
+      case 5:
+        invalid.resize(128);
+        invalid.back() = std::byte{1};
+        message = "Invalid manifest allocation padding";
+        break;
+      case 6:
+        invalid.resize(168); // Sixty-four padding bytes are not canonical.
+        message = "Invalid manifest allocation padding";
+        break;
+      case 7:
+        put_word(invalid, 8, 0);
+        message = "Invalid manifest position or actor";
+        break;
+      case 8:
+        invalid[0] = std::byte{4};
+        message = "Unknown manifest subtype";
+        break;
+      case 9:
+        put_word(invalid, 24, 6);
+        message = "Registry manifest must advance its revision once";
+        break;
+      case 10:
+        put_word(invalid, 72, 4096);
+        break;
+      case 11:
+        put_word(invalid, 64, 4224);
+        put_word(invalid, 72, 4096);
+        break;
+      case 12:
+        put_word(invalid, 72, 8192);
+        break;
+      case 13:
+        invalid[80] = std::byte{99};
+        path = "journal.commands";
+        message = "Unknown redo opcode";
+        break;
+      case 14:
+        invalid.resize(128);
+        invalid.back() = std::byte{1};
+        invalid[0] = std::byte{4};
+        message = "Invalid manifest allocation padding";
+        break;
+      case 15:
+        put_word(invalid, 72, 4096);
+        invalid[80] = std::byte{99};
+        break;
+      case 16:
+        invalid[82] = std::byte{1};
+        path = "journal.commands";
+        message = "Invalid command flags or truncated payload";
+        break;
+      case 17:
+        invalid.resize(96);
+        put_word(invalid, 56, 16); // Legal command slice, truncated WriteRange payload.
+        path = "journal.commands";
+        message = "Invalid command flags or truncated payload";
+        break;
+      }
+      expect_matching_error(mapped::decode_manifest_body(invalid, 8192),
+                              mapped::validate_manifest_body(invalid, 8192), path, message);
+    }
   }
 } // namespace

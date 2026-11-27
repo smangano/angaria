@@ -850,6 +850,42 @@ namespace
     EXPECT_EQ(records.front()._envelope._immutableBytes, immutable_bytes);
   }
 
+  // A completed manifest's commands are not replayed during inspection, but
+  // their complete framing still belongs to the validated history. Corrupt a
+  // later command after one valid frame; neither export nor a new mutation may
+  // accept the prefix, expose partial records, or alter the retained evidence.
+  TEST_F(MutationJournalTest, HistoricalManifestValidatesLaterCommandsBeforeExposingThePrefix)
+  {
+    Access access(make_session());
+    const auto accepted = require_value(access._journal.execute(access._guard,
+        make_plan(require_value(access._journal.snapshot(access._guard)), _configuration, true)));
+    std::vector<mapped::JournalRecordRange> records;
+    const auto before = require_value(access._journal.snapshot(access._guard, records));
+    ASSERT_EQ(records.size(), 2u);
+    const auto image = access.image();
+    const auto body = accepted._manifest + mapped::record_envelope_bytes;
+    const auto commands = get_integer(image, body + 48);
+    ASSERT_EQ(get_integer(image, body + 56), 96u); // Two 24-byte writes, then one 48-byte write.
+    ASSERT_EQ(get_integer(image, commands) & 0xffffu, 1u);
+    const auto second_command = commands + 24;
+    const std::array unknown_opcode{std::byte{99}, std::byte{0}};
+    require_value(access.file().write_exact(second_command, unknown_opcode));
+    const auto evidence = access.image();
+
+    expect_error(access._journal.snapshot(access._guard, records), ErrorCode::IoError);
+    EXPECT_TRUE(records.empty());
+    expect_error(access._journal.execute(access._guard, make_plan(before, _configuration)), ErrorCode::IoError);
+    EXPECT_EQ(access.image(), evidence);
+    EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
+    EXPECT_EQ(access.word(task_state()), 11u);
+    EXPECT_EQ(access.word(task_state() + 8), 22u);
+
+    require_value(access.file().write_exact(second_command, std::span{image}.subspan(second_command, 2)));
+    EXPECT_EQ(require_value(access._journal.snapshot(access._guard, records)), before);
+    ASSERT_EQ(records.size(), 2u);
+    EXPECT_EQ(records.back()._offset, accepted._manifest);
+  }
+
   // A scan of a large committed base ends at its partial final window, not at
   // an unaccepted append's longer physical EOF. Real FileGrowth failure must
   // therefore roll back without a scan mapping lease obstructing the shrink.

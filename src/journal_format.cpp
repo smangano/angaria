@@ -144,6 +144,34 @@ namespace angaria::detail::mapped
       return std::nullopt;
     }
 
+    template <typename Consume>
+    OperationResult walk_commands(std::span<const std::byte> bytes, Consume&& consume)
+    {
+      std::size_t offset{};
+      while (offset < bytes.size())
+      {
+        if (bytes.size() - offset < 16)
+        {
+          return failure(ErrorCode::IoError, "journal.commands", "Truncated redo command header");
+        }
+        const auto opcode = static_cast<RedoOpcode>(read_unsigned_le<std::uint16_t>(bytes, offset));
+        const auto length = read_unsigned_le<std::uint32_t>(bytes, offset + 4);
+        const auto target = read_unsigned_le<std::uint64_t>(bytes, offset + 8);
+        if (read_unsigned_le<std::uint16_t>(bytes, offset + 2) != 0 || length > bytes.size() - offset - 16)
+        {
+          return failure(ErrorCode::IoError, "journal.commands", "Invalid command flags or truncated payload");
+        }
+        const auto payload = bytes.subspan(offset + 16, length);
+        if (const auto error = validate_command(opcode, target, payload, ErrorCode::IoError))
+        {
+          return *error;
+        }
+        consume(opcode, target, payload);
+        offset += std::size_t{16} + length;
+      }
+      return std::monostate{};
+    }
+
     std::optional<Error> validate_envelope(const RecordEnvelope& envelope, ErrorCode code)
     {
       if (envelope._kind == 0 || envelope._kind > 12 || envelope._encoding != 1 ||
@@ -158,8 +186,9 @@ namespace angaria::detail::mapped
       return std::nullopt;
     }
 
-    std::optional<Error> validate_manifest(const Manifest& manifest, std::uint64_t recordOffset,
-                                           ErrorCode code)
+    template <typename Header>
+    std::optional<Error> validate_manifest_header(const Header& manifest, std::uint64_t recordOffset,
+                                                  ErrorCode code)
     {
       if (!reference_valid(recordOffset) ||
           !contains_range(max_log_bytes, recordOffset, record_envelope_bytes + 64) ||
@@ -186,16 +215,91 @@ namespace angaria::detail::mapped
       default:
         return failure(code, "journal.manifest", "Unknown manifest subtype");
       }
+      return std::nullopt;
+    }
+
+    std::optional<Error> validate_manifest_reference(std::uint64_t reference, std::uint64_t recordOffset,
+                                                     std::uint64_t previous, ErrorCode code)
+    {
+      if (!reference_valid(reference) || reference >= recordOffset || reference <= previous)
+      {
+        return failure(code, "journal.manifest", "Manifest record references must name an ordered earlier batch");
+      }
+      return std::nullopt;
+    }
+
+    std::optional<Error> validate_manifest(const Manifest& manifest, std::uint64_t recordOffset,
+                                           ErrorCode code)
+    {
+      if (const auto error = validate_manifest_header(manifest, recordOffset, code))
+      {
+        return *error;
+      }
       std::uint64_t previous{};
       for (const auto reference : manifest._records)
       {
-        if (!reference_valid(reference) || reference >= recordOffset || reference <= previous)
+        if (const auto error = validate_manifest_reference(reference, recordOffset, previous, code))
         {
-          return failure(code, "journal.manifest", "Manifest record references must name an ordered earlier batch");
+          return *error;
         }
         previous = reference;
       }
       return std::nullopt;
+    }
+
+    struct ManifestFrame
+    {
+      ManifestView _manifest;
+      std::span<const std::byte> _commands;
+    };
+
+    // Framing precedes semantic checks in both paths, preserving the owning
+    // decoder's ordering when a body contains more than one corruption.
+    Result<ManifestFrame> parse_manifest_frame(std::span<const std::byte> bytes,
+                                               std::uint64_t recordOffset)
+    {
+      if (bytes.size() < 64 || bytes.size() % 8 != 0 || !reference_valid(recordOffset) ||
+          !contains_range(max_log_bytes, recordOffset, record_envelope_bytes) ||
+          !contains_range(max_log_bytes, recordOffset + record_envelope_bytes, bytes.size()))
+      {
+        return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest body range");
+      }
+      if (!all_zero(bytes.subspan(4, 4)))
+      {
+        return failure(ErrorCode::IoError, "journal.manifest", "Manifest flags are reserved");
+      }
+      const auto referencesOffset = read_unsigned_le<std::uint64_t>(bytes, 32);
+      const auto count = read_unsigned_le<std::uint64_t>(bytes, 40);
+      const auto commandsOffset = read_unsigned_le<std::uint64_t>(bytes, 48);
+      const auto commandBytes = read_unsigned_le<std::uint64_t>(bytes, 56);
+      const auto referenceBytes = checked_multiply(count, 8);
+      const auto bodyStart = recordOffset + record_envelope_bytes;
+      if (!referenceBytes || *referenceBytes > bytes.size() - 64 ||
+          (count == 0 ? referencesOffset != 0 : referencesOffset != bodyStart + 64))
+      {
+        return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest reference slice");
+      }
+      const auto commandBegin = 64 + static_cast<std::size_t>(*referenceBytes);
+      if (commandBytes > bytes.size() - commandBegin || commandBytes % 8 != 0 ||
+          (commandBytes == 0 ? commandsOffset != 0 : commandsOffset != bodyStart + commandBegin))
+      {
+        return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest command slice");
+      }
+      const auto used = commandBegin + static_cast<std::size_t>(commandBytes);
+      if (bytes.size() - used >= section_alignment || !all_zero(bytes.subspan(used)))
+      {
+        return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest allocation padding");
+      }
+      ManifestFrame frame;
+      auto& manifest = frame._manifest;
+      manifest._subtype = static_cast<TransactionSubtype>(read_unsigned_le<std::uint16_t>(bytes, 0));
+      manifest._actor = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(bytes, 2));
+      manifest._actorIncarnation = read_unsigned_le<std::uint64_t>(bytes, 8);
+      manifest._baseRevision = read_unsigned_le<std::uint64_t>(bytes, 16);
+      manifest._newRevision = read_unsigned_le<std::uint64_t>(bytes, 24);
+      manifest._recordReferences = bytes.subspan(64, static_cast<std::size_t>(*referenceBytes));
+      frame._commands = bytes.subspan(commandBegin, static_cast<std::size_t>(commandBytes));
+      return frame;
     }
   } // namespace
 
@@ -301,29 +405,23 @@ namespace angaria::detail::mapped
   Result<std::vector<RedoCommand>> decode_commands(std::span<const std::byte> bytes)
   {
     std::vector<RedoCommand> commands;
-    std::size_t offset{};
-    while (offset < bytes.size())
+    auto result = walk_commands(bytes, [&](RedoOpcode opcode, std::uint64_t target,
+                                           std::span<const std::byte> payload)
     {
-      if (bytes.size() - offset < 16)
-      {
-        return failure(ErrorCode::IoError, "journal.commands", "Truncated redo command header");
-      }
-      const auto opcode = static_cast<RedoOpcode>(read_unsigned_le<std::uint16_t>(bytes, offset));
-      const auto length = read_unsigned_le<std::uint32_t>(bytes, offset + 4);
-      const auto target = read_unsigned_le<std::uint64_t>(bytes, offset + 8);
-      if (read_unsigned_le<std::uint16_t>(bytes, offset + 2) != 0 || length > bytes.size() - offset - 16)
-      {
-        return failure(ErrorCode::IoError, "journal.commands", "Invalid command flags or truncated payload");
-      }
-      const auto payload = bytes.subspan(offset + 16, length);
-      if (const auto error = validate_command(opcode, target, payload, ErrorCode::IoError))
-      {
-        return *error;
-      }
       commands.push_back(RedoCommand{opcode, target, {payload.begin(), payload.end()}});
-      offset += std::size_t{16} + length;
+    });
+    if (const auto error = std::get_if<Error>(&result))
+    {
+      return *error;
     }
     return commands;
+  }
+
+  OperationResult validate_commands(std::span<const std::byte> bytes)
+  {
+    return walk_commands(bytes, [](RedoOpcode, std::uint64_t, std::span<const std::byte>)
+    {
+    });
   }
 
   Result<RecordEnvelopeBytes> encode_record_envelope(const RecordEnvelope& envelope)
@@ -417,60 +515,66 @@ namespace angaria::detail::mapped
 
   Result<Manifest> decode_manifest_body(std::span<const std::byte> bytes, std::uint64_t recordOffset)
   {
-    if (bytes.size() < 64 || bytes.size() % 8 != 0 || !reference_valid(recordOffset) ||
-        !contains_range(max_log_bytes, recordOffset, record_envelope_bytes) ||
-        !contains_range(max_log_bytes, recordOffset + record_envelope_bytes, bytes.size()))
+    auto parsed = parse_manifest_frame(bytes, recordOffset);
+    if (const auto error = std::get_if<Error>(&parsed))
     {
-      return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest body range");
+      return *error;
     }
-    if (!all_zero(bytes.subspan(4, 4)))
-    {
-      return failure(ErrorCode::IoError, "journal.manifest", "Manifest flags are reserved");
-    }
-    const auto referencesOffset = read_unsigned_le<std::uint64_t>(bytes, 32);
-    const auto count = read_unsigned_le<std::uint64_t>(bytes, 40);
-    const auto commandsOffset = read_unsigned_le<std::uint64_t>(bytes, 48);
-    const auto commandBytes = read_unsigned_le<std::uint64_t>(bytes, 56);
-    const auto referenceBytes = checked_multiply(count, 8);
-    const auto bodyStart = recordOffset + record_envelope_bytes;
-    if (!referenceBytes || *referenceBytes > bytes.size() - 64 ||
-        (count == 0 ? referencesOffset != 0 : referencesOffset != bodyStart + 64))
-    {
-      return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest reference slice");
-    }
-    const auto commandBegin = 64 + static_cast<std::size_t>(*referenceBytes);
-    if (commandBytes > bytes.size() - commandBegin || commandBytes % 8 != 0 ||
-        (commandBytes == 0 ? commandsOffset != 0 : commandsOffset != bodyStart + commandBegin))
-    {
-      return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest command slice");
-    }
-    const auto used = commandBegin + static_cast<std::size_t>(commandBytes);
-    if (bytes.size() - used >= section_alignment || !all_zero(bytes.subspan(used)))
-    {
-      return failure(ErrorCode::IoError, "journal.manifest", "Invalid manifest allocation padding");
-    }
+    const auto& frame = std::get<ManifestFrame>(parsed);
+    const auto& view = frame._manifest;
     Manifest manifest;
-    manifest._subtype = static_cast<TransactionSubtype>(read_unsigned_le<std::uint16_t>(bytes, 0));
-    manifest._actor = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(bytes, 2));
-    manifest._actorIncarnation = read_unsigned_le<std::uint64_t>(bytes, 8);
-    manifest._baseRevision = read_unsigned_le<std::uint64_t>(bytes, 16);
-    manifest._newRevision = read_unsigned_le<std::uint64_t>(bytes, 24);
+    manifest._subtype = view._subtype;
+    manifest._actor = view._actor;
+    manifest._actorIncarnation = view._actorIncarnation;
+    manifest._baseRevision = view._baseRevision;
+    manifest._newRevision = view._newRevision;
     // Every count is bounded by its owning immutable span before allocation.
-    manifest._records.reserve(static_cast<std::size_t>(count));
+    const auto count = view._recordReferences.size() / sizeof(std::uint64_t);
+    manifest._records.reserve(count);
     for (std::size_t index = 0; index < count; ++index)
     {
-      manifest._records.push_back(read_unsigned_le<std::uint64_t>(bytes, 64 + index * 8));
+      manifest._records.push_back(read_unsigned_le<std::uint64_t>(view._recordReferences, index * 8));
     }
     if (const auto error = validate_manifest(manifest, recordOffset, ErrorCode::IoError))
     {
       return *error;
     }
-    auto decoded = decode_commands(bytes.subspan(commandBegin, static_cast<std::size_t>(commandBytes)));
+    auto decoded = decode_commands(frame._commands);
     if (const auto error = std::get_if<Error>(&decoded))
     {
       return *error;
     }
     manifest._commands = std::move(std::get<std::vector<RedoCommand>>(decoded));
+    return manifest;
+  }
+
+  Result<ManifestView> validate_manifest_body(std::span<const std::byte> bytes, std::uint64_t recordOffset)
+  {
+    auto parsed = parse_manifest_frame(bytes, recordOffset);
+    if (const auto error = std::get_if<Error>(&parsed))
+    {
+      return *error;
+    }
+    const auto& frame = std::get<ManifestFrame>(parsed);
+    const auto& manifest = frame._manifest;
+    if (const auto error = validate_manifest_header(manifest, recordOffset, ErrorCode::IoError))
+    {
+      return *error;
+    }
+    std::uint64_t previous{};
+    for (std::size_t offset = 0; offset < manifest._recordReferences.size(); offset += 8)
+    {
+      const auto reference = read_unsigned_le<std::uint64_t>(manifest._recordReferences, offset);
+      if (const auto error = validate_manifest_reference(reference, recordOffset, previous, ErrorCode::IoError))
+      {
+        return *error;
+      }
+      previous = reference;
+    }
+    if (auto result = validate_commands(frame._commands); std::holds_alternative<Error>(result))
+    {
+      return std::get<Error>(std::move(result));
+    }
     return manifest;
   }
 } // namespace angaria::detail::mapped
