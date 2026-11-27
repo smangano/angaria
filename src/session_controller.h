@@ -13,6 +13,16 @@ namespace angaria::detail::mapped
   struct TaskLeaseState;
   class SessionController;
 
+  // Private qualification seam. Blocking callers have registered their request;
+  // try callers have passed the first queued-request check. Observers can
+  // coordinate other threads, but must not reenter or mutate the Session.
+  class GateAcquireObserver
+  {
+  public:
+    virtual ~GateAcquireObserver() = default;
+    virtual OperationResult before_local_lock(bool nonblocking) = 0;
+  };
+
   // A thread-affine gate owner. Keep acquisition, use, moves, and destruction
   // on the acquiring thread. It retains its controller until the gate closes.
   class MutationGuard
@@ -65,8 +75,8 @@ namespace angaria::detail::mapped
     FileIdentity file_identity() const noexcept;
     const SuperblockConfiguration& configuration() const noexcept;
 
-    Result<MutationGuard> acquire_mutation();
-    Result<MutationGuard> try_acquire_mutation();
+    Result<MutationGuard> acquire_mutation(GateAcquireObserver* observer = nullptr);
+    Result<MutationGuard> try_acquire_mutation(GateAcquireObserver* observer = nullptr);
     OperationResult create_task_claim_file(const MutationGuard& guard, TaskId task);
     Result<std::shared_ptr<TaskLease>> try_claim_task(TaskId task, std::shared_ptr<TaskLease> parent = {});
     // True means a live owner currently holds the claim; probing never waits
@@ -79,7 +89,7 @@ namespace angaria::detail::mapped
     friend struct MutationGuardState;
     friend class TaskLease;
     explicit SessionController(std::unique_ptr<SessionControllerState> state) noexcept;
-    Result<MutationGuard> acquire_mutation(bool nonblocking);
+    Result<MutationGuard> acquire_mutation(bool nonblocking, GateAcquireObserver* observer);
     std::unique_ptr<SessionControllerState> _state;
   };
 } // namespace angaria::detail::mapped

@@ -31,7 +31,7 @@ The owning copy remains usable after the Source, Task, and Session close. Curren
 
 ## Waiting and bounds
 
-Timeouts are nanoseconds measured against a checked monotonic deadline. Negative or overflowing timeouts return `InvalidArgument`. Zero performs one nonblocking gate/availability attempt; a busy gate can therefore return `ReceiveTimeout` even when a delivery is pending. Positive waits retry with bounded gate acquisition, releasing the gate between checks. They never sleep or run application processing while holding it.
+Timeouts are nanoseconds measured against a checked monotonic deadline. Negative or overflowing timeouts return `InvalidArgument`. Zero performs one nonblocking gate/availability attempt; contention or an announced local blocking request can therefore return `ReceiveTimeout` even when a delivery is pending. [Local handoff preference](performance-gate-handoff.md) can defer a poll while the mutex is momentarily free; sustained blocking work may delay try-only consumers. Positive waits retry with bounded gate acquisition, releasing the gate between checks. They never sleep or run application processing while holding it.
 
 After acquisition and recovery, an existing pin can be returned even if the positive deadline has passed. An expired positive deadline cannot issue a fresh delivery. Recovery and an already started mutation still finish consistently; this is not a hard execution-time guarantee. This step uses Spin waiting; Linux eventfd follows in milestone 7.
 
