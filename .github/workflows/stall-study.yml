@@ -1,0 +1,78 @@
+name: Stall diagnostics and recorded SPSC (on demand)
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'study-stalls'
+    name: ${{ matrix.profile }} recorded SPSC and stall study
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: Linux x86_64
+            runner: ubuntu-24.04
+            architecture: x86_64
+            measure: true
+          - profile: Linux ARM64
+            runner: ubuntu-24.04-arm
+            architecture: aarch64
+            measure: false
+          - profile: macOS ARM64
+            runner: macos-15
+            architecture: arm64
+            measure: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check native architecture
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: test "$(uname -m)" = "$EXPECTED_ARCHITECTURE"
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ libboost-dev libgtest-dev python3
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install boost googletest
+      - name: Build ordinary prototype and qualification workers
+        run: |
+          cmake -S . -B build/stall-normal -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g -DBUILD_TESTING=ON -DANGARIA_BUILD_IPC_COMPARISON=ON -DANGARIA_BUILD_STALL_STUDY=ON -DANGARIA_ENABLE_DIAGNOSTICS=OFF -DANGARIA_ENABLE_CACHEGRIND=OFF
+          cmake --build build/stall-normal --target angaria_ipc_comparison angaria_ipc_comparison_tests angaria_recorded_spsc_tests --parallel 3
+      - name: Build separate diagnostic executable
+        run: |
+          cmake -S . -B build/stall-diagnostics -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g -DBUILD_TESTING=OFF -DANGARIA_BUILD_IPC_COMPARISON=ON -DANGARIA_BUILD_STALL_STUDY=ON -DANGARIA_ENABLE_DIAGNOSTICS=ON -DANGARIA_ENABLE_CACHEGRIND=OFF
+          cmake --build build/stall-diagnostics --target angaria_ipc_comparison --parallel 3
+      - name: Qualify recovery, replay, and evidence handling
+        run: |
+          build/stall-normal/angaria_ipc_comparison_tests
+          build/stall-normal/angaria_recorded_spsc_tests
+          python3 -B test/ipc_comparison.py build/stall-normal/angaria_ipc_comparison
+          python3 -B test/stall_study.py build/stall-normal/angaria_ipc_comparison build/stall-diagnostics/angaria_ipc_comparison
+      - name: Record ordinary comparisons and separate diagnostics
+        if: matrix.measure
+        id: measurements
+        run: >-
+          python3 -B benchmarks/run_stall_study.py build/stall-normal/angaria_ipc_comparison
+          --diagnostic-executable build/stall-diagnostics/angaria_ipc_comparison
+          --output build/stall-results --host-label "GitHub hosted Ubuntu 24.04 x86_64"
+      - name: Retain all measured attempts
+        if: always() && matrix.measure && steps.measurements.outcome != 'skipped'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: stall-study-linux-x86_64
+          path: build/stall-results/
+          if-no-files-found: error
+          retention-days: 14

@@ -1,6 +1,10 @@
 // Independent-process adapters for the bounded 1:1 IPC comparison. Control
 // traffic uses stdin/stdout; application messages use only the selected library.
 #include "ipc_comparison_support.h"
+#include "ipc_operation_diagnostics.h"
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+#include "recorded_spsc.h"
+#endif
 #include "build_version.h"
 
 #include <nanomsg/nn.h>
@@ -33,7 +37,6 @@ namespace
   using namespace angaria::benchmarks;
   namespace ipc = angaria::benchmarks::ipc;
   constexpr std::uint64_t log_limit = 64ULL * 1024 * 1024;
-  constexpr std::uint64_t ring_slots = 8;
 
   std::array<int, 3> runtime_abi()
   {
@@ -95,19 +98,26 @@ namespace
 
   std::uint64_t file_bytes(const ipc::Options& options)
   {
-    return options._profile == ipc::Profile::Angaria ?
+    return options._profile != ipc::Profile::Nanomsg ?
         std::filesystem::file_size(options._directory / "session.ang") : 0;
   }
 
-  std::string fields(const ipc::Options& options)
+  std::string fields(const ipc::Options& options, bool includeRole = true)
   {
-    return "\"profile\":" + ipc::json_string(ipc::profile_name(options._profile)) +
-        ",\"role\":" + ipc::json_string(ipc::role_name(options._role));
+    auto result = "\"profile\":" + ipc::json_string(ipc::profile_name(options._profile)) +
+        ",\"scenario\":" + ipc::json_string(options._scenario) +
+        ",\"collection\":" + ipc::json_string(options._collectionName) +
+        ",\"instrumentation_enabled\":" + (ipc::observation::instrumentation_enabled ? "true" : "false");
+    if (includeRole)
+    {
+      result += ",\"role\":" + ipc::json_string(ipc::role_name(options._role));
+    }
+    return result;
   }
 
   void event(const ipc::Options& options, std::string_view name, std::string extra = {})
   {
-    auto members = "\"profile\":" + ipc::json_string(ipc::profile_name(options._profile));
+    auto members = fields(options, false);
     if (!extra.empty())
     {
       members += ',' + extra;
@@ -242,11 +252,27 @@ namespace
       {
         _writer.emplace(value(_task->open_writer(_queue)));
       }
-      else
+      else if (options._profile == ipc::Profile::Angaria)
       {
         _source.emplace(value(_task->open_source_set(_sourceId)));
       }
     }
+
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+    spsc::Options spsc_options(const ipc::Options& options) const
+    {
+      spsc::Options result;
+      result._directory = options._directory;
+      result._session = _session.identity();
+      result._queue = _queue;
+      result._producer = _producerId;
+      result._schema = _schema;
+      result._payloadBytes = options._payloadBytes;
+      result._capacity = options._ringSlots;
+      result._maxLogBytes = log_limit;
+      return result;
+    }
+#endif
 
     Session _session;
     SchemaId _schema{};
@@ -261,7 +287,7 @@ namespace
 
   void setup(const ipc::Options& options)
   {
-    if (options._profile == ipc::Profile::Angaria)
+    if (options._profile != ipc::Profile::Nanomsg)
     {
       // All setup and history claims die before independent measured roles
       // attach. The retained H Publications have been verified and acknowledged.
@@ -272,7 +298,7 @@ namespace
       configuration._maxLogBytes = log_limit;
       configuration._limits = CapacityLimits::empty().tasks(3).queues(1).source_sets(1)
           .memberships_per_set(1).fields(1).message_schemas(1);
-      configuration._defaults._ringCapacity = ring_slots;
+      configuration._defaults._ringCapacity = options._ringSlots;
       TaskDescriptor creator;
       creator._name = "Setup";
       auto created = value(Session::create(configuration, creator));
@@ -315,7 +341,7 @@ namespace
       MessageHeader header;
       header._schema = schema;
       header._payloadBytes = payload.size();
-      const auto deadline = ipc::deadline_ns(ipc::monotonic_ns(), options._budgetMs);
+      const auto deadline = ipc::deadline_ns(ipc::monotonic_ns(), std::max<std::uint64_t>(10'000, options._budgetMs));
       for (std::uint64_t sequence = 1; sequence <= options._history; ++sequence)
       {
         ipc::check_deadline(deadline);
@@ -335,6 +361,21 @@ namespace
         value(source.acknowledge(delivery->_token));
       }
       value(source.close());
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+      if (options._profile == ipc::Profile::RecordedSpsc)
+      {
+        spsc::Options connection;
+        connection._directory = options._directory;
+        connection._session = created._session.identity();
+        connection._queue = queueId;
+        connection._producer = producerId;
+        connection._schema = schema;
+        connection._payloadBytes = options._payloadBytes;
+        connection._capacity = options._ringSlots;
+        connection._maxLogBytes = log_limit;
+        spsc::RecordedSpsc::create(connection);
+      }
+#endif
     }
     else
     {
@@ -368,6 +409,7 @@ namespace
     std::uint64_t _sendAttempts{};
     std::uint64_t _successfulSendStart{};
     std::uint64_t _backpressure{};
+    std::uint64_t _creditWaits{};
     std::uint64_t _receiveStart{};
     std::uint64_t _receive{};
     std::uint64_t _receiveApi{};
@@ -389,9 +431,17 @@ namespace
     explicit Worker(ipc::Options options)
         : _options(std::move(options)), _payload(_options._payloadBytes), _samples(_options._messages)
     {
-      if (_options._profile == ipc::Profile::Angaria)
+      if (_options._profile != ipc::Profile::Nanomsg)
       {
         _angaria.emplace(_options);
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+        if (_options._profile == ipc::Profile::RecordedSpsc)
+        {
+          _spsc.emplace(_angaria->spsc_options(_options),
+              _options._role == ipc::Role::Producer ? spsc::Role::Producer : spsc::Role::Consumer,
+              _angaria->_claim);
+        }
+#endif
       }
       else
       {
@@ -555,8 +605,23 @@ namespace
       }
       else
       {
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+        if (_spsc)
+        {
+          while (!_spsc->has_credit())
+          {
+            ++sample._creditWaits;
+            ipc::check_deadline(deadline);
+            std::this_thread::yield();
+          }
+        }
+#endif
         sample._idStart = ipc::monotonic_ns();
-        auto issued = _angaria->_task->next_publication_id();
+        auto issued = ipc::observe_operation(_observations[0], _options._collection,
+            [&]
+            {
+              return _angaria->_task->next_publication_id();
+            });
         sample._idEnd = ipc::monotonic_ns();
         const auto publication = value(std::move(issued));
         sample._publicationSequence = publication._sequence;
@@ -567,14 +632,31 @@ namespace
         header._payloadBytes = _payload.size();
         const MessageView outgoing{header, _payload};
         std::array<DestinationOutcome, 1> outcomes;
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+        const auto reference = _spsc ? _spsc->next_record_reference() : 0;
+#endif
         sample._sendStart = ipc::monotonic_ns();
-        const auto sent = _angaria->_writer->send(publication, outgoing, outcomes);
+        const auto sent = ipc::observe_operation(_observations[1], _options._collection,
+            [&]
+            {
+              return _angaria->_writer->send(publication, outgoing, outcomes);
+            });
         sample._sendEnd = ipc::monotonic_ns();
         sample._sendApi = sample._sendEnd - sample._sendStart;
         sample._successfulSendStart = sample._sendStart;
         sample._sendAttempts = 1;
         check_report(sent, publication, _angaria->_queue);
         sample._accepted = true;
+        ++_accepted;
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+        if (_spsc)
+        {
+          _spsc->publish_committed(reference, publication);
+          sample._sendEnd = ipc::monotonic_ns();
+          sample._sendApi = sample._sendEnd - sample._sendStart;
+        }
+#endif
+        return;
       }
       ++_accepted;
     }
@@ -582,6 +664,7 @@ namespace
     void consume(Sample& sample, std::uint64_t deadline)
     {
       std::optional<Delivery> delivery;
+      MessageView message;
       std::span<const std::byte> payload;
       if (_socket)
       {
@@ -596,8 +679,35 @@ namespace
           ipc::check_deadline(deadline);
           const auto timeout = std::chrono::milliseconds{std::min(5, ipc::remaining_ms(deadline))};
           const auto start = ipc::monotonic_ns();
-          auto received = _angaria->_source->receive(timeout);
-          const auto end = ipc::monotonic_ns(); // Before inspecting the variant.
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+          if (_spsc)
+          {
+            const auto received = ipc::observe_operation(_observations[2], _options._collection,
+                [&]
+                {
+                  return _spsc->try_receive();
+                });
+            const auto end = ipc::monotonic_ns();
+            ++sample._receiveAttempts;
+            sample._receiveApi += end - start;
+            if (received)
+            {
+              message = *received;
+              sample._receive = end;
+              sample._successfulReceiveStart = start;
+              break;
+            }
+            ++sample._timeouts;
+            std::this_thread::yield();
+            continue;
+          }
+#endif
+          auto received = ipc::observe_operation(_observations[2], _options._collection,
+              [&]
+              {
+                return _angaria->_source->receive(timeout);
+              });
+          const auto end = ipc::monotonic_ns();
           ++sample._receiveAttempts;
           sample._receiveApi += end - start;
           if (const auto* error = std::get_if<Error>(&received))
@@ -609,12 +719,13 @@ namespace
             sample._receive = end;
             sample._successfulReceiveStart = start;
             delivery.emplace(*found);
+            message = delivery->_message;
             break;
           }
           require(std::holds_alternative<ReceiveTimeout>(received), "Unexpected delivery gap");
           ++sample._timeouts;
         }
-        const auto& header = delivery->_message._header;
+        const auto& header = message._header;
         require(header._schema == _angaria->_schema && header._format == PayloadFormat::Binary &&
                     header._payloadBytes == _payload.size() && header._flags == 0 &&
                     header._queue == _angaria->_queue && header._queueSequence == sample._sequence &&
@@ -624,7 +735,7 @@ namespace
                 "Angaria received header/identity differs from the configured connection");
         sample._publicationSequence = header._publication._sequence;
         sample._publicationIncarnation = header._publication._producer._incarnation;
-        payload = delivery->_message._payload;
+        payload = message._payload;
       }
       const auto envelope = ipc::validate_payload(payload, sample._sequence);
       sample._scheduled = envelope._scheduledNs;
@@ -636,7 +747,11 @@ namespace
       {
         ipc::check_deadline(deadline);
         sample._ackStart = ipc::monotonic_ns();
-        auto acknowledged = _angaria->_source->acknowledge(delivery->_token);
+        auto acknowledged = ipc::observe_operation(_observations[3], _options._collection,
+            [&]
+            {
+              return _angaria->_source->acknowledge(delivery->_token);
+            });
         sample._ackEnd = ipc::monotonic_ns();
         value(std::move(acknowledged));
         ++_acknowledged;
@@ -654,7 +769,8 @@ namespace
         _cpuStartTime = ipc::monotonic_ns();
         _cpuStart = ipc::process_cpu_ns();
         _dataStart = ipc::wait_until(t0, deadline);
-        for (std::uint64_t index = 0; index < _options._messages; ++index)
+        const auto count = _options._scenario == "empty" && _options._role == ipc::Role::Producer ? 0 : _options._messages;
+        for (std::uint64_t index = 0; index < count; ++index)
         {
           auto& sample = _samples[_used++];
           sample._sequence = _options._history + index + 1;
@@ -722,6 +838,12 @@ namespace
             require(::nn_errno() == EAGAIN, "nanomsg final empty check failed");
           }
         }
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+        else if (_spsc)
+        {
+          _unexpectedMessages = _spsc->try_receive() ? 1 : 0;
+        }
+#endif
         else
         {
           const auto extra = _angaria->_source->receive(std::chrono::nanoseconds{0});
@@ -773,7 +895,9 @@ namespace
              << ",\"socket_send_buffer_bytes\":" << (_socket ? _socket->_sendBuffer : 0)
              << ",\"socket_receive_buffer_bytes\":" << (_socket ? _socket->_receiveBuffer : 0)
              << ",\"log_limit_bytes\":" << (_angaria ? log_limit : 0)
-             << ",\"ring_slots\":" << (_angaria ? ring_slots : 0) << ",\"rows\":[";
+             << ",\"ring_slots\":" << (_angaria ? _options._ringSlots : 0) << ",\"diagnostics\":";
+      ipc::write_diagnostics(output, _observations);
+      output << ",\"rows\":[";
       for (std::size_t index = 0; index < _used; ++index)
       {
         const auto& sample = _samples[index];
@@ -794,6 +918,7 @@ namespace
                  << ",\"send_api_ns\":" << sample._sendApi << ",\"send_attempts\":" << sample._sendAttempts
                  << ",\"successful_send_start_ns\":" << sample._successfulSendStart
                  << ",\"successful_send_end_ns\":" << sample._sendEnd
+                 << ",\"credit_waits\":" << sample._creditWaits
                  << ",\"backpressure_count\":" << sample._backpressure
                  << ",\"accepted\":" << (sample._accepted ? "true" : "false");
         }
@@ -818,6 +943,10 @@ namespace
     std::vector<Sample> _samples;
     std::optional<AngariaEndpoint> _angaria;
     std::optional<Socket> _socket;
+#if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
+    std::optional<spsc::RecordedSpsc> _spsc;
+#endif
+    std::array<ipc::OperationTotals, 4> _observations;
     std::size_t _used{};
     std::uint64_t _completed{};
     std::uint64_t _accepted{};

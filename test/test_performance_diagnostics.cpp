@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <thread>
 
+#include <sys/file.h>
 #include <time.h>
 
 namespace
@@ -212,6 +213,74 @@ namespace
     // observing its surrounding phase must not replace that error context.
     EXPECT_EQ(errno, E2BIG);
     EXPECT_TRUE(sample._valid);
+  }
+
+  TEST(PerformanceDiagnosticsTest, GateWaitSubphasesPartitionAcquisitionWithoutAddingHoldTwice)
+  {
+    // These private scopes model the collector nesting at the native gate:
+    // local and native acquisition are distinct sibling phases, while a held
+    // native gate overlaps normal work and is reported only as a counter.
+    diagnostics::Sample sample;
+    {
+      diagnostics::Capture capture(sample, diagnostics::Collection::Timings);
+      ANGARIA_DIAGNOSTIC_SCOPE(GateAcquire);
+      {
+        ANGARIA_DIAGNOSTIC_SCOPE(LocalGateWait);
+      }
+      {
+        ANGARIA_DIAGNOSTIC_SCOPE(NativeGateWait);
+        ANGARIA_DIAGNOSTIC_COUNT(NativeGateBlockingAttempts, 1);
+      }
+      {
+        ANGARIA_DIAGNOSTIC_SCOPE(NativeGateWait);
+        ANGARIA_DIAGNOSTIC_COUNT(NativeGateNonblockingAttempts, 1);
+      }
+      diagnostics::GateHold hold;
+      hold.start();
+      {
+        ANGARIA_DIAGNOSTIC_SCOPE(NativeStat);
+      }
+      hold.finish();
+    }
+    EXPECT_TRUE(sample._valid);
+    const auto acquisition = static_cast<std::size_t>(diagnostics::Phase::GateAcquire);
+    const auto local = static_cast<std::size_t>(diagnostics::Phase::LocalGateWait);
+    const auto native = static_cast<std::size_t>(diagnostics::Phase::NativeGateWait);
+    EXPECT_EQ(diagnostics::phase_names[local], "local_gate_wait");
+    EXPECT_EQ(diagnostics::phase_names[native], "native_gate_wait");
+    const auto blocking = static_cast<std::size_t>(diagnostics::Counter::NativeGateBlockingAttempts);
+    const auto nonblocking = static_cast<std::size_t>(diagnostics::Counter::NativeGateNonblockingAttempts);
+    EXPECT_EQ(sample._counters[blocking], diagnostics::instrumentation_enabled ? 1u : 0u);
+    EXPECT_EQ(sample._counters[nonblocking], diagnostics::instrumentation_enabled ? 1u : 0u);
+    EXPECT_EQ(sample._phases[local]._calls, diagnostics::instrumentation_enabled ? 1u : 0u);
+    EXPECT_EQ(sample._phases[native]._calls, diagnostics::instrumentation_enabled ? 2u : 0u);
+    EXPECT_LE(sample._phases[local]._inclusiveNs + sample._phases[native]._inclusiveNs,
+              sample._phases[acquisition]._inclusiveNs);
+    std::uint64_t exclusive{};
+    for (const auto& phase : sample._phases)
+    {
+      exclusive += phase._exclusiveNs;
+    }
+    EXPECT_EQ(exclusive, diagnostics::instrumentation_enabled ? sample._wallNs : 0u);
+  }
+
+  TEST(PerformanceDiagnosticsTest, NativeGateWaitObservationPreservesFailedLockErrno)
+  {
+    // A failed native flock is deliberately local to this test; no timing or
+    // scheduling claim is made. Observation must leave its EBADF intact.
+    diagnostics::Sample sample;
+    int result;
+    {
+      diagnostics::Capture capture(sample, diagnostics::Collection::Timings);
+      ANGARIA_DIAGNOSTIC_SCOPE(NativeGateWait);
+      result = ::flock(-1, LOCK_EX | LOCK_NB);
+    }
+    const auto observedError = errno;
+    EXPECT_EQ(result, -1);
+    EXPECT_EQ(observedError, EBADF);
+    EXPECT_TRUE(sample._valid);
+    EXPECT_EQ(sample._phases[static_cast<std::size_t>(diagnostics::Phase::NativeGateWait)]._calls,
+              diagnostics::instrumentation_enabled ? 1u : 0u);
   }
 
   TEST(PerformanceDiagnosticsTest, NativeGateTokensIgnoreExpiredAndReusedCaptureStorage)

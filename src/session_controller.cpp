@@ -666,7 +666,12 @@ namespace angaria::detail::mapped
     }
     if (nonblocking)
     {
-      if (!guard->_localLock.try_lock())
+      bool locked;
+      {
+        ANGARIA_DIAGNOSTIC_SCOPE(LocalGateWait);
+        locked = guard->_localLock.try_lock();
+      }
+      if (!locked)
       {
         ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
         return storage_error(ErrorCode::OwnershipBusy, _state->_directory, "Mutation gate is busy in this process");
@@ -682,6 +687,7 @@ namespace angaria::detail::mapped
     }
     else
     {
+      ANGARIA_DIAGNOSTIC_SCOPE(LocalGateWait);
       guard->_localLock.lock();
     }
     request.finish_waiting();
@@ -697,14 +703,28 @@ namespace angaria::detail::mapped
     // after native acquisition, before returning a usable guard. If an external
     // actor replaces a name while the old lock is held, detection can wait for
     // that lock; a nonblocking attempt reports Busy until it can check the names.
-    if (lock_file(_state->_mutationFd->_fd, LOCK_EX | (nonblocking ? LOCK_NB : 0)) == -1)
+    int nativeResult;
+    int nativeError{};
+    ANGARIA_DIAGNOSTIC_COUNT(NativeGateBlockingAttempts, nonblocking ? 0 : 1);
+    ANGARIA_DIAGNOSTIC_COUNT(NativeGateNonblockingAttempts, nonblocking ? 1 : 0);
     {
-      if (lock_busy(errno))
+      // Keep this scope around the actual native acquisition only. In
+      // particular, post-lock identity checks belong to gate-held work.
+      ANGARIA_DIAGNOSTIC_SCOPE(NativeGateWait);
+      nativeResult = lock_file(_state->_mutationFd->_fd, LOCK_EX | (nonblocking ? LOCK_NB : 0));
+      if (nativeResult == -1)
+      {
+        nativeError = errno;
+      }
+    }
+    if (nativeResult == -1)
+    {
+      if (lock_busy(nativeError))
       {
         ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
         return storage_error(ErrorCode::OwnershipBusy, _state->_directory / "mutation.lock", "Mutation gate is busy");
       }
-      return native_io_error(_state->_directory / "mutation.lock", "lock session mutation gate", errno);
+      return native_io_error(_state->_directory / "mutation.lock", "lock session mutation gate", nativeError);
     }
     guard->_nativeLocked = true;
 #if defined(ANGARIA_ENABLE_DIAGNOSTICS) && ANGARIA_ENABLE_DIAGNOSTICS

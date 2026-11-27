@@ -24,6 +24,8 @@ Step **4.12**, framework **0.4.14**, adds [detailed performance diagnostics](doc
 
 Step **4.27**, framework **0.4.29**, records the [recorded unacknowledged delivery plan](docs/recorded-unacknowledged-delivery-plan.md). The next performance priority is a [side-by-side nanomsg IPC comparison](docs/nanomsg-comparison-plan.md), using end-to-end latency and delivered throughput to guide implementation. Both acknowledged and proposed unacknowledged Angaria delivery require accepted messages to remain replayable. Comparison results will state each framework's recording and acknowledgment guarantees. Step **4.28**, framework **0.4.30**, implements the [optional 1:1 comparison runner](docs/nanomsg-comparison.md) with verified payloads, retained raw attempts and on-demand hosted qualification. The recorded unacknowledged profile remains planned work.
 
+Step **4.29**, framework **0.4.31**, adds [focused stall diagnostics and an experimental recorded SPSC connection](docs/stall-study.md). It retains existing log acceptance and replay while exploring consumer delivery without the Session gate. The experiment is benchmark-only; public runtime admission remains planned.
+
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
 ```sh

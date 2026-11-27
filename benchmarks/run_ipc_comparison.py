@@ -71,6 +71,9 @@ def command(executable, profile, role, directory, case):
     result = [str(executable), "--profile", profile, "--role", role, "--directory", str(directory)]
     for name in DIMENSIONS:
         result += ["--" + name.replace("_", "-"), str(case[name])]
+    for name in ("scenario", "collection", "ring_slots"):
+        if name in case:
+            result += ["--" + name.replace("_", "-"), str(case[name])]
     return result
 
 
@@ -211,6 +214,9 @@ def common_identity(report, role, profile, case, version):
           "Unsupported IPC report version")
     check(report.get("profile") == profile and report.get("role") == role, "Wrong IPC report identity")
     check(report.get("framework_version") == version, "Executable version differs from this checkout")
+    for key in ("scenario", "collection"):
+        if key in case:
+            check(report.get(key) == case[key], "Wrong report " + key)
     check(type(report.get("nanomsg_version")) is str and bool(report["nanomsg_version"]), "Missing nanomsg version")
     check(type(report.get("nanomsg_commit")) is str and re.fullmatch(r"[0-9a-f]{40}", report["nanomsg_commit"]),
           "Missing exact nanomsg source commit")
@@ -295,7 +301,7 @@ def validate_rows(producer, consumer, profile, case, t0):
             sample("send_backpressure_wall_ns", end - start)
             sample("scheduled_acceptance_ns", end - scheduled)
             sample("logical_producer_path_ns", end - logical)
-            if profile == "angaria":
+            if profile in ("angaria", "recorded-spsc"):
                 id_start, id_end = (integer(row.get(key), key) for key in ("id_start_ns", "id_end_ns"))
                 check(logical <= id_start <= id_end <= start, "ID issuance escapes the producer path")
                 sample("issue_api_ns", id_end - id_start)
@@ -341,7 +347,7 @@ def validate_rows(producer, consumer, profile, case, t0):
             sample("acknowledge_api_ns", ack_end - ack_start)
         else:
             check(ack_start == ack_end == 0, "Unacknowledged profile reports an acknowledgment")
-        if profile == "angaria":
+        if profile in ("angaria", "recorded-spsc"):
             for key in ("publication_sequence", "publication_incarnation"):
                 check(integer(row.get(key), key, 1) == integer(original.get(key), key, 1), "Angaria library identity differs between roles")
         received[sequence] = row
@@ -365,7 +371,7 @@ def validate_rows(producer, consumer, profile, case, t0):
               "Worker phase clock boundaries changed")
         check(integer(report.get("cpu_end_ns"), "process CPU end") >= integer(report.get("cpu_start_ns"), "process CPU start"),
               "Process CPU time decreased")
-    complete_counts = len(accepted) == len(received) == count and (profile == "nanomsg" or acknowledgments == count)
+    complete_counts = len(accepted) == len(received) == count and (profile != "angaria" or acknowledgments == count)
     complete = complete_counts and all(report["status"] == "complete" for report in (producer, consumer))
     if all(report["status"] == "complete" for report in (producer, consumer)):
         check(complete_counts, "Successful workers did not complete the requested cohort")
@@ -486,9 +492,15 @@ def attempt(executable, profile, case, directory, options, version):
             t0 = clock_ns() + options.start_lead_ms * 1_000_000
             start_cpu = time.process_time_ns()
             sent_start = {}
-            for role in ROLES:
-                sent_start[role] = workers.send(role, f"START {t0}")
-            done = workers.events({role: "DONE" for role in ROLES}, profile)
+            if case.get("scenario", "concurrent") == "backlog":
+                sent_start["producer"] = workers.send("producer", f"START {t0}")
+                done = workers.events({"producer": "DONE"}, profile)
+                sent_start["consumer"] = workers.send("consumer", f"START {t0}")
+                done.update(workers.events({"consumer": "DONE"}, profile))
+            else:
+                for role in ROLES:
+                    sent_start[role] = workers.send(role, f"START {t0}")
+                done = workers.events({role: "DONE" for role in ROLES}, profile)
             done_received = max(value[1] for value in done.values())
             finish_sent = {}
             for role in ROLES:
@@ -630,6 +642,30 @@ def parse_arguments():
     return options, executable, cases
 
 
+def comparison_metadata(executable, options):
+    manifest, sources, settings = metadata(executable, options)
+    cache = Path(manifest["cmake_cache"])
+    if cache.is_file():
+        for line in cache.read_text(errors="replace").splitlines():
+            match = re.match(r"(CMAKE_(?:C_COMPILER|C_FLAGS(?:_[A-Z]+)?)|ANGARIA_[A-Z0-9_]+):[^=]+=(.*)", line)
+            if match:
+                settings[match[1]] = match[2]
+    if settings.get("CMAKE_C_COMPILER"):
+        try:
+            compiler = subprocess.check_output([settings["CMAKE_C_COMPILER"], "--version"],
+                                               stderr=subprocess.DEVNULL, text=True, timeout=10)
+            settings["CMAKE_C_COMPILER_VERSION"] = compiler.splitlines()[0]
+        except (OSError, subprocess.SubprocessError, IndexError):
+            settings["CMAKE_C_COMPILER_VERSION"] = "unavailable"
+    for path in sorted((ROOT / "benchmarks").glob("ipc_comparison*")):
+        if path.is_file() and path.suffix in (".cpp", ".h") and " 2." not in path.name:
+            sources[str(path.relative_to(ROOT))] = sha256(path)
+    sources["benchmarks/run_ipc_comparison.py"] = sha256(Path(__file__))
+    if (ROOT / "test/ipc_comparison.py").is_file():
+        sources["test/ipc_comparison.py"] = sha256(ROOT / "test/ipc_comparison.py")
+    return manifest, sources, settings
+
+
 def main():
     options, executable, cases = parse_arguments()
     output = options.output.absolute()
@@ -637,26 +673,7 @@ def main():
     reports, manifest, sources, settings = [], {}, {}, {}
     failed = False
     try:
-        manifest, sources, settings = metadata(executable, options)
-        cache = Path(manifest["cmake_cache"])
-        if cache.is_file():
-            for line in cache.read_text(errors="replace").splitlines():
-                match = re.match(r"(CMAKE_(?:C_COMPILER|C_FLAGS(?:_[A-Z]+)?)|ANGARIA_[A-Z0-9_]+):[^=]+=(.*)", line)
-                if match:
-                    settings[match[1]] = match[2]
-        if settings.get("CMAKE_C_COMPILER"):
-            try:
-                compiler = subprocess.check_output([settings["CMAKE_C_COMPILER"], "--version"],
-                                                   stderr=subprocess.DEVNULL, text=True, timeout=10)
-                settings["CMAKE_C_COMPILER_VERSION"] = compiler.splitlines()[0]
-            except (OSError, subprocess.SubprocessError, IndexError):
-                settings["CMAKE_C_COMPILER_VERSION"] = "unavailable"
-        for path in sorted((ROOT / "benchmarks").glob("ipc_comparison*")):
-            if path.is_file() and path.suffix in (".cpp", ".h") and " 2." not in path.name:
-                sources[str(path.relative_to(ROOT))] = sha256(path)
-        sources["benchmarks/run_ipc_comparison.py"] = sha256(Path(__file__))
-        if (ROOT / "test/ipc_comparison.py").is_file():
-            sources["test/ipc_comparison.py"] = sha256(ROOT / "test/ipc_comparison.py")
+        manifest, sources, settings = comparison_metadata(executable, options)
         manifest.update(status="failed", suite="ipc-comparison-1-to-1", format_version=FORMAT_VERSION,
                         planned_runs=len(cases) * options.blocks * 4, blocks=options.blocks, repetitions=options.blocks * 2,
                         participant_processes=2, producers=1, consumers=1, start_lead_ms=options.start_lead_ms,
