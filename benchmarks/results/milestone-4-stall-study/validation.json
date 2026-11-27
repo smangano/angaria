@@ -1,0 +1,64 @@
+{
+  "measured_commit": "c0fab0d4479ff60db9580e9a1cea9663f83e7ddf",
+  "framework_version": "0.4.31",
+  "hosted_run": 46077661240,
+  "artifact_id": 15235883068,
+  "github_reported_digest": "sha256:06405b4251d16086bdab651d1931e398f951c55f5034043fa7a73a0b84d5c32c",
+  "source_hashes_per_leaf": 136,
+  "hosts": {
+    "macos-arm64": {
+      "attempts": 150,
+      "complete_delivery_attempts": 144,
+      "expected_empty_budget_stops": 6,
+      "verified_deliveries": 2304
+    },
+    "linux-x86_64": {
+      "attempts": 150,
+      "complete_delivery_attempts": 144,
+      "expected_empty_budget_stops": 6,
+      "verified_deliveries": 2304
+    }
+  },
+  "checks": [
+    {
+      "job_id": 140768976356,
+      "verification": [
+        "2026-11-27T22:39:32.4950849Z 100% tests passed, 0 tests failed out of 832"
+      ]
+    },
+    {
+      "job_id": 140768976001,
+      "verification": [
+        "2026-11-27T22:39:44.1055810Z 100% tests passed out of 832"
+      ]
+    },
+    {
+      "job_id": 140768976283,
+      "verification": [
+        "2026-11-27T22:40:33.0067796Z 100% tests passed, 0 tests failed out of 832"
+      ]
+    },
+    {
+      "job_id": 140769068884,
+      "verification": [
+        "2026-11-27T22:39:21.3531992Z [  PASSED  ] 12 tests.",
+        "2026-11-27T22:39:25.6331060Z Stall study: 22 real comparison/control attempts, scope/cache checks, and diagnostic boundaries passed",
+        "2026-11-27T22:40:10.8889133Z diagnostics-empty 6/6 angaria H=128 B=64: budget_exceeded"
+      ]
+    },
+    {
+      "job_id": 140769069127,
+      "verification": [
+        "2026-11-27T22:38:51.6715370Z [  PASSED  ] 12 tests.",
+        "2026-11-27T22:38:59.0644060Z Stall study: 22 real comparison/control attempts, scope/cache checks, and diagnostic boundaries passed"
+      ]
+    },
+    {
+      "job_id": 140769069174,
+      "verification": [
+        "2026-11-27T22:40:07.0998425Z [  PASSED  ] 12 tests.",
+        "2026-11-27T22:40:11.4897053Z Stall study: 22 real comparison/control attempts, scope/cache checks, and diagnostic boundaries passed"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "active_leaf": "diagnostics-empty",
+  "finished_utc": "2026-11-27T22:40:10.901069+00:00",
+  "framework_version": "0.4.31",
+  "leaves": [
+    {
+      "attempts": 120,
+      "budget_stops": 0,
+      "completed": 120,
+      "executable_sha256": "aa67beb5de383144ab5a30864ce4bf39a3b91244ff1754944c2013c83aaa081d",
+      "name": "ordinary-concurrent",
+      "status": "complete"
+    },
+    {
+      "attempts": 12,
+      "budget_stops": 0,
+      "completed": 12,
+      "executable_sha256": "aa67beb5de383144ab5a30864ce4bf39a3b91244ff1754944c2013c83aaa081d",
+      "name": "ordinary-backlog",
+      "status": "complete"
+    },
+    {
+      "attempts": 6,
+      "budget_stops": 0,
+      "completed": 6,
+      "executable_sha256": "00f53963776b3c6071e5269edb0c1a2d906b038a1a0411bd138af8ac7f7be2b6",
+      "name": "diagnostics-concurrent",
+      "status": "complete"
+    },
+    {
+      "attempts": 6,
+      "budget_stops": 0,
+      "completed": 6,
+      "executable_sha256": "00f53963776b3c6071e5269edb0c1a2d906b038a1a0411bd138af8ac7f7be2b6",
+      "name": "diagnostics-backlog",
+      "status": "complete"
+    },
+    {
+      "attempts": 6,
+      "budget_stops": 6,
+      "completed": 0,
+      "executable_sha256": "00f53963776b3c6071e5269edb0c1a2d906b038a1a0411bd138af8ac7f7be2b6",
+      "name": "diagnostics-empty",
+      "status": "complete"
+    }
+  ],
+  "started_utc": "2026-11-27T22:39:25.693124+00:00",
+  "status": "complete",
+  "total_attempts": 150
+}

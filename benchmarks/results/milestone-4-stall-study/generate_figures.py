@@ -71,7 +71,7 @@ def plot(directory):
                 ax.errorbar([0, 128], center, yerr=[low, high], marker='o', capsize=3, linewidth=1.6,
                             color=COLORS[profile], label=LABELS[profile])
             ax.set_yscale('log'); ax.set_xticks([0, 128]); ax.grid(axis='y', alpha=.2)
-            ax.set_xlabel('Prior logged messages H')
+            ax.set_xlabel('Prior messages H')
             if column == 0: ax.set_ylabel(label)
             if index == 0: ax.set_title(f'{size}-byte payload')
     handles, labels = axes[0, 0].get_legend_handles_labels()
@@ -121,6 +121,23 @@ def main():
         writer = csv.DictWriter(stream, fieldnames=list(table[0]), lineterminator='\n')
         writer.writeheader(); writer.writerows(table)
     (HERE / 'diagnostic-findings.json').write_text(json.dumps(findings, indent=2) + '\n')
+    fig, ax = plt.subplots(figsize=(10, 4.5), constrained_layout=True)
+    labels, concurrent, backlog = [], [], []
+    for host, observations in findings.items():
+        for history in (0, 128):
+            labels.append(host + '\nH=' + str(history))
+            for name, values in (('concurrent', concurrent), ('backlog', backlog)):
+                row = next(r for r in observations if r['history'] == history and r['scenario'] == name)
+                values.append(row['native_fraction_of_producer_api'] * 100)
+    positions = list(range(len(labels)))
+    left = ax.bar([x - .2 for x in positions], concurrent, .4, label='Concurrent receive', color=COLORS['angaria'])
+    right = ax.bar([x + .2 for x in positions], backlog, .4, label='Producer finishes before consumer starts', color=COLORS['recorded-spsc'])
+    ax.bar_label(left, fmt='%.1f%%', padding=3); ax.bar_label(right, fmt='%.2f%%', padding=3)
+    ax.set_xticks(positions, labels); ax.set_ylim(0, 105)
+    ax.set_ylabel('Native acquisition call / producer API wall time (%)')
+    ax.set_title('Instrumented current Angaria only: native gate contention\n64-byte, 16-message controls; totals across three runs per case')
+    ax.legend(loc='upper left'); ax.grid(axis='y', alpha=.2)
+    save(fig, 'native-gate-attribution')
 
 if __name__ == '__main__':
     main()

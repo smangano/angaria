@@ -2,6 +2,8 @@
 
 Step **4.29**, framework **0.4.31**, studies the independent-process stalls exposed by the [first IPC comparison](nanomsg-comparison.md). It adds precise gate-acquisition observations and a private current-log experiment using a **single-producer/single-consumer (SPSC)** connection: one writer and one reader own each ring. This is an opt-in benchmark, not an admitted public delivery mode.
 
+[Measured findings and latency/throughput plots](../benchmarks/results/milestone-4-stall-study/README.md) retain independent Mac and Linux studies.
+
 ## What is implemented
 
 The existing acknowledged path keeps its admission, journal, receipt, recovery, and waiting behavior. Diagnostic builds can now distinguish time in the process-local mutex acquisition, time in native `flock` acquisition, and time holding the native mutation gate. Native attempt counters distinguish blocking acquisition from nonblocking probes. Nonblocking acquisition time is syscall/probe cost, not proof of blocking. Gate-held intervals overlap ordinary phases and must not be added to their exclusive times.
@@ -22,7 +24,7 @@ The public send still creates its normal Pending receipt. The experimental consu
 
 ## Fixed experimental scope
 
-One two-plane Session contains one Queue, one Source and one producer. Registry/topology remain frozen after connection creation. Native role leases enforce one experimental producer and consumer; native Task claims still govern application ownership. The ring stores checked logical references and sequences, with connection/ticket generations. Existing native ABI qualification supplies aligned, always-lock-free eight-byte acquire/release operations on supported Linux/macOS profiles.
+One two-plane Session contains one Queue, one Source and one producer. Registry/topology remain frozen after connection creation. Native role leases enforce one experimental producer and consumer. The owning native Task handles must outlive their experimental endpoints; dynamic Task/connection teardown while an endpoint remains active is outside this fixed-lifetime pilot. The ring stores checked logical references and sequences, with connection/ticket generations. Existing native ABI qualification supplies aligned, always-lock-free eight-byte acquire/release operations on supported Linux/macOS profiles.
 
 Attachment validates the connection and captures checked schema metadata. Each endpoint reserves a read-only virtual mapping through the configured log ceiling without extending the actual file. It reads only acquired, bounded committed ranges; the existing append protocol grows backing storage before commit and never truncates committed records. Future pages are never touched before publication. This mapping technique is private to the fixed POSIX experiment and is covered by actual file-growth and interrupted-append tests. It is not a portable mapped-file API promise.
 
