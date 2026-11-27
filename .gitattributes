@@ -14,3 +14,8 @@ benchmarks/results/milestone-4-definition-reuse/**/*.csv -text whitespace=blank-
 benchmarks/results/milestone-4-payload-preparation/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 benchmarks/results/milestone-4-prefix-buffers/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 benchmarks/results/milestone-4-gate-resources/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/results/milestone-4-cachegrind/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/results/milestone-4-cachegrind/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
+
+# Raw Cachegrind event tables are retained verbatim; omit their generated row diffs.
+benchmarks/results/milestone-4-cachegrind/**/*.out -text -diff

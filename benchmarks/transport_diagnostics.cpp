@@ -3,6 +3,10 @@
 #include "angaria/detail/checked_arithmetic.h"
 #include "performance_diagnostics.h"
 
+#if defined(ANGARIA_ENABLE_CACHEGRIND) && ANGARIA_ENABLE_CACHEGRIND
+#include <valgrind/cachegrind.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -168,6 +172,40 @@ namespace
   using Clock = std::chrono::steady_clock;
   using namespace std::chrono_literals;
 
+#if defined(ANGARIA_ENABLE_CACHEGRIND) && ANGARIA_ENABLE_CACHEGRIND
+  inline constexpr bool cachegrind_enabled = true;
+
+  // Requests affect only the optional profiler, not transport state. Stop on
+  // unwinding too, before Session teardown and error reporting.
+  class CachegrindRegion
+  {
+  public:
+    explicit CachegrindRegion(bool active) noexcept : _active(active)
+    {
+      if (_active)
+      {
+        CACHEGRIND_START_INSTRUMENTATION;
+      }
+    }
+
+    ~CachegrindRegion()
+    {
+      if (_active)
+      {
+        CACHEGRIND_STOP_INSTRUMENTATION;
+      }
+    }
+
+    CachegrindRegion(const CachegrindRegion&) = delete;
+    CachegrindRegion& operator=(const CachegrindRegion&) = delete;
+
+  private:
+    bool _active{};
+  };
+#else
+  inline constexpr bool cachegrind_enabled = false;
+#endif
+
   struct Options
   {
     std::filesystem::path _directory;
@@ -183,6 +221,7 @@ namespace
     std::size_t _idlePollers{};
     std::string_view _role{};
     std::uint64_t _workBudgetMs{5000};
+    std::string_view _cachegrindRegion{"none"};
   };
 
   [[noreturn]] void invalid(std::string message)
@@ -196,7 +235,8 @@ namespace
     {
       invalid("Usage: angaria_transport_diagnostics DIRECTORY [--messages N --history H --payload-bytes B "
               "--fields F --capacity-scale C --workload serial|backlog|stream|process --collection none|counts|timings "
-              "--history-scope same|other --idle-pollers K --role setup|producer|consumer --work-budget-ms MS]");
+              "--history-scope same|other --idle-pollers K --role setup|producer|consumer --work-budget-ms MS "
+              "--cachegrind-region none|cycle]");
     }
     Options result;
     result._directory = argv[1];
@@ -214,6 +254,7 @@ namespace
       else if (flag == "--collection") result._collectionName = valueText;
       else if (flag == "--history-scope") result._historyScope = valueText;
       else if (flag == "--role") result._role = valueText;
+      else if (flag == "--cachegrind-region") result._cachegrindRegion = valueText;
       else
       {
         const auto count = parse_count(valueText, flag);
@@ -251,6 +292,16 @@ namespace
     if (!diagnostics::instrumentation_enabled && result._collection != diagnostics::Collection::None)
     {
       invalid("Counts/timings require an ANGARIA_ENABLE_DIAGNOSTICS build; use --collection none for baseline");
+    }
+    if (result._cachegrindRegion != "none" && result._cachegrindRegion != "cycle")
+    {
+      invalid("Cachegrind region must be none or cycle");
+    }
+    if (result._cachegrindRegion == "cycle" &&
+        (!cachegrind_enabled || result._workload != "serial" ||
+         result._collection != diagnostics::Collection::None || result._idlePollers != 0 || !result._role.empty()))
+    {
+      invalid("Cachegrind cycle requires ANGARIA_ENABLE_CACHEGRIND=ON, serial, collection none, no idle pollers or role");
     }
     return result;
   }
@@ -605,6 +656,8 @@ namespace
   {
     output << "\"framework_version\":\"" << version << "\",\"instrumentation_enabled\":"
            << (diagnostics::instrumentation_enabled ? "true" : "false")
+           << ",\"cachegrind_enabled\":" << (cachegrind_enabled ? "true" : "false")
+           << ",\"cachegrind_region\":\"" << options._cachegrindRegion << '\"'
            << ",\"collection\":\"" << options._collectionName << "\",\"workload\":\"" << options._workload
            << "\",\"messages\":" << options._messages << ",\"history\":" << options._history
            << ",\"payload_bytes\":" << options._payloadBytes << ",\"fields\":" << options._fields
@@ -996,10 +1049,17 @@ namespace
     else
     {
       const auto start = Clock::now();
-      for (std::uint64_t index = 1; index <= options._messages; ++index)
       {
-        workload.send(channels[0], &producer, offset + index);
-        require(workload.receive(channels[0], &consumer, offset + index), "Serial receive timed out");
+        // Setup, retained-history preload and sample allocation have ended.
+        // The region ends before status/retry controls, output and Session teardown.
+#if defined(ANGARIA_ENABLE_CACHEGRIND) && ANGARIA_ENABLE_CACHEGRIND
+        const CachegrindRegion region{options._cachegrindRegion == "cycle"};
+#endif
+        for (std::uint64_t index = 1; index <= options._messages; ++index)
+        {
+          workload.send(channels[0], &producer, offset + index);
+          require(workload.receive(channels[0], &consumer, offset + index), "Serial receive timed out");
+        }
       }
       cyclePhase = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count());
       afterPublish = std::filesystem::file_size(file);

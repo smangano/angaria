@@ -1,0 +1,647 @@
+{
+  "audit": {
+    "cache_model": {
+      "D1": "32768,8,64",
+      "I1": "32768,8,64",
+      "LL": "8388608,16,64"
+    },
+    "completed_cycles_per_profile": 16,
+    "csv_byte_matches": 2,
+    "executable_sha256_recorded": "bcf6bdd2a8380ba5f2f01808ebbf7a2de6f95d9d98b92edb84e7679da4bf5046",
+    "function_count_method": "Sum raw cost-row Ir by fn field across file sections, self attribution including compiler inlining; no cg_annotate group totals or callgraph inclusive costs",
+    "profiles": 9,
+    "source_hashes_matching": 129,
+    "source_head": "0fc124c3e6ccb87b8bea108ead2a1d70c19cee39",
+    "summary_rows": 57,
+    "valgrind_version": "valgrind-3.22.0"
+  },
+  "histories": {
+    "0": {
+      "events_identical_across_repetitions": true,
+      "miss_rates": {
+        "branch_mispredict_percent": 5.428173198022687,
+        "conditional_branch_mispredict_percent": 5.1756913566391995,
+        "d1_data_miss_percent": 0.9331099386016076,
+        "i1_instruction_miss_percent": 0.5110981152318175,
+        "indirect_branch_mispredict_percent": 11.96063890473474,
+        "ll_data_miss_percent": 0.014775218904182322,
+        "ll_instruction_miss_percent": 0.007831283106791528,
+        "ll_overall_miss_percent": 0.009956149084912116
+      },
+      "per_completed_cycle": {
+        "Bc": 566942.375,
+        "Bcm": 29343.1875,
+        "Bi": 21912.5,
+        "Bim": 2620.875,
+        "D1mr": 8064.875,
+        "D1mw": 5647.375,
+        "DLmr": 61.25,
+        "DLmw": 155.875,
+        "Dr": 889845.1875,
+        "Dw": 579676.1875,
+        "I1mr": 17033.8125,
+        "ILmr": 261.0,
+        "Ir": 3332787.1875,
+        "branch_mispredictions": 31964.0625,
+        "branches": 588854.875,
+        "d1_data_misses": 13712.25,
+        "data_references": 1469521.375,
+        "ll_data_misses": 217.125,
+        "ll_total_misses": 478.125
+      },
+      "raw_cost_rows": 7823,
+      "region_totals": {
+        "Bc": 9071078,
+        "Bcm": 469491,
+        "Bi": 350600,
+        "Bim": 41934,
+        "D1mr": 129038,
+        "D1mw": 90358,
+        "DLmr": 980,
+        "DLmw": 2494,
+        "Dr": 14237523,
+        "Dw": 9274819,
+        "I1mr": 272541,
+        "ILmr": 4176,
+        "Ir": 53324595,
+        "branch_mispredictions": 511425,
+        "branches": 9421678,
+        "d1_data_misses": 219396,
+        "data_references": 23512342,
+        "ll_data_misses": 3474,
+        "ll_total_misses": 7650
+      },
+      "runs": 3,
+      "top_functions_by_raw_self_Ir": [
+        {
+          "function": "_int_free",
+          "percent_of_region_Ir": 7.132751781799749,
+          "self_Ir": 3803511,
+          "self_Ir_per_cycle": 237719.4375
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::read_words(unsigned long, unsigned long) const",
+          "percent_of_region_Ir": 7.036632908323073,
+          "self_Ir": 3752256,
+          "self_Ir_per_cycle": 234516.0
+        },
+        {
+          "function": "angaria::detail::mapped::AtomicWord::bind(std::span<std::byte, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 6.426377921857634,
+          "self_Ir": 3426840,
+          "self_Ir_per_cycle": 214177.5
+        },
+        {
+          "function": "malloc",
+          "percent_of_region_Ir": 5.5621932055930285,
+          "self_Ir": 2966017,
+          "self_Ir_per_cycle": 185376.0625
+        },
+        {
+          "function": "angaria::detail::mapped::decode_manifest_body(std::span<std::byte const, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 3.9806472041653573,
+          "self_Ir": 2122664,
+          "self_Ir_per_cycle": 132666.5
+        },
+        {
+          "function": "free",
+          "percent_of_region_Ir": 3.8375181283608435,
+          "self_Ir": 2046341,
+          "self_Ir_per_cycle": 127896.3125
+        },
+        {
+          "function": "_int_malloc",
+          "percent_of_region_Ir": 3.796484530262255,
+          "self_Ir": 2024460,
+          "self_Ir_per_cycle": 126528.75
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::scan_prefix(angaria::detail::mapped::NativeFile&, unsigned long, unsigned long, unsigned long)",
+          "percent_of_region_Ir": 3.4925534830597402,
+          "self_Ir": 1862390,
+          "self_Ir_per_cycle": 116399.375
+        },
+        {
+          "function": "???",
+          "percent_of_region_Ir": 2.5102412873459237,
+          "self_Ir": 1338576,
+          "self_Ir_per_cycle": 83661.0
+        },
+        {
+          "function": "angaria::detail::mapped::decode_commands(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.42138172826254,
+          "self_Ir": 1291192,
+          "self_Ir_per_cycle": 80699.5
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::record_envelope(unsigned long, unsigned short) const",
+          "percent_of_region_Ir": 2.414486223477178,
+          "self_Ir": 1287515,
+          "self_Ir_per_cycle": 80469.6875
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::PrefixReader::copy_bytes(unsigned long, std::span<std::byte, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.4051940760168926,
+          "self_Ir": 1282560,
+          "self_Ir_per_cycle": 80160.0
+        },
+        {
+          "function": "angaria::detail::mapped::decode_record_envelope(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.0228114250094165,
+          "self_Ir": 1078656,
+          "self_Ir_per_cycle": 67416.0
+        },
+        {
+          "function": "angaria::detail::runtime_tasks(angaria::detail::RuntimeAccess&)",
+          "percent_of_region_Ir": 1.6598719596463882,
+          "self_Ir": 885120,
+          "self_Ir_per_cycle": 55320.0
+        },
+        {
+          "function": "__memcpy_avx_unaligned_erms",
+          "percent_of_region_Ir": 1.57519246043969,
+          "self_Ir": 839965,
+          "self_Ir_per_cycle": 52497.8125
+        },
+        {
+          "function": "angaria::detail::mapped::decode_task_definition(std::span<std::byte const, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 1.5245497879543202,
+          "self_Ir": 812960,
+          "self_Ir_per_cycle": 50810.0
+        },
+        {
+          "function": "(anonymous namespace)::allocate(unsigned long, unsigned long) [clone .constprop.0]",
+          "percent_of_region_Ir": 1.485490888397746,
+          "self_Ir": 792132,
+          "self_Ir_per_cycle": 49508.25
+        },
+        {
+          "function": "std::filesystem::__cxx11::path::_M_split_cmpts()",
+          "percent_of_region_Ir": 1.2736486793758115,
+          "self_Ir": 679168,
+          "self_Ir_per_cycle": 42448.0
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::read_bytes(unsigned long, unsigned long) const",
+          "percent_of_region_Ir": 1.2370426817118818,
+          "self_Ir": 659648,
+          "self_Ir_per_cycle": 41228.0
+        },
+        {
+          "function": "std::_Rb_tree_insert_and_rebalance(bool, std::_Rb_tree_node_base*, std::_Rb_tree_node_base*, std::_Rb_tree_node_base&)",
+          "percent_of_region_Ir": 1.2306610111150398,
+          "self_Ir": 656245,
+          "self_Ir_per_cycle": 41015.3125
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::check_publication(angaria::detail::mapped::PublicationHeader const&, std::span<angaria::detail::mapped::DestinationDefinition const, 18446744073709551615ul>, angaria::detail::mapped::PublicationLayout const&, unsigned long, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.2011568020347834,
+          "self_Ir": 640512,
+          "self_Ir_per_cycle": 40032.0
+        },
+        {
+          "function": "angaria::detail::mapped::validate_journal_record(unsigned long, angaria::detail::mapped::RecordEnvelope const&, std::span<std::byte const, 18446744073709551615ul>, unsigned long, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.1155827812663182,
+          "self_Ir": 594880,
+          "self_Ir_per_cycle": 37180.0
+        },
+        {
+          "function": "angaria::detail::mapped::validate_redo_targets(std::span<angaria::detail::mapped::RedoCommand const, 18446744073709551615ul>, angaria::detail::mapped::FixedLayout const&, std::span<angaria::detail::mapped::JournalRecordRange const, 18446744073709551615ul>, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.0959595661251622,
+          "self_Ir": 584416,
+          "self_Ir_per_cycle": 36526.0
+        },
+        {
+          "function": "__memset_avx2_unaligned_erms",
+          "percent_of_region_Ir": 1.0789917860604474,
+          "self_Ir": 575368,
+          "self_Ir_per_cycle": 35960.5
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::section_offset(angaria::detail::mapped::SectionKind) const",
+          "percent_of_region_Ir": 1.003064345823911,
+          "self_Ir": 534880,
+          "self_Ir_per_cycle": 33430.0
+        }
+      ]
+    },
+    "128": {
+      "events_identical_across_repetitions": true,
+      "miss_rates": {
+        "branch_mispredict_percent": 3.387686652168649,
+        "conditional_branch_mispredict_percent": 3.224266188340658,
+        "d1_data_miss_percent": 1.1654268367668905,
+        "i1_instruction_miss_percent": 0.1699172331120169,
+        "indirect_branch_mispredict_percent": 9.844093738986224,
+        "ll_data_miss_percent": 0.00762484262510439,
+        "ll_instruction_miss_percent": 0.002156973607311162,
+        "ll_overall_miss_percent": 0.0038826868575605905
+      },
+      "per_completed_cycle": {
+        "Bc": 2403103.0,
+        "Bcm": 77482.4375,
+        "Bi": 60825.8125,
+        "Bim": 5987.75,
+        "D1mr": 45196.9375,
+        "D1mw": 19944.125,
+        "DLmr": 140.375,
+        "DLmw": 285.8125,
+        "Dr": 3218408.9375,
+        "Dw": 2371050.6875,
+        "I1mr": 20594.9375,
+        "ILmr": 261.4375,
+        "Ir": 12120570.1875,
+        "branch_mispredictions": 83470.1875,
+        "branches": 2463928.8125,
+        "d1_data_misses": 65141.0625,
+        "data_references": 5589459.625,
+        "ll_data_misses": 426.1875,
+        "ll_total_misses": 687.625
+      },
+      "raw_cost_rows": 7864,
+      "region_totals": {
+        "Bc": 38449648,
+        "Bcm": 1239719,
+        "Bi": 973213,
+        "Bim": 95804,
+        "D1mr": 723151,
+        "D1mw": 319106,
+        "DLmr": 2246,
+        "DLmw": 4573,
+        "Dr": 51494543,
+        "Dw": 37936811,
+        "I1mr": 329519,
+        "ILmr": 4183,
+        "Ir": 193929123,
+        "branch_mispredictions": 1335523,
+        "branches": 39422861,
+        "d1_data_misses": 1042257,
+        "data_references": 89431354,
+        "ll_data_misses": 6819,
+        "ll_total_misses": 11002
+      },
+      "runs": 3,
+      "top_functions_by_raw_self_Ir": [
+        {
+          "function": "_int_free",
+          "percent_of_region_Ir": 6.716992166256535,
+          "self_Ir": 13026204,
+          "self_Ir_per_cycle": 814137.75
+        },
+        {
+          "function": "malloc",
+          "percent_of_region_Ir": 5.292220085995026,
+          "self_Ir": 10263156,
+          "self_Ir_per_cycle": 641447.25
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::check_publication(angaria::detail::mapped::PublicationHeader const&, std::span<angaria::detail::mapped::DestinationDefinition const, 18446744073709551615ul>, angaria::detail::mapped::PublicationLayout const&, unsigned long, angaria::ErrorCode)",
+          "percent_of_region_Ir": 5.02761826030637,
+          "self_Ir": 9750016,
+          "self_Ir_per_cycle": 609376.0
+        },
+        {
+          "function": "angaria::detail::mapped::decode_manifest_body(std::span<std::byte const, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 5.005131694428381,
+          "self_Ir": 9706408,
+          "self_Ir_per_cycle": 606650.5
+        },
+        {
+          "function": "angaria::detail::mapped::decode_commands(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 4.310255144091999,
+          "self_Ir": 8358840,
+          "self_Ir_per_cycle": 522427.5
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::read_words(unsigned long, unsigned long) const",
+          "percent_of_region_Ir": 4.253958287636871,
+          "self_Ir": 8249664,
+          "self_Ir_per_cycle": 515604.0
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::scan_prefix(angaria::detail::mapped::NativeFile&, unsigned long, unsigned long, unsigned long)",
+          "percent_of_region_Ir": 4.10871759575791,
+          "self_Ir": 7968000,
+          "self_Ir_per_cycle": 498000.0
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::read_prefix(std::span<std::byte const, 18446744073709551615ul>, unsigned long, unsigned long, unsigned long)",
+          "percent_of_region_Ir": 3.9533783690652795,
+          "self_Ir": 7666752,
+          "self_Ir_per_cycle": 479172.0
+        },
+        {
+          "function": "free",
+          "percent_of_region_Ir": 3.6715496310474216,
+          "self_Ir": 7120204,
+          "self_Ir_per_cycle": 445012.75
+        },
+        {
+          "function": "angaria::detail::mapped::AtomicWord::bind(std::span<std::byte, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 3.449355051226628,
+          "self_Ir": 6689304,
+          "self_Ir_per_cycle": 418081.5
+        },
+        {
+          "function": "angaria::detail::runtime_validate_delivery(angaria::detail::RuntimeAccess&, angaria::detail::TopologySnapshot const&, std::span<angaria::detail::RetainedTopologyDefinition<angaria::detail::mapped::QueueDefinition> const, 18446744073709551615ul>, std::span<angaria::detail::RetainedTopologyDefinition<angaria::detail::mapped::SourceDefinition> const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 3.4360785512344116,
+          "self_Ir": 6663557,
+          "self_Ir_per_cycle": 416472.3125
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::record_envelope(unsigned long, unsigned short) const",
+          "percent_of_region_Ir": 3.0628298154063223,
+          "self_Ir": 5939719,
+          "self_Ir_per_cycle": 371232.4375
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::PrefixReader::copy_bytes(unsigned long, std::span<std::byte, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.8514500114559893,
+          "self_Ir": 5529792,
+          "self_Ir_per_cycle": 345612.0
+        },
+        {
+          "function": "_int_malloc",
+          "percent_of_region_Ir": 2.536357058655909,
+          "self_Ir": 4918735,
+          "self_Ir_per_cycle": 307420.9375
+        },
+        {
+          "function": "__memcpy_avx_unaligned_erms",
+          "percent_of_region_Ir": 2.35300244203136,
+          "self_Ir": 4563157,
+          "self_Ir_per_cycle": 285197.3125
+        },
+        {
+          "function": "angaria::detail::mapped::decode_record_envelope(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.3472823109709005,
+          "self_Ir": 4552064,
+          "self_Ir_per_cycle": 284504.0
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::read_bytes(unsigned long, unsigned long) const",
+          "percent_of_region_Ir": 1.96647514360182,
+          "self_Ir": 3813568,
+          "self_Ir_per_cycle": 238348.0
+        },
+        {
+          "function": "angaria::detail::mapped::validate_journal_record(unsigned long, angaria::detail::mapped::RecordEnvelope const&, std::span<std::byte const, 18446744073709551615ul>, unsigned long, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.7345388603649798,
+          "self_Ir": 3363776,
+          "self_Ir_per_cycle": 210236.0
+        },
+        {
+          "function": "(anonymous namespace)::allocate(unsigned long, unsigned long) [clone .constprop.0]",
+          "percent_of_region_Ir": 1.4212450184699696,
+          "self_Ir": 2756208,
+          "self_Ir_per_cycle": 172263.0
+        },
+        {
+          "function": "angaria::detail::mapped::decode_receipt(std::span<std::byte const, 18446744073709551615ul>, angaria::detail::mapped::ReceiptProfile)",
+          "percent_of_region_Ir": 1.3276273105200398,
+          "self_Ir": 2574656,
+          "self_Ir_per_cycle": 160916.0
+        },
+        {
+          "function": "???",
+          "percent_of_region_Ir": 1.3150175489629785,
+          "self_Ir": 2550202,
+          "self_Ir_per_cycle": 159387.625
+        },
+        {
+          "function": "angaria::detail::mapped::MutationGuard::check_owner() const",
+          "percent_of_region_Ir": 1.291676031557158,
+          "self_Ir": 2504936,
+          "self_Ir_per_cycle": 156558.5
+        },
+        {
+          "function": "angaria::detail::mapped::MappedReadWindow::ensure_window(unsigned long)",
+          "percent_of_region_Ir": 1.2767798676633009,
+          "self_Ir": 2476048,
+          "self_Ir_per_cycle": 154753.0
+        },
+        {
+          "function": "angaria::detail::all_zero(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 1.135392129834981,
+          "self_Ir": 2201856,
+          "self_Ir_per_cycle": 137616.0
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::validate_command(angaria::detail::mapped::RedoOpcode, unsigned long, std::span<std::byte const, 18446744073709551615ul>, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.1041807268937116,
+          "self_Ir": 2141328,
+          "self_Ir_per_cycle": 133833.0
+        }
+      ]
+    },
+    "32": {
+      "events_identical_across_repetitions": true,
+      "miss_rates": {
+        "branch_mispredict_percent": 4.224941317671045,
+        "conditional_branch_mispredict_percent": 4.0215436495204395,
+        "d1_data_miss_percent": 0.9233213209667951,
+        "i1_instruction_miss_percent": 0.31944845982684095,
+        "indirect_branch_mispredict_percent": 10.933495357955007,
+        "ll_data_miss_percent": 0.012391071809187868,
+        "ll_instruction_miss_percent": 0.0047220595735035795,
+        "ll_overall_miss_percent": 0.00712893092871297
+      },
+      "per_completed_cycle": {
+        "Bc": 1041571.4375,
+        "Bcm": 41887.25,
+        "Bi": 31579.5625,
+        "Bim": 3452.75,
+        "D1mr": 14357.6875,
+        "D1mw": 9007.4375,
+        "DLmr": 131.8125,
+        "DLmw": 181.75,
+        "Dr": 1485184.625,
+        "Dw": 1045367.25,
+        "I1mr": 17673.625,
+        "ILmr": 261.25,
+        "Ir": 5532543.5,
+        "branch_mispredictions": 45340.0,
+        "branches": 1073151.0,
+        "d1_data_misses": 23365.125,
+        "data_references": 2530551.875,
+        "ll_data_misses": 313.5625,
+        "ll_total_misses": 574.8125
+      },
+      "raw_cost_rows": 7840,
+      "region_totals": {
+        "Bc": 16665143,
+        "Bcm": 670196,
+        "Bi": 505273,
+        "Bim": 55244,
+        "D1mr": 229723,
+        "D1mw": 144119,
+        "DLmr": 2109,
+        "DLmw": 2908,
+        "Dr": 23762954,
+        "Dw": 16725876,
+        "I1mr": 282778,
+        "ILmr": 4180,
+        "Ir": 88520696,
+        "branch_mispredictions": 725440,
+        "branches": 17170416,
+        "d1_data_misses": 373842,
+        "data_references": 40488830,
+        "ll_data_misses": 5017,
+        "ll_total_misses": 9197
+      },
+      "runs": 3,
+      "top_functions_by_raw_self_Ir": [
+        {
+          "function": "_int_free",
+          "percent_of_region_Ir": 6.907815094449777,
+          "self_Ir": 6114846,
+          "self_Ir_per_cycle": 382177.875
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::read_words(unsigned long, unsigned long) const",
+          "percent_of_region_Ir": 5.509003227900513,
+          "self_Ir": 4876608,
+          "self_Ir_per_cycle": 304788.0
+        },
+        {
+          "function": "malloc",
+          "percent_of_region_Ir": 5.417464182613295,
+          "self_Ir": 4795577,
+          "self_Ir_per_cycle": 299723.5625
+        },
+        {
+          "function": "angaria::detail::mapped::AtomicWord::bind(std::span<std::byte, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 4.792614825351125,
+          "self_Ir": 4242456,
+          "self_Ir_per_cycle": 265153.5
+        },
+        {
+          "function": "angaria::detail::mapped::decode_manifest_body(std::span<std::byte const, 18446744073709551615ul>, unsigned long)",
+          "percent_of_region_Ir": 4.539729330641503,
+          "self_Ir": 4018600,
+          "self_Ir_per_cycle": 251162.5
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::scan_prefix(angaria::detail::mapped::NativeFile&, unsigned long, unsigned long, unsigned long)",
+          "percent_of_region_Ir": 3.8605638618114795,
+          "self_Ir": 3417398,
+          "self_Ir_per_cycle": 213587.375
+        },
+        {
+          "function": "free",
+          "percent_of_region_Ir": 3.7491774804843376,
+          "self_Ir": 3318798,
+          "self_Ir_per_cycle": 207424.875
+        },
+        {
+          "function": "angaria::detail::mapped::decode_commands(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 3.4546768588443997,
+          "self_Ir": 3058104,
+          "self_Ir_per_cycle": 191131.5
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::check_publication(angaria::detail::mapped::PublicationHeader const&, std::span<angaria::detail::mapped::DestinationDefinition const, 18446744073709551615ul>, angaria::detail::mapped::PublicationLayout const&, unsigned long, angaria::ErrorCode)",
+          "percent_of_region_Ir": 3.296277742777802,
+          "self_Ir": 2917888,
+          "self_Ir_per_cycle": 182368.0
+        },
+        {
+          "function": "_int_malloc",
+          "percent_of_region_Ir": 3.209989446987629,
+          "self_Ir": 2841505,
+          "self_Ir_per_cycle": 177594.0625
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::record_envelope(unsigned long, unsigned short) const",
+          "percent_of_region_Ir": 2.6799292224272615,
+          "self_Ir": 2372292,
+          "self_Ir_per_cycle": 148268.25
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::PrefixReader::copy_bytes(unsigned long, std::span<std::byte, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.647317639707668,
+          "self_Ir": 2343424,
+          "self_Ir_per_cycle": 146464.0
+        },
+        {
+          "function": "angaria::detail::mapped::(anonymous namespace)::read_prefix(std::span<std::byte const, 18446744073709551615ul>, unsigned long, unsigned long, unsigned long)",
+          "percent_of_region_Ir": 2.5808744205987715,
+          "self_Ir": 2284608,
+          "self_Ir_per_cycle": 142788.0
+        },
+        {
+          "function": "__memcpy_avx_unaligned_erms",
+          "percent_of_region_Ir": 2.310291369602426,
+          "self_Ir": 2045086,
+          "self_Ir_per_cycle": 127817.875
+        },
+        {
+          "function": "angaria::detail::runtime_validate_delivery(angaria::detail::RuntimeAccess&, angaria::detail::TopologySnapshot const&, std::span<angaria::detail::RetainedTopologyDefinition<angaria::detail::mapped::QueueDefinition> const, 18446744073709551615ul>, std::span<angaria::detail::RetainedTopologyDefinition<angaria::detail::mapped::SourceDefinition> const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.2773679953894623,
+          "self_Ir": 2015942,
+          "self_Ir_per_cycle": 125996.375
+        },
+        {
+          "function": "angaria::detail::mapped::decode_record_envelope(std::span<std::byte const, 18446744073709551615ul>)",
+          "percent_of_region_Ir": 2.19949468088231,
+          "self_Ir": 1947008,
+          "self_Ir_per_cycle": 121688.0
+        },
+        {
+          "function": "???",
+          "percent_of_region_Ir": 1.8523690776222546,
+          "self_Ir": 1639730,
+          "self_Ir_per_cycle": 102483.125
+        },
+        {
+          "function": "angaria::detail::RuntimeAccess::read_bytes(unsigned long, unsigned long) const",
+          "percent_of_region_Ir": 1.6359202598226295,
+          "self_Ir": 1448128,
+          "self_Ir_per_cycle": 90508.0
+        },
+        {
+          "function": "angaria::detail::mapped::validate_journal_record(unsigned long, angaria::detail::mapped::RecordEnvelope const&, std::span<std::byte const, 18446744073709551615ul>, unsigned long, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.454014776386304,
+          "self_Ir": 1287104,
+          "self_Ir_per_cycle": 80444.0
+        },
+        {
+          "function": "(anonymous namespace)::allocate(unsigned long, unsigned long) [clone .constprop.0]",
+          "percent_of_region_Ir": 1.4512945085745823,
+          "self_Ir": 1284696,
+          "self_Ir_per_cycle": 80293.5
+        },
+        {
+          "function": "angaria::detail::mapped::MappedReadWindow::ensure_window(unsigned long)",
+          "percent_of_region_Ir": 1.1308903400398027,
+          "self_Ir": 1001072,
+          "self_Ir_per_cycle": 62567.0
+        },
+        {
+          "function": "std::_Rb_tree_insert_and_rebalance(bool, std::_Rb_tree_node_base*, std::_Rb_tree_node_base*, std::_Rb_tree_node_base&)",
+          "percent_of_region_Ir": 1.0975297799285266,
+          "self_Ir": 971541,
+          "self_Ir_per_cycle": 60721.3125
+        },
+        {
+          "function": "angaria::detail::mapped::MutationGuard::check_owner() const",
+          "percent_of_region_Ir": 1.0512072792559155,
+          "self_Ir": 930536,
+          "self_Ir_per_cycle": 58158.5
+        },
+        {
+          "function": "angaria::detail::mapped::validate_redo_targets(std::span<angaria::detail::mapped::RedoCommand const, 18446744073709551615ul>, angaria::detail::mapped::FixedLayout const&, std::span<angaria::detail::mapped::JournalRecordRange const, 18446744073709551615ul>, angaria::ErrorCode)",
+          "percent_of_region_Ir": 1.0164944929940452,
+          "self_Ir": 899808,
+          "self_Ir_per_cycle": 56238.0
+        },
+        {
+          "function": "angaria::detail::runtime_tasks(angaria::detail::RuntimeAccess&)",
+          "percent_of_region_Ir": 0.999901763086002,
+          "self_Ir": 885120,
+          "self_Ir_per_cycle": 55320.0
+        }
+      ]
+    }
+  }
+}

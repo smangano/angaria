@@ -585,7 +585,8 @@ def smoke_rejections(executable, temporary, timeout, existing):
         path = temporary / f"invalid-{index}"
         invoke(command(executable, path, dict(valid, **overrides)), timeout, succeeds=False)
         check(not path.exists() and not path.is_symlink(), "Invalid arguments created a Session")
-    for extra in (["--messages"], ["--messages", "2"], ["--unknown", "1"]):
+    for extra in (["--messages"], ["--messages", "2"], ["--unknown", "1"],
+                  ["--cachegrind-region", "unknown"]):
         path = temporary / "invalid-options"
         invoke(command(executable, path, valid) + extra, timeout, succeeds=False)
         check(not path.exists(), "Invalid option list created a Session")

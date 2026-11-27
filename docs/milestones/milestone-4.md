@@ -35,6 +35,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.21 | `milestone-4-21` | Share fresh schema preparation with payload codecs. | Reuse checked Fields during send/receive preparation, retain hook/cleanup ordering and generic fresh paths, qualify owning lifetimes and read counts, and plot measured improvements. |
 | 4.22 | `milestone-4-22` | Reuse prefix-validation buffers. | Use exact fixed-body spans and scan-local manifest scratch, retain atomic/read/recovery checks, qualify smaller reads after growth and corruption rejection, and plot matched improvements. |
 | 4.23 | `milestone-4-23` | Remove duplicate pre-lock resource checks. | Retain post-lock rejection and other resource checks, qualify delayed mismatch detection under contention, and measure native calls and full acquisition cost with matched controls. |
+| 4.24 | `milestone-4-24` | Add on-demand Cachegrind profiling. | Profile only the serial cycle after preload in nine fixed-model cases, validate the requested region, retain raw/source-annotated evidence, and keep ordinary CI and native timing interpretation separate. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -171,3 +172,7 @@ The [prefix buffer guide](../performance-prefix-buffers.md) replaces each small 
 ## Step 4.23 Gate resource checks
 
 Framework **0.4.25** [removes the three pathname-identity checks immediately before the native gate lock](../performance-gate-resources.md). The same post-lock check must pass before a usable guard is returned; file-access, claim and ownership checks remain. The guide explicitly accepts delayed `IoError` after unsupported resource replacement: try-only callers can see Busy/public receive timeout, and a blocking caller can wait indefinitely on a held old lock. Focused contention qualification and matched syscall/acquisition measurements are required. Native hold timing begins after acquisition, so its improvement is not assumed; Cachegrind profiling remains a separate follow-up.
+
+## Step 4.24 Cachegrind profiling
+
+Framework **0.4.26** adds [a benchmark-only region and on-demand profiling workflow](../performance-cachegrind.md). Optimized Linux x86_64 builds use debug locations, private diagnostics OFF and optional Cachegrind hooks ON. Three repetitions at H0/32/128 each profile the existing 16-message serial loop after setup/preload, with cold simulated caches, a fixed cache model and branch simulation. Public-result/region validation, raw profiles, source annotations, build provenance and all attempt outcomes accompany the evidence. PR labeling or manual dispatch requests profiling; ordinary CI and public APIs are unchanged. The primer review requires no new lesson or example changes.
