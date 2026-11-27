@@ -1,0 +1,7 @@
+[
+  "cg_annotate",
+  "--auto=no",
+  "--show=Ir,I1mr,ILmr,Dr,D1mr,DLmr,Dw,D1mw,DLmw,Bc,Bcm,Bi,Bim",
+  "--sort=Ir",
+  "/home/runner/work/angaria/angaria/build/cachegrind-results/h128-r3/cachegrind.out"
+]
