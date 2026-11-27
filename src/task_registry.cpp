@@ -193,7 +193,7 @@ namespace angaria::detail
       {
         runtime_value(observer->claim_file_ready(allocation._id));
       }
-      runtime_value(access._journal.execute(access._guard, plan));
+      runtime_value(access.execute(plan));
       // Return the already selected scalar ID without allocating after commit.
       return allocation._id;
     }

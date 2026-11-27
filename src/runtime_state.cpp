@@ -143,6 +143,19 @@ namespace angaria::detail
     {
       runtime_fail(ErrorCode::IoError, "session.flags", "Session is incomplete or has unknown flags");
     }
+    _validatedSnapshot = _snapshot;
+    _validatedForExecute = true;
+  }
+
+  Result<mapped::TransactionResult> RuntimeAccess::execute(const mapped::TransactionPlan& plan)
+  {
+    // Consume before owner/plan checks, allocation, recovery or execution. An
+    // error or rollback cannot leave a second reuse opportunity behind.
+    if (std::exchange(_validatedForExecute, false))
+    {
+      return _journal.execute_validated(_guard, plan, _validatedSnapshot, _recordBoundaries);
+    }
+    return _journal.execute(_guard, plan);
   }
 
   std::vector<std::uint64_t> RuntimeAccess::read_words(std::uint64_t offset, std::size_t count) const

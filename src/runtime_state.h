@@ -72,7 +72,7 @@ namespace angaria::detail
 
   // Private qualification seam for immutable read requests. Called after bounds
   // checks, before allocation/I/O, under the operation gate. It must not reenter
-  // the runtime. Production operations do not supply an observer.
+  // or mutate the Session. Production operations do not supply an observer.
   class RuntimeAccessReadObserver
   {
   public:
@@ -99,6 +99,11 @@ namespace angaria::detail
     std::vector<std::byte> immutable_record(std::uint64_t reference, std::uint16_t kind) const;
     std::vector<std::uint64_t> record_references(std::uint16_t kind) const;
     std::uint64_t section_offset(mapped::SectionKind kind) const;
+    // First attempt reuses this operation's validated framing under its own
+    // continuously held guard. Later attempts use fresh journal validation.
+    // Replacing the guard/session or writing metadata directly breaks that
+    // private operation contract; use the generic journal API for raw fixtures.
+    Result<mapped::TransactionResult> execute(const mapped::TransactionPlan& plan);
 
     std::shared_ptr<SessionState> _session;
     mapped::MutationGuard _guard;
@@ -108,6 +113,8 @@ namespace angaria::detail
 
   private:
     std::vector<mapped::JournalRecordRange> _recordBoundaries;
+    mapped::JournalSnapshot _validatedSnapshot;
+    bool _validatedForExecute{};
     RuntimeAccessReadObserver* _readObserver{};
     // Separate last windows keep atomic fixed state and immutable history from
     // evicting one another. Both end at the original recovered file size and

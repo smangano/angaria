@@ -285,7 +285,7 @@ namespace angaria::detail
     plan._commands.push_back(runtime_write_words(loaded._stateOffset, producerWords));
     plan._commands.push_back(runtime_write_words(loaded._stateOffset + 9 * 8, pending));
     plan._commands.push_back(std::move(ring));
-    runtime_value(access._journal.execute(access._guard, plan));
+    runtime_value(access.execute(plan));
     // Preparing this result cannot allocate or fail after committed authority.
     return accepted_report(publication, revision, queue, outcomes);
   }

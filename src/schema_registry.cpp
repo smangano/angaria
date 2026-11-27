@@ -199,7 +199,7 @@ namespace angaria::detail
       auto plan = append_plan(access, actor, 6, static_cast<std::uint32_t>(descriptor._id), index, 0, bodyBytes);
       mapped::FieldDefinition definition{runtime_value(mapped::canonicalize_field_descriptor(descriptor)), registration(plan)};
       plan._records.front()._immutable = runtime_value(mapped::encode_field_definition(definition, plan._base._tail));
-      runtime_value(access._journal.execute(access._guard, plan));
+      runtime_value(access.execute(plan));
       return descriptor._id;
     }
     catch (...)
@@ -271,7 +271,7 @@ namespace angaria::detail
       auto plan = append_plan(access, actor, 7, schema_key(descriptor._schema), index, previous, bodyBytes);
       mapped::SchemaDefinition definition{descriptor, registration(plan)};
       plan._records.front()._immutable = runtime_value(mapped::encode_schema_definition(definition, plan._base._tail));
-      runtime_value(access._journal.execute(access._guard, plan));
+      runtime_value(access.execute(plan));
       return descriptor._schema;
     }
     catch (...)

@@ -28,6 +28,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.14 | `milestone-4-14` | Reuse bounded mappings while scanning history. | Replace per-record native reads/mappings with scan-local windows, retain atomic readiness and complete validation, qualify boundary/rollback behavior, and record matched measurements. |
 | 4.15 | `milestone-4-15` | Give queued local blocking operations a gate handoff. | Prevent repeated nonblocking overtaking, qualify registration/race/cleanup behavior, and measure ordinary versus loaded progress with explicit scheduling limits. |
 | 4.16 | `milestone-4-16` | Reuse bounded mappings for runtime metadata. | Share the journal window mechanism, retain fresh atomic loads and owning copies, qualify boundary/rollback behavior, and record matched measurements. |
+| 4.17 | `milestone-4-17` | Reuse operation-entry history validation once. | Keep generic journal calls fresh, consume first-attempt reuse before failures/retries, qualify ownership/staleness/recovery, and measure duplicate-scan removal. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -124,6 +125,10 @@ Framework **0.4.17** gives [announced local blocking requests preference over tr
 ## Step 4.16 Runtime metadata windows
 
 Framework **0.4.18** extends [bounded mapping reuse](../performance-runtime-windows.md) to atomic words and immutable metadata within one gate-held runtime operation. Separate readers retain owning result copies and fresh atomic loads; no mappings or decoded state are cached between operations. Boundary and rollback qualification accompany matched normal/enabled measurements.
+
+## Step 4.17 Operation validation reuse
+
+Framework **0.4.19** [reuses the initial validated prefix](../performance-operation-validation.md) for one execution attempt under the continuously held runtime guard. Current roots/size, plan/domain checks, accepted-byte checks and recovery remain checked; generic calls and subsequent attempts validate freshly. The guide defines the internal trust boundary and accepted change in validation frequency.
 
 ## Qualification and completion
 

@@ -1,9 +1,10 @@
-// Private lookup and read-window qualification beneath Session/Registry
+// Private lookup, read-window, and validation-reuse qualification beneath Session/Registry
 // inspection. These fixtures append definitions directly to control batch
 // geometry and exercise storage independently of public registration; usage
 // examples live in test_task_registration.cpp.
 
 #include "native_atomic.h"
+#include "native_fixture.h"
 #include "result_assertions.h"
 #include "runtime_state.h"
 
@@ -34,6 +35,7 @@ namespace
 
   using angaria::test_support::expect_error;
   using angaria::test_support::require_value;
+  using angaria::test_support::set_atomic_word;
 
   constexpr std::uint64_t window_bytes = 64 * 1024;
 
@@ -90,6 +92,18 @@ namespace
       plan._actor = TaskId{1};
       plan._actorIncarnation = access.read_words(access.section_offset(mapped::SectionKind::TaskState), 1)[0];
       plan._newRevision = access._snapshot._revision + 1;
+      return plan;
+    }
+
+    // A harmless fixed-state update still consumes an operation generation.
+    // The fixture uses it to distinguish a fresh plan from an older snapshot.
+    mapped::TransactionPlan ready_plan(runtime::RuntimeAccess& access) const
+    {
+      auto plan = append_plan(access);
+      plan._kind = mapped::JournalKind::FixedState;
+      plan._newRevision = plan._base._revision;
+      const std::array ready{runtime::session_ready_flag};
+      plan._commands.push_back(runtime::runtime_write_words(112, ready));
       return plan;
     }
 
@@ -432,13 +446,15 @@ namespace
       const std::array ready{runtime::session_ready_flag};
       plan._commands.push_back(runtime::runtime_write_words(112, ready));
 
-      expect_error(access._journal.execute(access._guard, plan), ErrorCode::IoError);
+      // The initial validated execution fails after real file growth. A retry
+      // must take the ordinary fresh-validation path after rollback succeeds.
+      expect_error(access.execute(plan), ErrorCode::IoError);
       EXPECT_TRUE(injector._fired);
       EXPECT_EQ(require_value(access._file->size()), before._fileBytes);
       EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), before);
       EXPECT_EQ(access.read_words(ringEnd - 8, 1), words);
       EXPECT_EQ(access.immutable_record(accepted._manifest, 11), manifest);
-      const auto retry = require_value(access._journal.execute(access._guard, plan));
+      const auto retry = require_value(access.execute(plan));
       newReference = retry._records.front();
       expect_io_error([&]
       {
@@ -452,5 +468,82 @@ namespace
     runtime::RuntimeAccess fresh(_state);
     EXPECT_EQ(fresh.record_envelope(newReference, 8)._kind, 8u);
     EXPECT_GT(fresh._snapshot._tail, newReference);
+  }
+
+  // Factories may move a recovered access before executing its first plan.
+  // The guard, owning metadata index, and one-use validation move together;
+  // later executions must still validate current state and reject stale plans.
+  TEST_F(RuntimeAccessTest, ValidatedExecutionMovesWithItsGuardAndRejectsStalePlans)
+  {
+    runtime::RuntimeAccess access(_state);
+    static_cast<void>(access.immutable_record(_references.front(), 2));
+    const auto plan = ready_plan(access);
+    auto moved = std::move(access);
+    const auto first = require_value(moved.execute(plan));
+    EXPECT_EQ(first._generation, plan._base._generation + 1);
+    EXPECT_EQ(first._tail, plan._base._tail);
+    EXPECT_EQ(first._manifest, plan._base._manifest);
+    expect_error(moved.execute(plan), ErrorCode::Conflict);
+
+    auto next = plan;
+    next._base = require_value(moved._journal.snapshot(moved._guard));
+    next._newRevision = next._base._revision;
+    const auto second = require_value(moved.execute(next));
+    EXPECT_EQ(second._generation, first._generation + 1);
+    EXPECT_EQ(second._tail, first._tail);
+  }
+
+  // Even an invalid first attempt consumes the one-use validation. Deliberate
+  // same-root corruption after that rejection must be found by the next full
+  // scan; unchanged generation/tail/revision alone cannot authorize reuse.
+  TEST_F(RuntimeAccessTest, RejectedAttemptConsumesValidationBeforeSameRootCorruption)
+  {
+    runtime::RuntimeAccess access(_state);
+    const auto plan = ready_plan(access);
+    auto invalid = plan;
+    invalid._commands.clear();
+    expect_error(access.execute(invalid), ErrorCode::InvalidArgument);
+    EXPECT_EQ(access.read_words(120, 1)[0], plan._base._generation);
+
+    const auto readiness = _references.front() + 48;
+    const auto original = access.record_envelope(_references.front(), 2)._readiness;
+    set_atomic_word(_state->_directory, readiness, 0);
+    expect_error(access.execute(plan), ErrorCode::IoError);
+    // The general journal entry point also continues to validate freshly.
+    expect_error(access._journal.execute(access._guard, plan), ErrorCode::IoError);
+    set_atomic_word(_state->_directory, readiness, original);
+    const auto accepted = require_value(access.execute(plan));
+    EXPECT_EQ(accepted._generation, plan._base._generation + 1);
+  }
+
+  // A generic operation can complete under this guard without appending bytes.
+  // The old runtime plan must conflict even though tail/revision are unchanged.
+  // A later access must then scan again rather than inherit the earlier proof.
+  TEST_F(RuntimeAccessTest, InterveningFixedStateAndNewAccessCannotReuseOldValidation)
+  {
+    std::uint64_t generation{};
+    std::uint64_t originalReadiness{};
+    {
+      runtime::RuntimeAccess access(_state);
+      const auto plan = ready_plan(access);
+      originalReadiness = access.record_envelope(_references.front(), 2)._readiness;
+      const auto accepted = require_value(access._journal.execute(access._guard, plan));
+      EXPECT_EQ(accepted._tail, plan._base._tail);
+      expect_error(access.execute(plan), ErrorCode::Conflict);
+      generation = accepted._generation;
+    }
+
+    // This is a quiescent-file corruption seam, never an application update.
+    const auto readiness = _references.front() + 48;
+    set_atomic_word(_state->_directory, readiness, 0);
+    expect_io_error([&]
+    {
+      runtime::RuntimeAccess invalid(_state);
+    });
+    set_atomic_word(_state->_directory, readiness, originalReadiness);
+    runtime::RuntimeAccess fresh(_state);
+    EXPECT_EQ(fresh._snapshot._generation, generation);
+    const auto accepted = require_value(fresh.execute(ready_plan(fresh)));
+    EXPECT_EQ(accepted._generation, generation + 1);
   }
 } // namespace

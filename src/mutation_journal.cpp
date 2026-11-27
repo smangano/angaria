@@ -376,15 +376,20 @@ namespace angaria::detail::mapped
       return *layout;
     }
 
-    JournalSnapshot clean_snapshot(MutationJournalState& state, NativeFile& file,
-                                    PrefixRecords* validated = nullptr)
+    JournalSnapshot idle_roots(MutationJournalState& state, NativeFile& file)
     {
-      ANGARIA_DIAGNOSTIC_SCOPE(Snapshot);
       if (control(state) != JournalControl::Idle)
       {
         fail(ErrorCode::IoError, "Journal recovery is required");
       }
-      const auto snapshot = roots(state, file);
+      return roots(state, file);
+    }
+
+    JournalSnapshot clean_snapshot(MutationJournalState& state, NativeFile& file,
+                                    PrefixRecords* validated = nullptr)
+    {
+      ANGARIA_DIAGNOSTIC_SCOPE(Snapshot);
+      const auto snapshot = idle_roots(state, file);
       auto records = scan_prefix(file, fixed_layout(state)._arenaBegin, snapshot._tail, snapshot._generation);
       if (snapshot._tail != snapshot._fileBytes || snapshot._accounted != snapshot._tail ||
           snapshot._manifest != records._manifest || snapshot._revision != records._revision)
@@ -649,14 +654,16 @@ namespace angaria::detail::mapped
       publish(state, JournalControl::Idle, JournalCheckpoint::Idle);
     }
 
-    void recover_journal(MutationJournalState& state, NativeFile& file)
+    // True means recovery changed or replayed journal state. A caller may not
+    // reuse validation captured before that repair, even if roots look equal.
+    bool recover_journal(MutationJournalState& state, NativeFile& file)
     {
       ANGARIA_DIAGNOSTIC_SCOPE(Recovery);
       ANGARIA_DIAGNOSTIC_COUNT(RecoveryChecks, 1);
       const auto observed = control(state);
       if (observed == JournalControl::Idle)
       {
-        return;
+        return false;
       }
       // Count non-idle recovery attempts, including Prepared rollback. This is
       // distinct from the inexpensive Idle check made by healthy operations.
@@ -680,10 +687,11 @@ namespace angaria::detail::mapped
         }
         checkpoint(state, JournalCheckpoint::Rollback);
         publish(state, JournalControl::Idle, JournalCheckpoint::Idle);
-        return;
+        return true;
       }
       const auto batch = validate_accepted(state, file, header, prefix);
       apply_accepted(state, file, header, prefix, batch);
+      return true;
     }
 
     struct RecordImage
@@ -757,11 +765,29 @@ namespace angaria::detail::mapped
       TransactionResult _result;
     };
 
-    PreparedOperation preflight(MutationJournalState& state, NativeFile& file, const TransactionPlan& plan)
+    PreparedOperation preflight(MutationJournalState& state, NativeFile& file, const TransactionPlan& plan,
+                                 const JournalSnapshot* validated,
+                                 std::span<const JournalRecordRange> records)
     {
       ANGARIA_DIAGNOSTIC_SCOPE(JournalPreflight);
       PrefixRecords prefix;
-      const auto current = clean_snapshot(state, file, &prefix);
+      JournalSnapshot current;
+      if (validated && idle_roots(state, file) == *validated)
+      {
+        // Only RuntimeAccess can offer this first-attempt proof. Its captured
+        // prefix remains immutable under the same held gate. Check live roots
+        // and physical length, but do not walk that unchanged prefix twice.
+        current = *validated;
+        prefix._ranges.assign(records.begin(), records.end());
+        prefix._manifest = validated->_manifest;
+        prefix._revision = validated->_revision;
+      }
+      else
+      {
+        // A changed state still receives full validation before stale-plan
+        // classification, preserving corruption/recovery error precedence.
+        current = clean_snapshot(state, file, &prefix);
+      }
       if (plan._base != current)
       {
         fail(ErrorCode::Conflict, "Transaction plan was captured before another completed operation");
@@ -836,8 +862,9 @@ namespace angaria::detail::mapped
         }
       }
       PreparedOperation operation;
-      // clean_snapshot has already validated these exact records under this
-      // held gate. Preflight only builds local images before execution begins.
+      // These exact records were validated under the continuously held gate,
+      // either at runtime entry or by preflight's fresh scan. Only local images
+      // are built before execution begins.
       operation._prefix = std::move(prefix);
       operation._commands = value_or_throw<JournalFailure>(encode_commands(plan._commands));
       auto& header = operation._header;
@@ -1050,6 +1077,22 @@ namespace angaria::detail::mapped
 
   Result<TransactionResult> MutationJournal::execute(const MutationGuard& guard, const TransactionPlan& plan)
   {
+    return execute_impl(guard, plan, nullptr, {});
+  }
+
+  Result<TransactionResult> MutationJournal::execute_validated(const MutationGuard& guard,
+                                                               const TransactionPlan& plan,
+                                                               const JournalSnapshot& validated,
+                                                               std::span<const JournalRecordRange> records)
+  {
+    return execute_impl(guard, plan, &validated, records);
+  }
+
+  Result<TransactionResult> MutationJournal::execute_impl(const MutationGuard& guard,
+                                                          const TransactionPlan& plan,
+                                                          const JournalSnapshot* validated,
+                                                          std::span<const JournalRecordRange> records)
+  {
     try
     {
       if (!_state)
@@ -1057,8 +1100,8 @@ namespace angaria::detail::mapped
         fail(ErrorCode::InvalidState, "Journal is moved-from");
       }
       auto& file = *value_or_throw<JournalFailure>(_state->_controller->file(guard));
-      recover_journal(*_state, file);
-      auto operation = preflight(*_state, file, plan);
+      const bool recovered = recover_journal(*_state, file);
+      auto operation = preflight(*_state, file, plan, recovered ? nullptr : validated, records);
       try
       {
         execute_prepared(*_state, file, operation);
