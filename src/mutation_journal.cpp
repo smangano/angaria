@@ -8,6 +8,7 @@
 #include "angaria/detail/error_support.h"
 #include "journal_validation.h"
 #include "loss_redo.h"
+#include "mapped_read_window.h"
 #include "native_atomic.h"
 #include "task_claim_redo.h"
 
@@ -85,7 +86,7 @@ namespace angaria::detail::mapped
     {
     public:
       PrefixReader(NativeFile& file, std::uint64_t arena, std::uint64_t tail)
-          : _file(file), _arena(arena), _tail(tail)
+          : _arena(arena), _tail(tail), _window(file, tail)
       {
       }
 
@@ -100,25 +101,15 @@ namespace angaria::detail::mapped
       void copy_bytes(std::uint64_t offset, std::span<std::byte> output)
       {
         check_range(offset, output.size());
-        while (!output.empty())
-        {
-          ensure_window(offset);
-          const auto delta = host_size(offset - _windowBegin);
-          const auto count = std::min(output.size(), _bytes.size() - delta);
-          std::copy_n(_bytes.begin() + delta, count, output.begin());
-          offset += count;
-          output = output.subspan(count);
-        }
+        value_or_throw<JournalFailure>(_window.copy_bytes(offset, output));
       }
 
       std::uint64_t load_acquire(std::uint64_t offset)
       {
         check_range(offset, sizeof(std::uint64_t));
-        ensure_window(offset);
         // Record readiness is eight-byte aligned. It cannot straddle a
         // 64 KiB boundary, and still uses the live mapped atomic adapter.
-        return value_or_throw<JournalFailure>(AtomicWord::bind(
-            _bytes, host_size(offset - _windowBegin))).load_acquire();
+        return value_or_throw<JournalFailure>(_window.load_acquire(offset));
       }
 
     private:
@@ -130,29 +121,9 @@ namespace angaria::detail::mapped
         }
       }
 
-      void ensure_window(std::uint64_t offset)
-      {
-        if (!_bytes.empty() && offset >= _windowBegin &&
-            contains_range(_bytes.size(), offset - _windowBegin, 1))
-        {
-          return;
-        }
-        _bytes = {};
-        _mapping = {};
-        const auto begin = offset - offset % _windowBytes;
-        const auto length = std::min(_windowBytes, _tail - begin);
-        _mapping = value_or_throw<JournalFailure>(_file.map_read_write(begin, length));
-        _bytes = value_or_throw<JournalFailure>(_mapping.writable_bytes());
-        _windowBegin = begin;
-      }
-
-      static constexpr std::uint64_t _windowBytes = 64 * 1024;
-      NativeFile& _file;
       std::uint64_t _arena{};
       std::uint64_t _tail{};
-      std::uint64_t _windowBegin{};
-      MappedRegion _mapping;
-      std::span<std::byte> _bytes;
+      MappedReadWindow _window;
     };
 
     std::vector<std::byte> read_bytes(NativeFile& file, std::uint64_t offset, std::uint64_t length)

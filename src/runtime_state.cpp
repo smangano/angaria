@@ -136,6 +136,8 @@ namespace angaria::detail
     // The journal already decodes and validates every committed envelope.
     // Adopt those owning copies instead of reading the same history again.
     _snapshot = runtime_value(_journal.snapshot(_guard, _recordBoundaries));
+    _wordWindow.emplace(*_file, _snapshot._fileBytes);
+    _byteWindow.emplace(*_file, _snapshot._tail);
     const auto flags = read_words(112, 1)[0];
     if ((flags & ~session_ready_flag) != 0 || (requireReady && flags != session_ready_flag))
     {
@@ -145,27 +147,20 @@ namespace angaria::detail
 
   std::vector<std::uint64_t> RuntimeAccess::read_words(std::uint64_t offset, std::size_t count) const
   {
+    runtime_value(_guard.check_owner());
     if (offset % 8 != 0 || count > std::numeric_limits<std::size_t>::max() / 8 ||
         !mapped::contains_range(_snapshot._fileBytes, offset, std::uint64_t{count} * 8))
     {
       runtime_fail(ErrorCode::IoError, "runtime.words", "Atomic range exceeds the recovered file");
     }
     std::vector<std::uint64_t> result(count);
-    if (count == 0)
-    {
-      return result;
-    }
-    auto region = runtime_value(_file->map_read_write(offset, count * 8));
-    auto bytes = runtime_value(region.writable_bytes());
-    for (std::size_t index = 0; index < count; ++index)
-    {
-      result[index] = runtime_value(mapped::AtomicWord::bind(bytes, index * 8)).load_acquire();
-    }
+    runtime_value(_wordWindow->load_words(offset, result));
     return result;
   }
 
   std::vector<std::byte> RuntimeAccess::read_bytes(std::uint64_t offset, std::uint64_t length) const
   {
+    runtime_value(_guard.check_owner());
     if (!fits_size_t(length) ||
         !mapped::contains_range(_snapshot._tail, offset, length))
     {
@@ -176,7 +171,7 @@ namespace angaria::detail
       runtime_value(_readObserver->before_read(offset, length));
     }
     std::vector<std::byte> result(static_cast<std::size_t>(length));
-    runtime_value(_file->read_exact(offset, result));
+    runtime_value(_byteWindow->copy_bytes(offset, result));
     return result;
   }
 

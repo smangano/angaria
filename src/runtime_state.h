@@ -3,6 +3,7 @@
 #include "angaria/runtime.h"
 
 #include "angaria/detail/error_support.h"
+#include "mapped_read_window.h"
 #include "mutation_journal.h"
 #include "session_metadata.h"
 #include "schema_metadata.h"
@@ -14,6 +15,7 @@
 #include <memory>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <thread>
@@ -107,6 +109,11 @@ namespace angaria::detail
   private:
     std::vector<mapped::JournalRecordRange> _recordBoundaries;
     RuntimeAccessReadObserver* _readObserver{};
+    // Separate last windows keep atomic fixed state and immutable history from
+    // evicting one another. Both end at the original recovered file size and
+    // are destroyed before the operation's guard, including on unwind.
+    mutable std::optional<mapped::MappedReadWindow> _wordWindow;
+    mutable std::optional<mapped::MappedReadWindow> _byteWindow;
   };
 
   struct LoadedTask

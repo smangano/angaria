@@ -44,6 +44,8 @@ The mutex protects resource bookkeeping and the wrapper's I/O/resize operations.
 
 Lease protection is process-local. Another process or code bypassing this API can truncate a file after it was checked. A previous size check cannot make retained spans safe against that race; do not access a span after uncoordinated truncation can have invalidated its range. Access beyond the shortened file can fault. The later mutation-gate and retention protocols coordinate cooperating participants; they cannot protect against arbitrary external truncation.
 
+Step 4.16 [runtime metadata windows](performance-runtime-windows.md) retains separate bounded mappings for atomic words and immutable copies during one recovered operation. Each read checks guard ownership; window ends never exceed its original recovered file size. These private mapping leases may remain live during append rollback to that size, then end before the guard is released. Returned vectors own copies, and retained word mappings still perform fresh native atomic loads.
+
 ## Committed payload storage and append planning
 
 Milestone 4, step 4.4, framework **0.4.5**, adds two private foundations for native delivery. At that step they left public send/receive disabled and creation at format 2.1/`0x3`. Step 4.6 enables [direct send and core creation](direct-publication.md), and step 4.7 adds [public Source delivery](native-receive.md).

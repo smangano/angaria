@@ -27,6 +27,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.13 | `milestone-4-13` | Reuse validated record information. | Adopt the journal's validated record ranges for runtime lookup and reuse preflight's own prefix scan; qualify behavior and record measured improvement before further optimizations. |
 | 4.14 | `milestone-4-14` | Reuse bounded mappings while scanning history. | Replace per-record native reads/mappings with scan-local windows, retain atomic readiness and complete validation, qualify boundary/rollback behavior, and record matched measurements. |
 | 4.15 | `milestone-4-15` | Give queued local blocking operations a gate handoff. | Prevent repeated nonblocking overtaking, qualify registration/race/cleanup behavior, and measure ordinary versus loaded progress with explicit scheduling limits. |
+| 4.16 | `milestone-4-16` | Reuse bounded mappings for runtime metadata. | Share the journal window mechanism, retain fresh atomic loads and owning copies, qualify boundary/rollback behavior, and record matched measurements. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -119,6 +120,10 @@ Framework **0.4.16** introduces [scan-local mapped windows](../performance-prefi
 ## Step 4.15 Local gate handoff
 
 Framework **0.4.17** gives [announced local blocking requests preference over try-only polling](../performance-gate-handoff.md). Deterministic tests cover the free-mutex interval, a registration race, and failure/exception cleanup. The guide records the class-preference tradeoff and measured progress; FIFO, cross-process fairness, and response-time bounds remain outside the claim.
+
+## Step 4.16 Runtime metadata windows
+
+Framework **0.4.18** extends [bounded mapping reuse](../performance-runtime-windows.md) to atomic words and immutable metadata within one gate-held runtime operation. Separate readers retain owning result copies and fresh atomic loads; no mappings or decoded state are cached between operations. Boundary and rollback qualification accompany matched normal/enabled measurements.
 
 ## Qualification and completion
 
