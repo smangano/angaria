@@ -79,6 +79,14 @@ Acceptance establishes delivery obligations. Consumers acknowledge independently
 
 The default recovery policy retains records needed for unacknowledged deliveries. Exhausting the configured log capacity returns a log-full result. Native direct publication and delivery implement process-crash recovery; broader Publishing support follows milestone 6. Power-loss durability requires a separate contract.
 
+### Recorded unacknowledged delivery workstream
+
+The [recorded unacknowledged delivery plan](docs/recorded-unacknowledged-delivery-plan.md) adds a planned delivery profile alongside acknowledged recovery delivery. Every accepted message remains in the replay log; processing acknowledgments become a separate choice. Fixed fan-out uses a Publishing Queue Set and one producer-consumer Queue per destination, with incoming Queues collected by each consumer's Source Queue Set. Default all-destination acceptance and explicitly configured partial acceptance remain distinct contracts.
+
+The next performance priority is the [nanomsg comparison](docs/nanomsg-comparison-plan.md). Build and qualify a reproducible same-host IPC baseline before selecting further targeted optimizations. Lead reports with end-to-end latency to each required consumer, latency to the slowest required consumer, and verified delivered publications per second. Compare logging, acknowledgment, admission and failure guarantees explicitly.
+
+Implementation proceeds through the existing log authority and a recorded unacknowledged prototype before any decision to partition producer logs. Preserve logical commit order, accepted destination snapshots, bounded replay retention and borrowed-message lifetimes. The work intersects milestone 5 Source selection, milestone 6 Publishing fan-out and milestone 8 retention; it does not make those currently planned paths runnable. Native format, capability, configuration and public-interface changes require their own reviewed steps. Existing acknowledged delivery and its current defaults remain unchanged by this planning step.
+
 ## 1 Core architecture and policy contracts
 
 Completed through [PR #7](https://github.com/smangano/angaria/pull/7). The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divided this work into five reviewed step PRs targeting `milestone-1`.
