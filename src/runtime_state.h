@@ -87,7 +87,7 @@ namespace angaria::detail
                            mapped::JournalFaultInjector* injector = nullptr,
                            RuntimeAccessReadObserver* observer = nullptr);
     // Adopt a guard obtained by a bounded try-acquire loop. Recovery and
-    // indexing still complete before callers inspect or mutate the Session.
+    // prefix validation complete before callers inspect or mutate the Session.
     RuntimeAccess(std::shared_ptr<SessionState> session, mapped::MutationGuard guard,
                   bool requireReady = true, mapped::JournalFaultInjector* injector = nullptr,
                   RuntimeAccessReadObserver* observer = nullptr);
@@ -105,14 +105,7 @@ namespace angaria::detail
     mapped::NativeFile* _file{};
 
   private:
-    struct RecordBoundary
-    {
-      std::uint64_t _offset{};
-      mapped::RecordEnvelope _envelope;
-    };
-
-    void index_records();
-    std::vector<RecordBoundary> _recordBoundaries;
+    std::vector<mapped::JournalRecordRange> _recordBoundaries;
     RuntimeAccessReadObserver* _readObserver{};
   };
 

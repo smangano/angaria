@@ -24,6 +24,7 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.10 | `milestone-4-10` | Add a native multi-process primer application. | Independent producers/consumers exercise the real public mapped path, exact schemas, backlog, acknowledgment/redelivery, and replacement, using at most one Active Queue per Source. |
 | 4.11 | `milestone-4-11` | Measure and finish the milestone. | Record reproducible latency, throughput, and allocation/commit contention baselines; audit progress guarantees, compatibility, documentation, and the full primer before integration. |
 | 4.12 | `milestone-4-12` | Diagnose the measured performance before integration. | Split public-operation costs, count repeated work, record history/capacity/schema/stream controls, quantify observation overhead, and identify measured optimization candidates without changing transport algorithms. |
+| 4.13 | `milestone-4-13` | Reuse validated record information. | Adopt the journal's validated record ranges for runtime lookup and reuse preflight's own prefix scan; qualify behavior and record measured improvement before further optimizations. |
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -104,6 +105,10 @@ The application compiles with tests disabled. Its CTest walkthrough invokes the 
 Framework **0.4.13** adds the [measurement guide and baseline](../native-performance.md) and [completion audit](milestone-4-completion.md). A bounded C++ tool measures ordinary public buffered send/receive cycles and phased backlog, with constant four-channel geometry and total retained history across producer counts. A separate instrumented private profile observes gate acquisition, preparation, file growth, materialization, and apply boundaries. It reports physical append growth rather than claiming zero heap allocation or pure lock cost. Python retains raw reports, aggregate summaries, and TOML experiment metadata; CI checks correctness without speed thresholds.
 
 The completion review covers all eleven steps, retained native profiles and capability-before-recovery rejection, current/future API boundaries, blocking progress guarantees, full-log reserved work, and all seventeen primer lessons. It corrects stale future-tense descriptions and identifies v0 examples as legacy. This step targets staging; the milestone integration into `main` is a separate PR after this review is merged.
+
+## Step 4.13 First performance optimization
+
+Framework **0.4.15** removes redundant record reads through [validated-prefix reuse](../performance-prefix-reuse.md). The runtime adopts framing already checked by the journal; preflight reuses its own validated ranges. Snapshot and execute entry points still validate freshly. This step also records the project's equal priority for performance and correctness, with explicit risk assessment of defensive costs.
 
 ## Qualification and completion
 

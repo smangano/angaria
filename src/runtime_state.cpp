@@ -130,16 +130,17 @@ namespace angaria::detail
       : _session(checked_session(std::move(session))),
         _guard(std::move(guard)),
         _journal(runtime_value(mapped::MutationJournal::open(_session->_controller, _guard, injector))),
-        _snapshot(runtime_value(_journal.snapshot(_guard))),
         _file(runtime_value(_session->_controller->file(_guard))),
         _readObserver(observer)
   {
+    // The journal already decodes and validates every committed envelope.
+    // Adopt those owning copies instead of reading the same history again.
+    _snapshot = runtime_value(_journal.snapshot(_guard, _recordBoundaries));
     const auto flags = read_words(112, 1)[0];
     if ((flags & ~session_ready_flag) != 0 || (requireReady && flags != session_ready_flag))
     {
       runtime_fail(ErrorCode::IoError, "session.flags", "Session is incomplete or has unknown flags");
     }
-    index_records();
   }
 
   std::vector<std::uint64_t> RuntimeAccess::read_words(std::uint64_t offset, std::size_t count) const
@@ -179,58 +180,14 @@ namespace angaria::detail
     return result;
   }
 
-  void RuntimeAccess::index_records()
-  {
-    ANGARIA_DIAGNOSTIC_SCOPE(RecordIndex);
-    ANGARIA_DIAGNOSTIC_COUNT(IndexScans, 1);
-    const auto layout = mapped::make_fixed_layout(_session->_controller->configuration()._limits);
-    if (!layout || _snapshot._tail < layout->_arenaBegin ||
-        _snapshot._tail % mapped::section_alignment != 0)
-    {
-      runtime_fail(ErrorCode::IoError, "record", "Invalid committed record arena");
-    }
-    // The journal has recovered and validated this prefix. Capture its exact
-    // boundaries once while holding the gate; definition lookups then reuse
-    // the same owning envelope copies instead of rescanning preceding records.
-    for (auto offset = layout->_arenaBegin; offset < _snapshot._tail;)
-    {
-      ANGARIA_DIAGNOSTIC_COUNT(IndexedRecords, 1);
-      if (!mapped::contains_range(_snapshot._tail, offset, mapped::record_envelope_bytes))
-      {
-        runtime_fail(ErrorCode::IoError, "record", "Committed history ends inside a record envelope");
-      }
-      mapped::RecordEnvelopeBytes bytes{};
-      runtime_value(_file->read_exact(offset, std::span{bytes}.first(48)));
-      const auto readiness = read_words(offset + 48, 1)[0];
-      write_unsigned_le(bytes, 48, readiness);
-      runtime_value(_file->read_exact(offset + 56, std::span{bytes}.subspan(56)));
-      const auto envelope = runtime_value(mapped::decode_record_envelope(bytes));
-      if (envelope._readiness != 2 || envelope._generation > _snapshot._generation ||
-          envelope._totalBytes == 0 ||
-          !mapped::contains_range(_snapshot._tail, offset, envelope._totalBytes))
-      {
-        runtime_fail(ErrorCode::IoError, "record", "Reference is outside committed record history");
-      }
-      const auto body = read_bytes(offset + mapped::record_envelope_bytes,
-                                  std::min<std::uint64_t>(128, envelope._immutableBytes));
-      runtime_value(mapped::validate_journal_record(offset, envelope, body, layout->_arenaBegin));
-      _recordBoundaries.push_back(RecordBoundary{offset, envelope});
-      offset += envelope._totalBytes;
-    }
-  }
-
   const mapped::RecordEnvelope& RuntimeAccess::record_envelope(std::uint64_t reference, std::uint16_t kind) const
   {
     if (reference % mapped::section_alignment != 0)
     {
       runtime_fail(ErrorCode::IoError, "record.reference", "Invalid immutable record reference");
     }
-    const auto found = std::lower_bound(_recordBoundaries.begin(), _recordBoundaries.end(), reference,
-                                       [](const auto& candidate, std::uint64_t value)
-                                       {
-                                         return candidate._offset < value;
-                                       });
-    if (found == _recordBoundaries.end() || found->_offset != reference)
+    const auto* found = mapped::find_journal_record(_recordBoundaries, reference);
+    if (found == nullptr)
     {
       runtime_fail(ErrorCode::IoError, "record.reference", "Reference does not name a committed record boundary");
     }
