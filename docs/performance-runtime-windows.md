@@ -27,4 +27,46 @@ Private tests qualify copies and word ranges crossing window boundaries, movemen
 
 The unchanged diagnostic workload compares preserved 0.4.17 executables with fresh normal and enabled builds. Exact input/executable hashes, compiler settings, geometry, complete or budget-stop outcomes, and raw samples accompany the measurements. Normal builds supply performance comparisons; enabled counts and timings explain work. Adjacent alternating serial pairs check ordinary-call cost separately from sequential full matrices. CI records correctness and observations without timing thresholds. Small host studies do not qualify production tail latency.
 
-Measured results and exact provenance are recorded with the PR after qualification.
+The [retained evidence](../benchmarks/results/milestone-4-runtime-windows/README.md) contains **33 fresh normal-before**, **33 normal-after**, **75 enabled-after**, **30 alternating serial runs**, and **54 hosted Linux runs** (225 total). Measured after source is **`47da91cbcded7bf6c6bd160129eaccfa8de88b51`**. The preserved 0.4.17 baseline matches all 127 preceding inputs; both after builds share 128 hashes, including the new helper. The runner, compiler flags and workload controls match.
+
+![Ordinary latency and counted native work](../benchmarks/results/milestone-4-runtime-windows/runtime-windows.svg)
+
+### Ordinary performance
+
+The primary table uses five alternating sixteen-message serial runs per variant at each history H on the Apple M4. Send p50 is nearest rank within each run, then the median across runs; reduction compares those variant medians. Throughput is each complete run's messages divided by its issue/send/receive/ack window, then the median. It is not inferred from a sum of latency medians.
+
+| Preloaded history H | Send before, ms | Send after, ms | Latency reduction | Complete cycles/s before | After |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0.544 | 0.252 | 53.6% | 591.00 | 1,455.36 |
+| 32 | 0.840 | 0.300 | 64.3% | 353.49 | 1,132.91 |
+| 128 | 1.782 | 0.513 | 71.2% | 158.73 | 601.53 |
+
+At H=128, receive falls **2.901→0.592 ms** (79.6% lower), and acknowledgment **1.423→0.360 ms** (74.7% lower). Complete-cycle throughput is about **3.8×** the before value. Every paired H=128 send p50 improves by roughly **70.4–71.5%**, without discarding any pair.
+
+**ID issuance has a small observed cost at H=128:** its alternating medians rise **0.176→0.180 ms**, about 2.3%; individual paired changes range from about −1.4% to +4.2%. The initial sequential study also rises **0.174→0.180 ms**, about 3.4%. H=0/32 alternating issue medians improve instead. The shared reader adds local range/result handling to the already optimized journal scan; these small studies cannot isolate that cost from host/run variability. The accepted tradeoff is a possible small issuance cost alongside the much larger send/receive/ack benefit, with no zero-overhead claim.
+
+The initial full matrices corroborate send reductions of about **49%, 62%, and 70%** at H=0/32/128. Unrelated-Queue history, sixteen-times capacity, payload/Field controls and backlog also finish, with send reductions of about **68–71%**. All ordinary thread, independent-process and loaded-polling cases complete sixteen messages before and after. Three-idle-poller elapsed windows fall from **210–259 ms** to **44–49 ms**. The process study retains an after outlier of about 81 ms beside two 27–28 ms runs; absolute medians are not production tail guarantees or controlled platform comparisons.
+
+### Native work and remaining costs
+
+All three matching counted repetitions agree for each quoted first-send value at H=128:
+
+| Work in one public call | Before | After |
+| --- | ---: | ---: |
+| Full-prefix scans / record visits | 2 / 638 | 2 / 638 |
+| Separate runtime index scans | 0 | 0 |
+| Map attempts | 324 | 23 |
+| Native read attempts | 791 | 7 |
+| Stat attempts | 1,409 | 68 |
+| C++ allocation requests | 7,290 | 6,688 |
+| Cumulative requested bytes | 968,388 | 937,084 |
+
+First receive drops **617→26 maps**, **1,267→0 reads** and **2,303→56 stats**; acknowledgment drops **311→16**, **492→0** and **962→46**. Both still perform two scans and 642 record visits. First issuance needs **8 maps / 0 reads / 34 stats**, versus 10/9/45. Zero read counters mean no `pread` attempts were recorded, not an absence of file-backed page access. Every retained record and manifest is still checked.
+
+First-send cumulative mapped bytes decrease **2,899,360→926,408**, while issuance increases **255,496→368,336** because a reusable window covers more bytes than the old tiny request. Neither counter measures resident pages or peak memory. Allocation requests remain substantial and count cumulative C++ `new` requests rather than live allocation.
+
+Enabled H=128 send p50 is **0.515 ms None**, **0.545 ms Counts** and **0.546 ms Timings**; the initial normal build observes **0.518 ms**. Instrumentation overhead and run variability remain visible, so improvement claims use normal builds. Native helper exclusive time now accounts for roughly **22% of send** and **18% of receive** in timed runs, down from the preceding study's roughly 69%/73% observations. Those fractions come from different runs and are not themselves a speedup ratio.
+
+Both strict local Release configurations, diagnostics ON and OFF, pass **806/806** tests, including all three new tests, the original benchmark smoke, native walkthroughs and seventeen primer programs. Hosted Linux x86_64, Linux ARM64 and macOS ARM64 also pass all 806 tests for the measured code. The retained Linux matrix completes 54/54 eight-message workloads, including all six loaded cases, and independently confirms the first-send native counters with all 128 matching input hashes. Its whole-program syscall trace corroborates fewer native calls; traced time and different hardware/window sizes are not controlled ordinary-latency comparisons.
+
+History-dependent full validation and thousands of allocations now form a larger share of the remaining cost. Idle polling still spins: new timed loaded runs record about 0.20–0.37 million attempts and 0.13–0.19 CPU seconds across the three idle threads during 0.045–0.065 seconds of elapsed work. This still puts pressure on roughly three cores. The gate retains its existing class preference and scheduling limits. This step adds no cross-call cache, waiting policy, fairness guarantee or latency bound.
