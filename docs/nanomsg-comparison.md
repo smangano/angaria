@@ -28,7 +28,9 @@ cmake --build build/ipc --target angaria_ipc_comparison --parallel 3
 python3 -B test/ipc_comparison.py build/ipc/angaria_ipc_comparison
 ```
 
-The qualification script exercises both real adapters, independent payload checks, nonzero history, paced releases, invalid reports, and bounded participant cleanup. Its pass criteria are correctness and accounting, with no performance threshold.
+The qualification script exercises both real adapters, independent payload checks, nonzero history, paced releases, invalid reports, and bounded participant cleanup. It rejects acknowledgments before verification or after the data phase, and cached metrics/rates inconsistent with worker timestamps. Synthetic incomplete attempts check the whole stop interval and zero completed work. Its pass criteria are correctness and accounting, with no performance threshold.
+
+For the five native deadline-helper regressions, install GoogleTest, reconfigure with `-DBUILD_TESTING=ON`, build the additional target `angaria_ipc_comparison_tests`, and run it directly. With both targets built, `ctest --test-dir build/ipc --output-on-failure -R '^ipc_comparison_(deadlines|smoke)$'` runs both qualification entries. These private helper tests distinguish actual deadline exhaustion from late transport, payload, schedule and clock errors. GoogleTest is not required to build or run the comparison itself.
 
 ## Record matched runs
 
@@ -37,7 +39,7 @@ python3 -B benchmarks/run_ipc_comparison.py build/ipc/angaria_ipc_comparison \
   --output build/ipc-results --host-label 'describe this host'
 ```
 
-The destination must be new. Defaults are 16 measured messages, payloads of 64/256/1,024 bytes, and **H=0/32/128** prior verified messages. Angaria preload messages are acknowledged before measurement; nanomsg preload messages are drained without per-message return acknowledgments. H is retained log history for Angaria, and prior traffic only for nanomsg. Each of the nine cells uses five alternating ABBA/BAAB blocks, or ten runs per profile: **180 attempts** overall. No timing-based outlier removal is applied. An infrastructure/protocol failure stops execution and retains its raw output; a work-budget stop remains an incomplete observed prefix.
+The destination must be new. Defaults are 16 measured messages, payloads of 64/256/1,024 bytes, and **H=0/32/128** prior verified messages. Angaria preload messages are acknowledged before measurement; nanomsg preload messages are drained without per-message return acknowledgments. H is retained log history for Angaria, and prior traffic only for nanomsg. Each of the nine cells uses five alternating ABBA/BAAB blocks, or ten runs per profile: **180 attempts** overall. No timing-based outlier removal is applied. An infrastructure, transport or validation failure stops execution and retains its raw output, even if it occurs after the deadline. Only an explicit deadline-exhaustion outcome, or otherwise successful work finishing late, is a work-budget stop.
 
 `--smoke` uses four short attempts. `--messages`, `--histories`, `--payload-bytes`, `--blocks`, `--budget-ms`, and `--timeout` bound experiments. `--interval-ns` specifies an offered schedule. Its default zero makes all messages due at T0, a finite burst. Positive intervals retain the original release time when a producer falls behind. This prevents late messages from disappearing from scheduled latency. The last release must precede the phase deadline.
 
@@ -57,7 +59,7 @@ Each worker names `CLOCK_MONOTONIC`, reports its resolution and the minimum/medi
 
 These short fresh cohorts measure bounded completed work, **not sustained capacity**. Report startup jitter alongside throughput. A default cell has 160 delivery observations per profile; p99 and p99.9 are marked insufficient. The runner requires at least 10,000 and 1,000,000 observations respectively within an identical complete cell before reporting those tails. Summaries lead with the median of each run's nearest-rank median, and retain the range across runs.
 
-`reports.jsonl` retains each attempt, raw per-message timings, clock probes, counts, and resource use. `runs.csv` lists all outcomes. `summary.csv` aggregates only matched cells and separates incomplete populations. Each attempt directory preserves command arguments, control events, stdout, stderr, and its report, including failures. `manifest.toml` records source/executable hashes, dependency identity and runtime/header ABI, C/C++ toolchains and flags, host, command, and limits. Temporary Session files and IPC endpoints are removed after each attempt.
+`reports.jsonl` retains each attempt, raw per-message timings, clock probes, counts, and resource use. `runs.csv` lists all outcomes. `summary.csv` aggregates only matched cells and separates incomplete populations. Each attempt directory preserves command arguments, control events, stdout, stderr, and its report, including failures. `manifest.toml` records source/executable hashes, dependency identity and runtime/header ABI, C/C++ toolchains and flags, host, command, and limits. Incomplete verified/acknowledged rates use T0 through the later participant data-phase stop, including any stall after the last completed message. Zero completed work contributes a zero-rate observation. Last-verification/acknowledgment prefix rates remain separately named diagnostics. Complete-run rates retain their original last-completion boundaries. The plotter reconstructs all counts, timing samples and rates and rejects mismatched cached aggregates before drawing figures. Temporary Session files and IPC endpoints are removed after each attempt.
 
 ## Request hosted qualification
 

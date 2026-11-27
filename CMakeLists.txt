@@ -210,6 +210,11 @@ if(BUILD_TESTING)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 
   if(ANGARIA_BUILD_IPC_COMPARISON)
+    add_executable(angaria_ipc_comparison_tests test/test_ipc_comparison_deadlines.cpp)
+    target_include_directories(angaria_ipc_comparison_tests PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(angaria_ipc_comparison_tests PRIVATE angaria GTest::gtest_main)
+    add_test(NAME ipc_comparison_deadlines COMMAND angaria_ipc_comparison_tests)
     add_test(NAME ipc_comparison_smoke
       COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/ipc_comparison.py"
               "$<TARGET_FILE:angaria_ipc_comparison>")

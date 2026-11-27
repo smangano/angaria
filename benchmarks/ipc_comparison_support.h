@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -252,15 +253,32 @@ namespace angaria::benchmarks::ipc
     return checked_add(startNs, checked_multiply(budgetMs, nanoseconds_per_millisecond));
   }
 
+  // A work budget is an expected incomplete outcome. Transport, payload and
+  // other failures retain their own cause even if they happen to finish late.
+  class DeadlineExceeded final : public std::exception
+  {
+  public:
+    const char* what() const noexcept override
+    {
+      return "IPC benchmark deadline exceeded";
+    }
+  };
+
   inline void check_deadline(std::uint64_t deadlineNs)
   {
-    require(monotonic_ns() < deadlineNs, "IPC benchmark deadline exceeded");
+    if (monotonic_ns() >= deadlineNs)
+    {
+      throw DeadlineExceeded{};
+    }
   }
 
   inline int remaining_ms(std::uint64_t deadlineNs)
   {
     const auto now = monotonic_ns();
-    require(now < deadlineNs, "IPC benchmark deadline exceeded");
+    if (now >= deadlineNs)
+    {
+      throw DeadlineExceeded{};
+    }
     const auto remaining = deadlineNs - now;
     const auto milliseconds = remaining / nanoseconds_per_millisecond +
                               (remaining % nanoseconds_per_millisecond != 0 ? 1 : 0);
@@ -274,7 +292,10 @@ namespace angaria::benchmarks::ipc
     while (true)
     {
       const auto now = monotonic_ns();
-      require(now < deadlineNs, "IPC benchmark deadline exceeded");
+      if (now >= deadlineNs)
+      {
+        throw DeadlineExceeded{};
+      }
       if (now >= targetNs)
       {
         return now;

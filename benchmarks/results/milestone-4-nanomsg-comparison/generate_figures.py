@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from run_ipc_comparison import common_report, validate_rows
+from run_ipc_comparison import common_report, validate_cached_summary
 HERE = Path(__file__).resolve().parent
 LABELS = {'angaria': 'Angaria 0.4.30: recorded, acknowledged',
           'nanomsg': 'libnanomsg 1.3.0 IPC: unrecorded, unacknowledged'}
@@ -30,10 +30,11 @@ def load(directory):
         workers = report['worker_reports']
         for role, worker in workers.items():
             common_report(worker, role, report['profile'], report, '0.4.30')
-        verified = validate_rows(workers['producer'], workers['consumer'], report['profile'],
-                                 report, report['control_timing']['t0_ns'])
+        verified = validate_cached_summary(report)
         assert verified['delivered'] == verified['accepted'] == report['messages'] == 16
         assert verified['pending'] == 0
+        # Reject stale cached summaries before using reconstructed measurements.
+        report.update(verified)
     return reports
 
 

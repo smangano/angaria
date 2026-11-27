@@ -305,8 +305,10 @@ def validate_rows(producer, consumer, profile, case, t0):
     for row in consumer["rows"]:
         sequence = integer(row.get("sequence"), "consumer sequence", history + 1)
         check(sequence <= history + count, "Out-of-range consumer sequence")
+        ack_start, ack_end = (integer(row.get(key), key) for key in ("ack_start_ns", "ack_end_ns"))
         if not integer(row.get("verified_ns"), "verification timestamp"):
             check(consumer.get("status") != "complete", "Successful consumer retained an unverified row")
+            check(ack_start == ack_end == 0, "Unverified delivery reports an acknowledgment")
             if row.get("receive_start_ns"):
                 sample("receive_incomplete_api_total_ns", integer(row.get("receive_api_ns"), "incomplete receive API time"))
                 sample("receive_incomplete_wait_wall_ns", consumer["data_end_ns"] - row["receive_start_ns"])
@@ -333,9 +335,9 @@ def validate_rows(producer, consumer, profile, case, t0):
         sample("verification_ns", verified - arrived)
         sample("logical_start_to_delivery_ns", arrived - row["logical_start_ns"])
         sample("scheduled_to_delivery_ns", arrived - row["scheduled_ns"])
-        ack_start, ack_end = (integer(row.get(key), key) for key in ("ack_start_ns", "ack_end_ns"))
         if profile == "angaria" and ack_end:
-            check(verified <= ack_start <= ack_end, "Acknowledgment precedes verification")
+            check(verified <= ack_start <= ack_end <= consumer["data_end_ns"],
+                  "Acknowledgment escapes the verified consumer data phase")
             sample("acknowledge_api_ns", ack_end - ack_start)
         else:
             check(ack_start == ack_end == 0, "Unacknowledged profile reports an acknowledgment")
@@ -370,6 +372,63 @@ def validate_rows(producer, consumer, profile, case, t0):
     return dict(accepted=len(accepted), delivered=len(received), acknowledged=acknowledgments,
                 pending=len(accepted) - len(received), metrics=metrics,
                 status="complete" if complete else "budget_exceeded")
+
+
+def derive_result(producer, consumer, profile, case, t0):
+    """Reconstruct counts, timings and rates from validated participant rows.
+
+    An incomplete attempt is observed until both data phases stop, including
+    time spent stalled after the last delivery. Prefix rates remain separate
+    diagnostics and never substitute for completed work over that interval.
+    """
+    result = validate_rows(producer, consumer, profile, case, t0)
+    result["rates"] = {}
+    rows = [row for row in consumer["rows"] if row["verified_ns"] > 0]
+    accepted_rows = [row for row in producer["rows"] if row["accepted"]]
+    complete = result["status"] == "complete"
+    if not complete:
+        stopped = max(producer["data_end_ns"], consumer["data_end_ns"]) - t0
+        check(stopped > 0, "Nonpositive incomplete-attempt stop interval")
+        result["cohort_stop_ns"] = stopped
+        result["rates"]["bounded_cohort_verified_per_second"] = result["delivered"] * 1e9 / stopped
+        if profile == "angaria":
+            result["rates"]["bounded_cohort_acknowledged_per_second"] = result["acknowledged"] * 1e9 / stopped
+    if rows:
+        check(bool(accepted_rows), "Verified work has no accepted producer interval")
+        last_verified = max(row["verified_ns"] for row in rows)
+        first_send = min(row["send_start_ns"] for row in accepted_rows)
+        cohort_ns, active_ns = last_verified - t0, last_verified - first_send
+        check(cohort_ns > 0 and active_ns > 0, "Nonpositive common cohort interval")
+        if complete:
+            result["cohort_verified_ns"], result["active_verified_ns"] = cohort_ns, active_ns
+            result["rates"]["bounded_cohort_verified_per_second"] = result["delivered"] * 1e9 / cohort_ns
+            result["rates"]["first_send_to_last_verified_per_second"] = result["delivered"] * 1e9 / active_ns
+        else:
+            result["verified_prefix_ns"], result["active_verified_prefix_ns"] = cohort_ns, active_ns
+            result["rates"]["verified_prefix_per_second"] = result["delivered"] * 1e9 / cohort_ns
+            result["rates"]["first_send_to_last_verified_prefix_per_second"] = result["delivered"] * 1e9 / active_ns
+        if profile == "angaria" and result["acknowledged"]:
+            ack_ns = max(row["ack_end_ns"] for row in rows) - t0
+            check(ack_ns > 0, "Nonpositive acknowledged prefix interval")
+            name = "bounded_cohort_acknowledged_per_second" if complete else "acknowledged_prefix_per_second"
+            result["rates"][name] = result["acknowledged"] * 1e9 / ack_ns
+    return result
+
+
+def validate_cached_summary(report):
+    """Reject cached aggregates that disagree with their authoritative rows."""
+    workers = report["worker_reports"]
+    derived = derive_result(workers["producer"], workers["consumer"], report["profile"], report,
+                            report["control_timing"]["t0_ns"])
+    fields = ("accepted", "delivered", "acknowledged", "pending", "status", "metrics", "rates",
+              "cohort_verified_ns", "active_verified_ns", "cohort_stop_ns", "verified_prefix_ns",
+              "active_verified_prefix_ns")
+    for key in fields:
+        if key in derived:
+            check(key in report and report[key] == derived[key], f"Cached {key} differs from reconstructed rows")
+        else:
+            check(key not in report, f"Unexpected cached {key} for this completion boundary")
+    return derived
 
 
 def children_cpu_ns():
@@ -452,23 +511,10 @@ def attempt(executable, profile, case, directory, options, version):
                 check(report["cpu_start_ns"] <= active_cpu <= report["cpu_end_ns"], "Active/drain process CPU intervals changed")
                 check(sent_start[role][0] <= integer(report.get("cpu_start_time_ns"), "CPU interval start") <= report["data_start_ns"],
                       "Participant CPU interval does not include its START-to-T0 wait")
-            result.update(validate_rows(producer, consumer, profile, case, t0))
+            result.update(derive_result(producer, consumer, profile, case, t0))
             result["control_timing"] = dict(t0_ns=t0, start_sent=sent_start, done_received_ns={role: value[1] for role, value in done.items()},
                                              finish_sent=finish_sent, coordinator_barrier_ns=done_received - min(value[0] for value in sent_start.values()))
             result["start_jitter_ns"] = {role: report["data_start_ns"] - t0 for role, report in result["worker_reports"].items()}
-            rows = [row for row in consumer["rows"] if row["verified_ns"] > 0]
-            accepted_rows = [row for row in producer["rows"] if row["accepted"]]
-            if rows and accepted_rows:
-                last_verified = max(row["verified_ns"] for row in rows)
-                first_send = min(row["send_start_ns"] for row in accepted_rows)
-                cohort_ns, active_ns = last_verified - t0, last_verified - first_send
-                check(cohort_ns > 0 and active_ns > 0, "Nonpositive common cohort interval")
-                result["cohort_verified_ns"], result["active_verified_ns"] = cohort_ns, active_ns
-                result["rates"] = dict(bounded_cohort_verified_per_second=len(rows) * 1e9 / cohort_ns,
-                                       first_send_to_last_verified_per_second=len(rows) * 1e9 / active_ns)
-                if profile == "angaria" and result["acknowledged"]:
-                    ack_end = max(row["ack_end_ns"] for row in rows)
-                    result["rates"]["bounded_cohort_acknowledged_per_second"] = result["acknowledged"] * 1e9 / (ack_end - t0)
             result["resources"] = dict(coordinator_phase_cpu_ns=coordinator_phase_cpu,
                                         worker_process_phase_cpu_ns={role: report["cpu_end_ns"] - report["cpu_start_ns"] for role, report in result["worker_reports"].items()},
                                         worker_peak_rss_bytes={role: report.get("peak_rss_bytes") for role, report in result["worker_reports"].items()},
@@ -500,7 +546,7 @@ def write_artifacts(output, reports, manifest, sources, settings, cases):
     with (output / "reports.jsonl").open("w", encoding="utf-8") as stream:
         for report in reports:
             stream.write(json.dumps(report, sort_keys=True) + "\n")
-    columns = ("attempt", "profile", "block", "position", "order") + DIMENSIONS + ("status", "accepted", "delivered", "acknowledged", "pending", "cohort_verified_ns", "active_verified_ns", "coordinator_attempt_cpu_ns", "children_lifetime_cpu_ns", "failure", "artifact_directory")
+    columns = ("attempt", "profile", "block", "position", "order") + DIMENSIONS + ("status", "accepted", "delivered", "acknowledged", "pending", "cohort_verified_ns", "active_verified_ns", "cohort_stop_ns", "verified_prefix_ns", "active_verified_prefix_ns", "coordinator_attempt_cpu_ns", "children_lifetime_cpu_ns", "failure", "artifact_directory")
     with (output / "runs.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=columns, extrasaction="ignore")
         writer.writeheader()

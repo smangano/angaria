@@ -97,6 +97,7 @@ def run_cohort(executable, output, arguments, messages, history, payload, interv
         for role in ("setup", "producer", "consumer"):
             require((directory / (role + ".stdout")).is_file() and (directory / (role + ".stderr")).is_file(), "Raw stream missing")
         require(report["rates"]["bounded_cohort_verified_per_second"] == messages * 1e9 / report["cohort_verified_ns"], "Wrong verified denominator")
+        ipc.validate_cached_summary(report)
     with (output / "runs.csv").open(newline="") as stream:
         require(len(list(csv.DictReader(stream))) == 4, "CSV dropped completed attempts")
     with (output / "summary.csv").open(newline="") as stream:
@@ -122,6 +123,8 @@ def tamper_checks(reports):
         damaged(0, "scheduled_ns", producer["rows"][0]["scheduled_ns"] + 1)
         damaged(1, "receive_ns", consumer["rows"][0]["logical_start_ns"] - 1)
         damaged(1, "ack_start_ns", consumer["rows"][0]["verified_ns"] - 1 if profile == "angaria" else 1)
+        if profile == "angaria":
+            damaged(1, "ack_end_ns", consumer["data_end_ns"] + 1)
         for key, value in (("framework_version", "wrong"), ("nanomsg_version", "1.2.3"), ("pid", 0),
                            ("nanomsg_runtime_abi_current", producer["nanomsg_header_abi_current"] + 1),
                            ("clock_pair_median_ns", float("nan"))):
@@ -131,6 +134,8 @@ def tamper_checks(reports):
         pair = copy.deepcopy((producer, consumer))
         pair[0]["status"] = pair[1]["status"] = "budget_exceeded"
         pair[1]["rows"][-1]["verified_ns"] = 0
+        pair[1]["rows"][-1]["ack_start_ns"] = 0
+        pair[1]["rows"][-1]["ack_end_ns"] = 0
         pair[1]["verified"] -= 1
         pair[1]["completed"] -= 1
         if profile == "angaria":
@@ -138,6 +143,80 @@ def tamper_checks(reports):
         prefix = ipc.validate_rows(*pair, profile, case, t0)
         require(prefix["status"] == "budget_exceeded" and prefix["delivered"] == case["messages"] - 1 and prefix["pending"] == 1,
                 "Incomplete row was counted as delivered")
+        # An unverified row cannot have reached either acknowledgment boundary.
+        for key in ("ack_start_ns", "ack_end_ns"):
+            corrupted = copy.deepcopy(pair)
+            corrupted[1]["rows"][-1][key] = consumer["data_end_ns"]
+            rejected(lambda: ipc.validate_rows(*corrupted, profile, case, t0))
+        # A transport/integrity error stays a failure even if it finishes late.
+        corrupted = copy.deepcopy(pair)
+        corrupted[1].update(status="error", data_end_ns=t0 + 10_000_000_000)
+        rejected(lambda: ipc.derive_result(*corrupted, profile, case, t0))
+
+
+def summary_checks(reports, directory):
+    """Golden stop-duration rates and corrupt caches exercise evidence handling."""
+    retained = []
+    for original in reports[:2]:
+        ipc.validate_cached_summary(original)
+        # Valid worker rows must not excuse a stale/corrupt cached plot value.
+        for field in ("accepted", "delivered", "acknowledged", "pending", "cohort_verified_ns", "active_verified_ns"):
+            corrupted = copy.deepcopy(original)
+            corrupted[field] += 1
+            rejected(lambda: ipc.validate_cached_summary(corrupted))
+        corrupted = copy.deepcopy(original)
+        corrupted["metrics"]["logical_start_to_delivery_ns"][0] += 1
+        rejected(lambda: ipc.validate_cached_summary(corrupted))
+        corrupted = copy.deepcopy(original)
+        corrupted["rates"]["bounded_cohort_verified_per_second"] *= 2
+        rejected(lambda: ipc.validate_cached_summary(corrupted))
+        if original["profile"] == "angaria":
+            corrupted = copy.deepcopy(original)
+            corrupted["rates"]["bounded_cohort_acknowledged_per_second"] *= 2
+            rejected(lambda: ipc.validate_cached_summary(corrupted))
+
+        profile = original["profile"]
+        t0 = original["control_timing"]["t0_ns"]
+        case = {key: original[key] for key in ipc.DIMENSIONS}
+        producer, consumer = copy.deepcopy(tuple(original["worker_reports"][role] for role in ipc.ROLES))
+        # One delivery followed by a ten-second stall is 0.1/s, regardless of
+        # how early that first message arrived. The stalled suffix counts.
+        consumer.update(status="budget_exceeded", data_end_ns=t0 + 10_000_000_000,
+                        rows=consumer["rows"][:1], verified=1, completed=1,
+                        acknowledged=1 if profile == "angaria" else 0)
+        derived = ipc.derive_result(producer, consumer, profile, case, t0)
+        require(derived["cohort_stop_ns"] == 10_000_000_000 and
+                derived["rates"]["bounded_cohort_verified_per_second"] == 0.1,
+                "Incomplete rate dropped time spent stalled")
+        require("verified_prefix_per_second" in derived["rates"] and
+                "first_send_to_last_verified_per_second" not in derived["rates"],
+                "Incomplete prefix was presented as complete throughput")
+        if profile == "angaria":
+            require(derived["rates"]["bounded_cohort_acknowledged_per_second"] == 0.1,
+                    "Acknowledged rate dropped the stalled suffix")
+        retained.append(dict(case, profile=profile, **derived))
+
+        # Zero completed work must produce a zero-rate summary observation.
+        producer.update(status="budget_exceeded", data_end_ns=t0 + 10_000_000_000, rows=[], accepted=0)
+        consumer.update(rows=[], verified=0, completed=0, acknowledged=0)
+        derived = ipc.derive_result(producer, consumer, profile, case, t0)
+        require(derived["rates"]["bounded_cohort_verified_per_second"] == 0 and
+                "verified_prefix_per_second" not in derived["rates"], "Zero delivery disappeared or invented a prefix")
+        if profile == "angaria":
+            require(derived["rates"]["bounded_cohort_acknowledged_per_second"] == 0,
+                    "Zero acknowledgments disappeared")
+        retained.append(dict(case, profile=profile, **derived))
+    directory.mkdir()
+    ipc.write_artifacts(directory, retained, {}, {}, {}, [])
+    with (directory / "summary.csv").open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    verified = [row for row in rows if row["metric"] == "bounded_cohort_verified_per_second"]
+    require(len(verified) == 2 and all(row["runs"] == row["samples"] == "2" and
+                                    float(row["min_run_stat"]) == 0 and float(row["max_run_stat"]) == 0.1
+                                    for row in verified), "Incomplete summary omitted zero-work attempts")
+    acknowledged = [row for row in rows if row["metric"] == "bounded_cohort_acknowledged_per_second"]
+    require(len(acknowledged) == 1 and acknowledged[0]["runs"] == "2" and
+            float(acknowledged[0]["min_run_stat"]) == 0, "Acknowledgment summary omitted zero work")
 
 
 def cleanup_check(directory):
@@ -172,6 +251,7 @@ def main():
         run_cohort(executable, output / "history", ["--blocks", "1", "--messages", "3", "--histories", "2",
                                                   "--payload-bytes", "1024", "--interval-ns", "1000000"], 3, 2, 1024, 1000000)
         tamper_checks(reports)
+        summary_checks(reports, output / "incomplete-summary")
         cleanup_check(output / "timeout")
         for index, arguments in enumerate((["--blocks", "0"], ["--messages", "129"],
                                             ["--messages", "2", "--interval-ns", "1000000", "--budget-ms", "1"])):

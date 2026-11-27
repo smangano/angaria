@@ -673,10 +673,19 @@ namespace
           }
         }
       }
+      catch (const ipc::DeadlineExceeded& error)
+      {
+        _error = error.what();
+        _status = "budget_exceeded";
+        if (_dataStart == 0)
+        {
+          _dataStart = ipc::monotonic_ns();
+        }
+      }
       catch (...)
       {
         _error = current_error();
-        _status = ipc::monotonic_ns() >= deadline ? "budget_exceeded" : "error";
+        _status = "error";
         if (_dataStart == 0)
         {
           _dataStart = ipc::monotonic_ns();

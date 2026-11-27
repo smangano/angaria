@@ -30,17 +30,19 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes cmake g++ libboost-dev python3
+          sudo apt-get install --yes cmake g++ libboost-dev libgtest-dev python3
       - name: Configure ordinary comparison
         run: >-
           cmake -S . -B build/ipc -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g
-          -DBUILD_TESTING=OFF -DANGARIA_BUILD_IPC_COMPARISON=ON
+          -DBUILD_TESTING=ON -DANGARIA_BUILD_IPC_COMPARISON=ON
           -DANGARIA_ENABLE_DIAGNOSTICS=OFF -DANGARIA_ENABLE_CACHEGRIND=OFF
       - name: Build both comparison profiles
-        run: cmake --build build/ipc --target angaria_ipc_comparison --parallel 3
+        run: cmake --build build/ipc --target angaria_ipc_comparison angaria_ipc_comparison_tests --parallel 3
       - name: Qualify the runner and adapters
-        run: python3 -B test/ipc_comparison.py build/ipc/angaria_ipc_comparison
+        run: |
+          build/ipc/angaria_ipc_comparison_tests
+          python3 -B test/ipc_comparison.py build/ipc/angaria_ipc_comparison
       - name: Record matched bounded cohorts
         id: measurements
         env:
