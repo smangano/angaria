@@ -15,6 +15,10 @@ find_package(Threads REQUIRED)
 
 # Research instrumentation is compiled out of ordinary builds.
 option(ANGARIA_ENABLE_DIAGNOSTICS "Enable private transport performance instrumentation" OFF)
+option(ANGARIA_ENABLE_CACHEGRIND "Enable benchmark-only Cachegrind region requests" OFF)
+if(ANGARIA_ENABLE_CACHEGRIND AND ANGARIA_ENABLE_DIAGNOSTICS)
+  message(FATAL_ERROR "Cachegrind profiling requires ANGARIA_ENABLE_DIAGNOSTICS=OFF")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -83,6 +87,9 @@ if(ANGARIA_ENABLE_DIAGNOSTICS)
 endif()
 
 option(ANGARIA_BUILD_BENCHMARKS "Build native transport measurement tools" ON)
+if(ANGARIA_ENABLE_CACHEGRIND AND NOT ANGARIA_BUILD_BENCHMARKS)
+  message(FATAL_ERROR "ANGARIA_ENABLE_CACHEGRIND requires ANGARIA_BUILD_BENCHMARKS=ON")
+endif()
 if(ANGARIA_BUILD_BENCHMARKS)
   add_executable(angaria_transport_benchmark benchmarks/native_transport.cpp)
   target_include_directories(angaria_transport_benchmark PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -92,6 +99,37 @@ if(ANGARIA_BUILD_BENCHMARKS)
   target_link_libraries(angaria_transport_diagnostics PRIVATE angaria)
   if(ANGARIA_ENABLE_DIAGNOSTICS)
     target_compile_definitions(angaria_transport_diagnostics PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+  endif()
+  if(ANGARIA_ENABLE_CACHEGRIND)
+    find_path(ANGARIA_VALGRIND_INCLUDE_DIR NAMES valgrind/cachegrind.h REQUIRED)
+    include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state(RESET)
+    set(CMAKE_REQUIRED_INCLUDES "${ANGARIA_VALGRIND_INCLUDE_DIR}")
+    check_cxx_source_compiles([[
+      #include <valgrind/cachegrind.h>
+      #if !defined(__VALGRIND_MAJOR__) || !defined(__VALGRIND_MINOR__)
+      #error Valgrind header version is unavailable
+      #endif
+      #if __VALGRIND_MAJOR__ < 3 || (__VALGRIND_MAJOR__ == 3 && __VALGRIND_MINOR__ < 22)
+      #error Cachegrind region requests require Valgrind 3.22 or newer
+      #endif
+      #if !defined(CACHEGRIND_START_INSTRUMENTATION) || !defined(CACHEGRIND_STOP_INSTRUMENTATION)
+      #error Cachegrind start and stop requests are unavailable
+      #endif
+      int main()
+      {
+        CACHEGRIND_START_INSTRUMENTATION;
+        CACHEGRIND_STOP_INSTRUMENTATION;
+        return 0;
+      }
+    ]] ANGARIA_CACHEGRIND_CLIENT_REQUESTS)
+    cmake_pop_check_state()
+    if(NOT ANGARIA_CACHEGRIND_CLIENT_REQUESTS)
+      message(FATAL_ERROR "Cachegrind profiling requires working Valgrind 3.22+ start/stop client requests")
+    endif()
+    target_include_directories(angaria_transport_diagnostics SYSTEM PRIVATE "${ANGARIA_VALGRIND_INCLUDE_DIR}")
+    target_compile_definitions(angaria_transport_diagnostics PRIVATE ANGARIA_ENABLE_CACHEGRIND=1)
   endif()
 endif()
 
