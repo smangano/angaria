@@ -1,0 +1,41 @@
+# Observed execution requests; not an estimate of a permission-profile penalty.
+[setup]
+execution_request = "require_escalated"
+work = "Git/worktree setup and copying preserved binaries only; measurements were separate commands."
+
+[enabled]
+populations = ["macos-arm64-before-enabled", "macos-arm64-after-enabled"]
+execution_request = "use_default"
+order = "Sequential before, rebuild/test, after; attribution rather than headline timing."
+
+[initial_alternating]
+populations = ["alternating/before-normal", "alternating/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 15
+repetitions_per_history = 5
+
+[matched_controls]
+populations = ["matched-controls/before-normal", "matched-controls/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 33
+cases = 11
+repetitions = 3
+
+[confirmation]
+populations = ["confirmation/before-normal", "confirmation/after-normal"]
+execution_request = "use_default"
+coordinator = "One shared coordinator launches both variants with matching settings."
+pairs = 60
+repetitions_per_history = 20
+reason = "Fixed before launch to investigate mixed initial cycle results; original observations remain."
+
+[failed_launch]
+populations = ["failed-confirmation-version-check/before-normal", "failed-confirmation-version-check/after-normal"]
+execution_request = "use_default"
+timing_use = "Excluded: wrong older after executable rejected by version validator on first pair."
+
+[linux_ci]
+population = "linux-x86_64-after"
+execution_request = "GitHub-hosted runner, distinct from the local execution profile."
