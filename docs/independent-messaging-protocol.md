@@ -217,7 +217,9 @@ Live message-log inspection can read acquired immutable prefixes while messaging
 
 ## 11. Required evidence and next implementation boundary
 
-Step 2 implements reviewed codecs and independent byte fixtures, not the entire runtime. Subsequent append, delivery, recovery and acknowledgment PRs must qualify their own boundaries as they become executable. Before public replacement, demonstrate:
+Step 2 implements reviewed codecs and independent byte fixtures, not the entire runtime. Subsequent append, delivery, recovery and acknowledgment PRs must qualify their own boundaries as they become executable.
+
+Every implementation step includes and runs either a focused performance unit test or a full matched benchmark against nanomsg, selected for its scope and reported in that PR. For example, codecs measure bounded encode/decode cost, producer append measures commit latency/throughput across retained-history sizes, and Source progress measures issue/acknowledge/release cost. Once a changed messaging path is runnable, use matched end-to-end latency and verified throughput comparisons for material path/policy changes. Retain baselines and results, state the expected direction, and investigate unexpected regressions before integration. This design-only step defines the checks; it adds no runtime path or speedup claim. The consolidated pre-admission evidence must also include:
 
 - Native atomic/profile qualification on Linux x86_64, Linux ARM64 and macOS ARM64; macOS x86_64 by request. Incompatible version/profile/policy rejection precedes mutable access.
 - Real termination before/after the committed tail; live pause after commit; late-descriptor/credit races; multiple wraps; full byte/count/credit limits; same-ID retry conflicts and uncertain-result recovery.
