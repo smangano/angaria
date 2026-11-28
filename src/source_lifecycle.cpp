@@ -59,9 +59,11 @@ namespace angaria::detail
   SourceQueueSetState::~SourceQueueSetState()
   {
     (void)close_source(this);
-    // A failed last-handle close ends its borrow and releases native ownership.
-    // Remove the local reservation even when a Thread handle is destroyed on
-    // another thread: no live Source remains to justify blocking its owner.
+    // Explicit foreign-thread close rejects without changing a Thread Source.
+    // Final same-process destruction instead relinquishes its reservation and
+    // native ownership; the consumer member may release its selected pin, but
+    // never acknowledges processing. The next owner can recover/redeliver it.
+    // No live Source remains to justify blocking its owner with a reservation.
     // A fork child must still leave its parent's local bookkeeping untouched.
     if (_registered && _ownerPid == static_cast<std::uint64_t>(::getpid()))
     {

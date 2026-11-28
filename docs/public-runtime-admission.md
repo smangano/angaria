@@ -37,7 +37,7 @@ The Session's `max_log_bytes` bounds administrative Registry/journal storage. `p
 
 ## Receiving and processing progress
 
-An acknowledged Source returns `Delivery`, with `_message` and an exact `_token`. Repeated receive keeps its pin; `acknowledge(token)` commits processing completion, while `release(token)` permits redelivery with a fresh token. Close releases an outstanding pin. Old tokens fail after release, successful close/reopen, or Task replacement. A failed close keeps the live handle available for retry; recovery of selected progress remains consumer-owned.
+An acknowledged Source returns `Delivery`, with `_message` and an exact `_token`. Repeated receive keeps its pin; `acknowledge(token)` commits processing completion, while `release(token)` permits redelivery with a fresh token. Close releases an outstanding pin. Old tokens fail after release, successful close/reopen, or Task replacement. A failed close keeps the live handle available for retry; recovery of selected progress remains consumer-owned. Explicit calls on a Thread Source from another thread reject without changing its pin. Final-handle destruction within the owning process may release that pin and relinquishes its local reservation and native ownership, even on another thread; it never acknowledges processing, so the next authoritative opener can recover and redeliver the message.
 
 An acknowledgment-free Source returns `MessageView`. The next receive ends the preceding borrow, including an empty attempt. Replacement/reopening can deliver an unacknowledged message again. Both receive forms expose the same `MessageHeader`; `copy_message()` owns its bytes and preserves the complete observed header and exact decoding context after handles close.
 

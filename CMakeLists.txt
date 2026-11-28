@@ -210,6 +210,9 @@ if(BUILD_TESTING)
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_end_to_end_validation.py")
   add_test(NAME end_to_end_coordinator
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_end_to_end_coordinator.py")
+  add_test(NAME public_runtime_controls_validation
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_public_runtime_controls.py")
+  set_tests_properties(public_runtime_controls_validation PROPERTIES TIMEOUT 20)
 
   # Isolate allocation replacement hooks from the ordinary correctness suite.
   add_executable(angaria_producer_log_performance test/test_producer_log_performance.cpp)
