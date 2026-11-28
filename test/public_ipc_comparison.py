@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,15 @@ def main():
         directory.mkdir(parents=True, exist_ok=False)
     succeeded = False
     try:
+        # Check the same build/provenance route as full collection, without
+        # requiring a committed source tree during ordinary developer tests.
+        # In particular, common metadata must not require retired drivers.
+        _, build = coordinator.build_snapshot(options.executable.resolve(), directory)
+        host, sources, settings = coordinator.ipc.comparison_metadata(options.executable.resolve(),
+            SimpleNamespace(host_label="public IPC correctness smoke", smoke=True,
+                            timeout=30, repetitions=1, angaria_profile="public-recorded"))
+        coordinator.write_json(directory / "preflight.json",
+                               dict(build=build, host=host, source_sha256=sources, settings=settings))
         cases, attempts = coordinator.plan(True, "public")
         results = []
         for request in attempts:
