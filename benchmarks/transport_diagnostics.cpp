@@ -1,4 +1,5 @@
 #include "transport_support.h"
+#include "diagnostic_totals.h"
 
 #include "angaria/detail/checked_arithmetic.h"
 #include "performance_diagnostics.h"
@@ -340,45 +341,7 @@ namespace
     std::size_t _actor{};
   };
 
-  struct IdleSummary
-  {
-    void add(const diagnostics::Sample& sample)
-    {
-      const bool first = _polls == 0;
-      const auto append = [&](std::uint64_t& target, std::uint64_t amount)
-      {
-        const auto added = detail::checked_add(target, amount);
-        if (added)
-        {
-          target = *added;
-        }
-        else
-        {
-          _sample._overflow = true;
-          _sample._valid = false;
-        }
-      };
-      append(_polls, 1);
-      append(_sample._wallNs, sample._wallNs);
-      append(_sample._cpuNs, sample._cpuNs);
-      _sample._cpuAvailable = first ? sample._cpuAvailable : _sample._cpuAvailable && sample._cpuAvailable;
-      _sample._valid = _sample._valid && sample._valid;
-      _sample._overflow = _sample._overflow || sample._overflow;
-      for (std::size_t index = 0; index < diagnostics::phase_count; ++index)
-      {
-        append(_sample._phases[index]._calls, sample._phases[index]._calls);
-        append(_sample._phases[index]._inclusiveNs, sample._phases[index]._inclusiveNs);
-        append(_sample._phases[index]._exclusiveNs, sample._phases[index]._exclusiveNs);
-      }
-      for (std::size_t index = 0; index < diagnostics::counter_count; ++index)
-      {
-        append(_sample._counters[index], sample._counters[index]);
-      }
-    }
-
-    std::uint64_t _polls{};
-    diagnostics::Sample _sample;
-  };
+  using IdleSummary = DiagnosticTotals;
 
   struct Workload
   {
@@ -1171,9 +1134,9 @@ namespace
       }
       const auto& summary = idleSummaries[index];
       const auto captured = idle[index]._used;
-      output << "{\"actor\":" << index + 2 << ",\"polls\":" << summary._polls
-             << ",\"captured_samples\":" << captured << ",\"unrecorded_samples\":" << summary._polls - captured
-             << ",\"raw_truncated\":" << (summary._polls > captured ? "true" : "false")
+      output << "{\"actor\":" << index + 2 << ",\"polls\":" << summary._calls
+             << ",\"captured_samples\":" << captured << ",\"unrecorded_samples\":" << summary._calls - captured
+             << ",\"raw_truncated\":" << (summary._calls > captured ? "true" : "false")
              << ",\"cpu_all_available\":" << (summary._sample._cpuAvailable ? "true" : "false")
              << ",\"aggregate\":{";
       write_measurement_fields(output, summary._sample);

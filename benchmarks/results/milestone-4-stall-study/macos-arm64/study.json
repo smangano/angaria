@@ -1,0 +1,50 @@
+{
+  "active_leaf": "diagnostics-empty",
+  "finished_utc": "2026-11-27T22:36:19.512274+00:00",
+  "framework_version": "0.4.31",
+  "leaves": [
+    {
+      "attempts": 120,
+      "budget_stops": 0,
+      "completed": 120,
+      "executable_sha256": "240525e61bd0156c8d379997a909abcf87f69b62adcbac0110f4d93f3bc3d40f",
+      "name": "ordinary-concurrent",
+      "status": "complete"
+    },
+    {
+      "attempts": 12,
+      "budget_stops": 0,
+      "completed": 12,
+      "executable_sha256": "240525e61bd0156c8d379997a909abcf87f69b62adcbac0110f4d93f3bc3d40f",
+      "name": "ordinary-backlog",
+      "status": "complete"
+    },
+    {
+      "attempts": 6,
+      "budget_stops": 0,
+      "completed": 6,
+      "executable_sha256": "f876134325cd3709cf55fc2bf60df218184430a73e9508c3b387cb239987fb6f",
+      "name": "diagnostics-concurrent",
+      "status": "complete"
+    },
+    {
+      "attempts": 6,
+      "budget_stops": 0,
+      "completed": 6,
+      "executable_sha256": "f876134325cd3709cf55fc2bf60df218184430a73e9508c3b387cb239987fb6f",
+      "name": "diagnostics-backlog",
+      "status": "complete"
+    },
+    {
+      "attempts": 6,
+      "budget_stops": 6,
+      "completed": 0,
+      "executable_sha256": "f876134325cd3709cf55fc2bf60df218184430a73e9508c3b387cb239987fb6f",
+      "name": "diagnostics-empty",
+      "status": "complete"
+    }
+  ],
+  "started_utc": "2026-11-27T22:35:47.703882+00:00",
+  "status": "complete",
+  "total_attempts": 150
+}

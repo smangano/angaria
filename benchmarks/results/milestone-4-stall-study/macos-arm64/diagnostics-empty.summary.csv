@@ -1,0 +1,9 @@
+profile,messages,history,payload_bytes,interval_ns,socket_buffer_bytes,budget_ms,status,metric,unit,runs,samples,min_samples_per_run,max_samples_per_run,median_run_stat,min_run_stat,max_run_stat,pooled_p99,p99_rank,pooled_p999,p999_rank,tail_population
+angaria,16,0,64,0,131072,100,budget_exceeded,bounded_cohort_acknowledged_per_second,per_second,3,3,1,1,0.0,0.0,0.0,not_applicable,,not_applicable,,incomplete_observed_prefix
+angaria,16,0,64,0,131072,100,budget_exceeded,bounded_cohort_verified_per_second,per_second,3,3,1,1,0.0,0.0,0.0,not_applicable,,not_applicable,,incomplete_observed_prefix
+angaria,16,0,64,0,131072,100,budget_exceeded,receive_incomplete_api_total_ns,ns,3,3,1,1,95291000,95070000,95529000,incomplete_population,,incomplete_population,,incomplete_observed_prefix
+angaria,16,0,64,0,131072,100,budget_exceeded,receive_incomplete_wait_wall_ns,ns,3,3,1,1,95325000,95097000,95550000,incomplete_population,,incomplete_population,,incomplete_observed_prefix
+angaria,16,128,64,0,131072,100,budget_exceeded,bounded_cohort_acknowledged_per_second,per_second,3,3,1,1,0.0,0.0,0.0,not_applicable,,not_applicable,,incomplete_observed_prefix
+angaria,16,128,64,0,131072,100,budget_exceeded,bounded_cohort_verified_per_second,per_second,3,3,1,1,0.0,0.0,0.0,not_applicable,,not_applicable,,incomplete_observed_prefix
+angaria,16,128,64,0,131072,100,budget_exceeded,receive_incomplete_api_total_ns,ns,3,3,1,1,99160000,95459000,99447000,incomplete_population,,incomplete_population,,incomplete_observed_prefix
+angaria,16,128,64,0,131072,100,budget_exceeded,receive_incomplete_wait_wall_ns,ns,3,3,1,1,99178000,95481000,99469000,incomplete_population,,incomplete_population,,incomplete_observed_prefix

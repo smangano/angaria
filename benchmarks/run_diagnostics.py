@@ -39,12 +39,13 @@ COUNTERS = {"prefix_scans", "prefix_records", "index_scans", "indexed_records", 
             "task_slots", "allocations", "allocated_bytes", "empty_polls", "native_read_calls",
             "native_read_bytes", "native_map_calls", "native_mapped_bytes", "native_unmap_calls",
             "file_stat_calls", "file_grow_calls", "gate_attempts", "gate_busy", "gate_acquisitions",
-            "recovery_checks", "recovery_replays", "native_gate_holds", "native_gate_hold_ns"}
+            "recovery_checks", "recovery_replays", "native_gate_holds", "native_gate_hold_ns",
+            "native_gate_blocking_attempts", "native_gate_nonblocking_attempts"}
 PHASES = {"journal_open", "recovery", "snapshot", "prefix_scan", "record_index", "task_check",
           "task_catalog", "topology", "delivery_validation", "publication_lookup", "schema_lookup",
           "codec_build", "payload_validation", "publication_plan", "journal_preflight", "journal_body",
           "file_growth", "materialize", "commit_apply", "source_reconcile", "receive_select",
-          "native_read", "native_map", "native_stat", "native_unmap", "gate_acquire", "other"}
+          "native_read", "native_map", "native_stat", "native_unmap", "gate_acquire", "local_gate_wait", "native_gate_wait", "other"}
 
 
 def case(**overrides):

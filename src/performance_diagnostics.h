@@ -46,6 +46,10 @@ namespace angaria::detail::diagnostics
     GateAcquire,
     NativeStat,
     NativeUnmap,
+    // Acquisition subphases are siblings under GateAcquire. A nonblocking
+    // attempt measures syscall/probe cost rather than blocked wait time.
+    LocalGateWait,
+    NativeGateWait,
     // Reserved for root wall time outside all observed regions.
     Other,
     Count
@@ -80,6 +84,8 @@ namespace angaria::detail::diagnostics
     RecoveryReplays,
     NativeGateHolds,
     NativeGateHoldNs,
+    NativeGateBlockingAttempts,
+    NativeGateNonblockingAttempts,
     Count
   };
 
@@ -90,14 +96,16 @@ namespace angaria::detail::diagnostics
       "task_catalog", "topology", "delivery_validation", "publication_lookup", "schema_lookup",
       "codec_build", "payload_validation", "publication_plan", "journal_preflight", "journal_body",
       "file_growth", "materialize", "commit_apply", "source_reconcile", "receive_select",
-      "native_read", "native_map", "gate_acquire", "native_stat", "native_unmap", "other"};
+      "native_read", "native_map", "gate_acquire", "native_stat", "native_unmap",
+      "local_gate_wait", "native_gate_wait", "other"};
   inline constexpr std::array<std::string_view, counter_count> counter_names{
       "prefix_scans", "prefix_records", "index_scans", "indexed_records", "topology_builds",
       "delivery_validations", "validated_publications", "publication_lookups", "lookup_publications",
       "task_slots", "allocations", "allocated_bytes", "empty_polls", "native_read_calls",
       "native_read_bytes", "native_map_calls", "native_mapped_bytes", "native_unmap_calls",
       "file_stat_calls", "file_grow_calls", "gate_attempts", "gate_busy", "gate_acquisitions",
-      "recovery_checks", "recovery_replays", "native_gate_holds", "native_gate_hold_ns"};
+      "recovery_checks", "recovery_replays", "native_gate_holds", "native_gate_hold_ns",
+      "native_gate_blocking_attempts", "native_gate_nonblocking_attempts"};
 
 #if defined(ANGARIA_ENABLE_DIAGNOSTICS) && ANGARIA_ENABLE_DIAGNOSTICS
   inline constexpr bool instrumentation_enabled = true;

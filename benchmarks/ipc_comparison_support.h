@@ -6,6 +6,7 @@
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/text_escaping.h"
 #include "transport_support.h"
+#include "performance_diagnostics.h"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +34,8 @@ namespace angaria::benchmarks::ipc
   enum class Profile
   {
     Angaria,
-    Nanomsg
+    Nanomsg,
+    RecordedSpsc
   };
 
   enum class Role
@@ -45,7 +47,8 @@ namespace angaria::benchmarks::ipc
 
   inline std::string_view profile_name(Profile profile)
   {
-    return profile == Profile::Angaria ? "angaria" : "nanomsg";
+    return profile == Profile::Angaria ? "angaria" :
+           profile == Profile::RecordedSpsc ? "recorded-spsc" : "nanomsg";
   }
 
   inline std::string_view role_name(Role role)
@@ -71,6 +74,10 @@ namespace angaria::benchmarks::ipc
     std::uint64_t _budgetMs = 10'000;
     std::uint64_t _socketBufferBytes = 131'072;
     std::uint64_t _intervalNs = 0;
+    std::uint64_t _ringSlots = 8;
+    std::string _scenario{"concurrent"};
+    std::string _collectionName{"none"};
+    detail::diagnostics::Collection _collection{detail::diagnostics::Collection::None};
   };
 
   inline bool valid_payload_size(std::size_t size)
@@ -91,9 +98,10 @@ namespace angaria::benchmarks::ipc
       const std::string_view argument{argv[++index]};
       if (flag == "--profile")
       {
-        require(!haveProfile && (argument == "angaria" || argument == "nanomsg"),
-                "Expected one --profile angaria|nanomsg");
-        options._profile = argument == "angaria" ? Profile::Angaria : Profile::Nanomsg;
+        require(!haveProfile && (argument == "angaria" || argument == "nanomsg" || argument == "recorded-spsc"),
+                "Expected one --profile angaria|nanomsg|recorded-spsc");
+        options._profile = argument == "angaria" ? Profile::Angaria :
+                           argument == "recorded-spsc" ? Profile::RecordedSpsc : Profile::Nanomsg;
         haveProfile = true;
       }
       else if (flag == "--role")
@@ -109,6 +117,23 @@ namespace angaria::benchmarks::ipc
         require(!haveDirectory && !argument.empty(), "Expected one nonempty --directory");
         options._directory = std::filesystem::path{argument};
         haveDirectory = true;
+      }
+      else if (flag == "--scenario")
+      {
+        require(argument == "concurrent" || argument == "backlog" || argument == "empty", "Unknown scenario");
+        options._scenario = argument;
+      }
+      else if (flag == "--collection")
+      {
+        require(argument == "none" || argument == "counts" || argument == "timings", "Unknown collection");
+        options._collectionName = argument;
+        options._collection = argument == "timings" ? detail::diagnostics::Collection::Timings :
+                              argument == "counts" ? detail::diagnostics::Collection::Counts :
+                                                     detail::diagnostics::Collection::None;
+      }
+      else if (flag == "--ring-slots")
+      {
+        options._ringSlots = parse_count(argument, flag);
       }
       else if (flag == "--messages")
       {
@@ -139,6 +164,12 @@ namespace angaria::benchmarks::ipc
         require(false, "Unknown IPC benchmark option");
       }
     }
+    require(options._ringSlots >= 1 && options._ringSlots <= 128, "Ring slots must be in 1..128");
+    require(detail::diagnostics::instrumentation_enabled || options._collectionName == "none",
+            "Diagnostics collection requires an instrumented study build");
+#if !defined(ANGARIA_BUILD_STALL_STUDY) || !ANGARIA_BUILD_STALL_STUDY
+    require(options._profile != Profile::RecordedSpsc, "SPSC profile requires the experimental study build");
+#endif
     require(haveProfile && haveRole && haveDirectory, "IPC benchmark requires profile, role and directory");
     require(options._messages >= 1 && options._messages <= 128, "Messages must be in 1..128");
     require(options._history <= 128, "History must be in 0..128");

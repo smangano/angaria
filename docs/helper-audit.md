@@ -67,3 +67,5 @@ Some similarly named functions have different responsibilities. Their shared mec
 - Compile-only interface-review examples may use presentation shortcuts described in their own review contract. Runnable primer programs show public Result checks directly and do not share generic unwrappers with those proposals.
 
 The shared-helper tests cover unaligned and variable-width bytes, signed boundaries, empty/nonzero ranges, arithmetic overflow, move-only Results, wire-code/Field semantics, and escaping across streaming boundaries. Existing format, ownership, recovery, and primer tests remain the behavioral baseline. All shared headers are also compiled independently to check their includes.
+
+The stall study shares [diagnostic_totals.h](../benchmarks/diagnostic_totals.h) with the existing transport diagnostic executable for overflow-checked Sample accumulation. [ipc_operation_diagnostics.h](../benchmarks/ipc_operation_diagnostics.h) adds IPC-specific capture lifetimes and serialization; ordinary builds compile those captures away.
