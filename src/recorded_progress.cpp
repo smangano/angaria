@@ -521,7 +521,7 @@ namespace angaria::detail::recorded
       require(receipt._consumerIncarnation <= source._actorIncarnation &&
                   (sequence > source._acknowledged || receipt._state == ProgressReceiptState::Acknowledged) &&
                   (sequence <= source._acknowledged || receipt._state != ProgressReceiptState::Acknowledged) &&
-                  (receipt._state != ProgressReceiptState::Issued || sequence == source._pinSequence),
+                  ((receipt._state == ProgressReceiptState::Issued) == (sequence == source._pinSequence)),
               ErrorCode::IoError, "Receipt differs from committed Source progress");
       if (receipt._state == ProgressReceiptState::Issued)
       {

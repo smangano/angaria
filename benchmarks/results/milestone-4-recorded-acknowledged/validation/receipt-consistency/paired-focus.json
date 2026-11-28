@@ -1,0 +1,1151 @@
+{
+  "scope": "Native macOS ARM64 same-process focused receipt-consistency guard; five alternating ABBA/BAAB blocks, ten attempts per executable; no IPC speedup claim",
+  "baseline_commit": "550fbf1efbb798fddf65901a373ce8ab19479f2d",
+  "executable_sha256": {
+    "before": "60c54538ac736d497d06955d77253b35ace8992d92fb9c11f8c029c38e39c90b",
+    "after": "20d40dc31658f5412987ac769db187280b2c90c11839d2ac413eb544947efb2c"
+  },
+  "progress_source_after_sha256": "f3c1cf8354ac4a5df8ca4d9179add4b0c488a00654fcd1abbe5935b6a5a0f5ab",
+  "attempts": [
+    {
+      "block": 1,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          1455.078,
+          1954.438,
+          1856.125,
+          1744.141,
+          1110.016
+        ],
+        "verified_acknowledged_publications_per_second": 573348.264,
+        "pinned_repeat_ns_per_call": [
+          55.344,
+          49.469,
+          49.484,
+          49.469,
+          49.484
+        ],
+        "release_redelivery_ns_per_cycle": [
+          501.953,
+          481.125,
+          488.281,
+          485.672,
+          481.766
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[1455.078,1954.438,1856.125,1744.141,1110.016],\"verified_acknowledged_publications_per_second\":573348.264,\"pinned_repeat_ns_per_call\":[55.344,49.469,49.484,49.469,49.484],\"release_redelivery_ns_per_cycle\":[501.953,481.125,488.281,485.672,481.766],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (2 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (2 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (2 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 1,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          1246.75,
+          8145.188,
+          3001.953,
+          3028.0,
+          1011.062
+        ],
+        "verified_acknowledged_publications_per_second": 333116.461,
+        "pinned_repeat_ns_per_call": [
+          53.375,
+          43.609,
+          43.625,
+          46.219,
+          44.266
+        ],
+        "release_redelivery_ns_per_cycle": [
+          449.859,
+          420.578,
+          425.781,
+          423.828,
+          435.547
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[1246.750,8145.188,3001.953,3028.000,1011.062],\"verified_acknowledged_publications_per_second\":333116.461,\"pinned_repeat_ns_per_call\":[53.375,43.609,43.625,46.219,44.266],\"release_redelivery_ns_per_cycle\":[449.859,420.578,425.781,423.828,435.547],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (3 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (3 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (3 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 1,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          947.922,
+          1475.906,
+          1425.125,
+          1382.812,
+          850.906
+        ],
+        "verified_acknowledged_publications_per_second": 723163.842,
+        "pinned_repeat_ns_per_call": [
+          44.266,
+          38.406,
+          38.422,
+          39.062,
+          38.406
+        ],
+        "release_redelivery_ns_per_cycle": [
+          380.203,
+          365.234,
+          366.531,
+          369.141,
+          369.797
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[947.922,1475.906,1425.125,1382.812,850.906],\"verified_acknowledged_publications_per_second\":723163.842,\"pinned_repeat_ns_per_call\":[44.266,38.406,38.422,39.062,38.406],\"release_redelivery_ns_per_cycle\":[380.203,365.234,366.531,369.141,369.797],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 1,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          877.609,
+          1336.578,
+          1210.281,
+          6952.469,
+          757.812
+        ],
+        "verified_acknowledged_publications_per_second": 826254.228,
+        "pinned_repeat_ns_per_call": [
+          39.719,
+          33.203,
+          33.203,
+          33.203,
+          33.859
+        ],
+        "release_redelivery_ns_per_cycle": [
+          344.391,
+          330.734,
+          326.172,
+          329.422,
+          329.422
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[877.609,1336.578,1210.281,6952.469,757.812],\"verified_acknowledged_publications_per_second\":826254.228,\"pinned_repeat_ns_per_call\":[39.719,33.203,33.203,33.203,33.859],\"release_redelivery_ns_per_cycle\":[344.391,330.734,326.172,329.422,329.422],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (2 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (2 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (2 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 2,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          804.688,
+          1247.391,
+          1095.703,
+          1052.094,
+          710.281
+        ],
+        "verified_acknowledged_publications_per_second": 950485.639,
+        "pinned_repeat_ns_per_call": [
+          35.797,
+          31.25,
+          31.25,
+          31.891,
+          31.906
+        ],
+        "release_redelivery_ns_per_cycle": [
+          309.891,
+          300.781,
+          299.484,
+          302.078,
+          305.984
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[804.688,1247.391,1095.703,1052.094,710.281],\"verified_acknowledged_publications_per_second\":950485.639,\"pinned_repeat_ns_per_call\":[35.797,31.250,31.250,31.891,31.906],\"release_redelivery_ns_per_cycle\":[309.891,300.781,299.484,302.078,305.984],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 2,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          769.531,
+          1423.188,
+          1087.25,
+          1038.422,
+          667.328
+        ],
+        "verified_acknowledged_publications_per_second": 962999.744,
+        "pinned_repeat_ns_per_call": [
+          35.797,
+          29.953,
+          29.953,
+          29.953,
+          29.297
+        ],
+        "release_redelivery_ns_per_cycle": [
+          301.438,
+          285.812,
+          285.156,
+          281.906,
+          286.453
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[769.531,1423.188,1087.250,1038.422,667.328],\"verified_acknowledged_publications_per_second\":962999.744,\"pinned_repeat_ns_per_call\":[35.797,29.953,29.953,29.953,29.297],\"release_redelivery_ns_per_cycle\":[301.438,285.812,285.156,281.906,286.453],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 2,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          726.562,
+          1194.016,
+          1028.0,
+          1018.219,
+          662.75
+        ],
+        "verified_acknowledged_publications_per_second": 982107.234,
+        "pinned_repeat_ns_per_call": [
+          33.859,
+          29.297,
+          29.953,
+          29.953,
+          30.594
+        ],
+        "release_redelivery_ns_per_cycle": [
+          293.625,
+          283.203,
+          283.203,
+          283.203,
+          276.703
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[726.562,1194.016,1028.000,1018.219,662.750],\"verified_acknowledged_publications_per_second\":982107.234,\"pinned_repeat_ns_per_call\":[33.859,29.297,29.953,29.953,30.594],\"release_redelivery_ns_per_cycle\":[293.625,283.203,283.203,283.203,276.703],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 2,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          688.156,
+          1100.922,
+          975.922,
+          935.547,
+          594.406
+        ],
+        "verified_acknowledged_publications_per_second": 1068893.528,
+        "pinned_repeat_ns_per_call": [
+          32.547,
+          26.703,
+          26.047,
+          25.391,
+          26.703
+        ],
+        "release_redelivery_ns_per_cycle": [
+          264.969,
+          259.766,
+          259.109,
+          253.906,
+          256.516
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[688.156,1100.922,975.922,935.547,594.406],\"verified_acknowledged_publications_per_second\":1068893.528,\"pinned_repeat_ns_per_call\":[32.547,26.703,26.047,25.391,26.703],\"release_redelivery_ns_per_cycle\":[264.969,259.766,259.109,253.906,256.516],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 3,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          695.969,
+          1101.562,
+          1137.359,
+          1150.391,
+          672.531
+        ],
+        "verified_acknowledged_publications_per_second": 907801.418,
+        "pinned_repeat_ns_per_call": [
+          31.906,
+          26.688,
+          26.688,
+          26.703,
+          26.703
+        ],
+        "release_redelivery_ns_per_cycle": [
+          264.984,
+          253.25,
+          258.453,
+          256.516,
+          253.906
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[695.969,1101.562,1137.359,1150.391,672.531],\"verified_acknowledged_publications_per_second\":907801.418,\"pinned_repeat_ns_per_call\":[31.906,26.688,26.688,26.703,26.703],\"release_redelivery_ns_per_cycle\":[264.984,253.250,258.453,256.516,253.906],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 3,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          688.141,
+          1174.469,
+          1235.031,
+          945.312,
+          598.953
+        ],
+        "verified_acknowledged_publications_per_second": 1057851.24,
+        "pinned_repeat_ns_per_call": [
+          33.203,
+          27.344,
+          26.688,
+          27.344,
+          27.344
+        ],
+        "release_redelivery_ns_per_cycle": [
+          263.672,
+          257.156,
+          257.156,
+          257.172,
+          250.0
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[688.141,1174.469,1235.031,945.312,598.953],\"verified_acknowledged_publications_per_second\":1057851.240,\"pinned_repeat_ns_per_call\":[33.203,27.344,26.688,27.344,27.344],\"release_redelivery_ns_per_cycle\":[263.672,257.156,257.156,257.172,250.000],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 3,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          687.5,
+          1177.734,
+          1002.609,
+          959.625,
+          600.906
+        ],
+        "verified_acknowledged_publications_per_second": 1042073.727,
+        "pinned_repeat_ns_per_call": [
+          31.906,
+          27.344,
+          28.641,
+          27.344,
+          26.047
+        ],
+        "release_redelivery_ns_per_cycle": [
+          266.938,
+          255.859,
+          251.953,
+          251.953,
+          255.859
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[687.500,1177.734,1002.609,959.625,600.906],\"verified_acknowledged_publications_per_second\":1042073.727,\"pinned_repeat_ns_per_call\":[31.906,27.344,28.641,27.344,26.047],\"release_redelivery_ns_per_cycle\":[266.938,255.859,251.953,251.953,255.859],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 3,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          705.719,
+          1174.469,
+          1005.203,
+          968.094,
+          593.75
+        ],
+        "verified_acknowledged_publications_per_second": 1032957.81,
+        "pinned_repeat_ns_per_call": [
+          31.25,
+          26.688,
+          27.344,
+          27.344,
+          26.703
+        ],
+        "release_redelivery_ns_per_cycle": [
+          272.797,
+          257.812,
+          253.266,
+          255.203,
+          253.906
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[705.719,1174.469,1005.203,968.094,593.750],\"verified_acknowledged_publications_per_second\":1032957.810,\"pinned_repeat_ns_per_call\":[31.250,26.688,27.344,27.344,26.703],\"release_redelivery_ns_per_cycle\":[272.797,257.812,253.266,255.203,253.906],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 4,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          681.0,
+          1130.859,
+          958.984,
+          972.0,
+          598.953
+        ],
+        "verified_acknowledged_publications_per_second": 1042769.857,
+        "pinned_repeat_ns_per_call": [
+          31.25,
+          27.344,
+          27.344,
+          27.344,
+          27.344
+        ],
+        "release_redelivery_ns_per_cycle": [
+          272.781,
+          257.156,
+          250.656,
+          256.516,
+          259.109
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[681.000,1130.859,958.984,972.000,598.953],\"verified_acknowledged_publications_per_second\":1042769.857,\"pinned_repeat_ns_per_call\":[31.250,27.344,27.344,27.344,27.344],\"release_redelivery_ns_per_cycle\":[272.781,257.156,250.656,256.516,259.109],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 4,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          690.75,
+          1162.109,
+          981.766,
+          966.797,
+          595.703
+        ],
+        "verified_acknowledged_publications_per_second": 1034343.434,
+        "pinned_repeat_ns_per_call": [
+          30.609,
+          26.703,
+          26.703,
+          26.703,
+          26.688
+        ],
+        "release_redelivery_ns_per_cycle": [
+          266.281,
+          254.547,
+          259.125,
+          259.766,
+          255.859
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[690.750,1162.109,981.766,966.797,595.703],\"verified_acknowledged_publications_per_second\":1034343.434,\"pinned_repeat_ns_per_call\":[30.609,26.703,26.703,26.703,26.688],\"release_redelivery_ns_per_cycle\":[266.281,254.547,259.125,259.766,255.859],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 4,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          675.781,
+          1117.188,
+          1018.875,
+          938.141,
+          597.0
+        ],
+        "verified_acknowledged_publications_per_second": 1065938.276,
+        "pinned_repeat_ns_per_call": [
+          29.953,
+          26.703,
+          26.047,
+          26.688,
+          26.688
+        ],
+        "release_redelivery_ns_per_cycle": [
+          270.828,
+          258.469,
+          257.172,
+          263.672,
+          263.016
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[675.781,1117.188,1018.875,938.141,597.000],\"verified_acknowledged_publications_per_second\":1065938.276,\"pinned_repeat_ns_per_call\":[29.953,26.703,26.047,26.688,26.688],\"release_redelivery_ns_per_cycle\":[270.828,258.469,257.172,263.672,263.016],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 4,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          700.516,
+          1128.906,
+          973.953,
+          953.125,
+          602.859
+        ],
+        "verified_acknowledged_publications_per_second": 1049180.328,
+        "pinned_repeat_ns_per_call": [
+          31.906,
+          26.688,
+          27.344,
+          27.344,
+          27.344
+        ],
+        "release_redelivery_ns_per_cycle": [
+          266.922,
+          255.859,
+          255.859,
+          259.109,
+          256.516
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[700.516,1128.906,973.953,953.125,602.859],\"verified_acknowledged_publications_per_second\":1049180.328,\"pinned_repeat_ns_per_call\":[31.906,26.688,27.344,27.344,27.344],\"release_redelivery_ns_per_cycle\":[266.922,255.859,255.859,259.109,256.516],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 5,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          692.703,
+          1154.938,
+          985.672,
+          938.156,
+          602.875
+        ],
+        "verified_acknowledged_publications_per_second": 1065920.522,
+        "pinned_repeat_ns_per_call": [
+          32.547,
+          27.344,
+          27.344,
+          26.688,
+          27.984
+        ],
+        "release_redelivery_ns_per_cycle": [
+          268.219,
+          259.766,
+          257.156,
+          260.422,
+          258.453
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[692.703,1154.938,985.672,938.156,602.875],\"verified_acknowledged_publications_per_second\":1065920.522,\"pinned_repeat_ns_per_call\":[32.547,27.344,27.344,26.688,27.984],\"release_redelivery_ns_per_cycle\":[268.219,259.766,257.156,260.422,258.453],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 5,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          696.609,
+          1149.078,
+          990.234,
+          932.938,
+          592.438
+        ],
+        "verified_acknowledged_publications_per_second": 1071883.165,
+        "pinned_repeat_ns_per_call": [
+          30.594,
+          27.344,
+          26.031,
+          26.688,
+          26.703
+        ],
+        "release_redelivery_ns_per_cycle": [
+          266.922,
+          255.859,
+          256.516,
+          254.547,
+          253.906
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[696.609,1149.078,990.234,932.938,592.438],\"verified_acknowledged_publications_per_second\":1071883.165,\"pinned_repeat_ns_per_call\":[30.594,27.344,26.031,26.688,26.703],\"release_redelivery_ns_per_cycle\":[266.922,255.859,256.516,254.547,253.906],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 5,
+      "profile": "after",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          676.438,
+          1086.594,
+          959.641,
+          937.5,
+          599.609
+        ],
+        "verified_acknowledged_publications_per_second": 1066666.667,
+        "pinned_repeat_ns_per_call": [
+          30.609,
+          26.047,
+          26.688,
+          27.344,
+          26.688
+        ],
+        "release_redelivery_ns_per_cycle": [
+          268.234,
+          259.125,
+          258.453,
+          252.609,
+          258.469
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[676.438,1086.594,959.641,937.500,599.609],\"verified_acknowledged_publications_per_second\":1066666.667,\"pinned_repeat_ns_per_call\":[30.609,26.047,26.688,27.344,26.688],\"release_redelivery_ns_per_cycle\":[268.234,259.125,258.453,252.609,258.469],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    {
+      "block": 5,
+      "profile": "before",
+      "sample": {
+        "study": "recorded_acknowledged_queue_same_process_cost",
+        "payload_bytes": 8,
+        "ring_capacity": 2,
+        "cycles_per_block": 64,
+        "id_send_lookup_receive_ack_ns": [
+          703.766,
+          1147.781,
+          1002.594,
+          948.562,
+          597.656
+        ],
+        "verified_acknowledged_publications_per_second": 1054226.791,
+        "pinned_repeat_ns_per_call": [
+          31.906,
+          26.703,
+          26.703,
+          26.703,
+          26.688
+        ],
+        "release_redelivery_ns_per_cycle": [
+          265.625,
+          258.453,
+          258.469,
+          255.203,
+          258.469
+        ],
+        "messaging_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "pinned_repeat_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "release_redelivery_allocations": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "diagnostics_enabled": false
+      },
+      "stdout": "Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc\n[==========] Running 2 tests from 2 test suites.\n[----------] Global test environment set-up.\n[----------] 1 test from RecordedAcknowledgedAllocationCapture\n[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests\n[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)\n[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)\n\n[----------] 1 test from RecordedAcknowledgedPerformance\n[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts\n{\"study\":\"recorded_acknowledged_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,\"cycles_per_block\":64,\"id_send_lookup_receive_ack_ns\":[703.766,1147.781,1002.594,948.562,597.656],\"verified_acknowledged_publications_per_second\":1054226.791,\"pinned_repeat_ns_per_call\":[31.906,26.703,26.703,26.703,26.688],\"release_redelivery_ns_per_cycle\":[265.625,258.453,258.469,255.203,258.469],\"messaging_allocations\":[0,0,0,0,0],\"pinned_repeat_allocations\":[0,0,0,0,0],\"release_redelivery_allocations\":[0,0,0,0,0],\"diagnostics_enabled\":false}\n[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)\n[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)\n\n[----------] Global test environment tear-down\n[==========] 2 tests from 2 test suites ran. (1 ms total)\n[  PASSED  ] 2 tests.\n",
+      "stderr": "",
+      "exit_code": 0
+    }
+  ]
+}

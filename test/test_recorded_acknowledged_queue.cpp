@@ -129,6 +129,39 @@ namespace
   }
 }
 
+TEST_F(RecordedAcknowledgedQueueTest, APendingReceiptCannotDescribeAnActivePinOrReviveItsFailedHandle)
+{
+  create();
+  auto sender = require_value(recorded::RecordedProducer::open(_options));
+  auto receiver = require_value(recorded::RecordedAcknowledgedConsumer::open(_options));
+  const auto id = send(sender);
+  const auto delivery = require_delivery(receiver.try_receive(recorded_test_time(0)));
+  const auto copied = require_value(delivery._message.copy_message(8));
+  auto file = require_value(mapped::NativeFile::open_existing(
+      support::recorded_progress_path(_options), mapped::FileAccess::ReadWrite));
+  auto mapping = require_value(file.map_read_write(recorded::progress_receipts_offset, recorded::progress_receipt_bytes));
+  auto bytes = require_value(mapping.writable_bytes());
+
+  // Deliberate stored-state corruption, not a supported external writer: all
+  // issuance fields remain, but Pending contradicts the Source's active pin.
+  // Inspection must reject it before an acknowledgment can normalize the row.
+  angaria::detail::write_unsigned_le<std::uint64_t>(bytes, 0,
+      static_cast<std::uint64_t>(recorded::ProgressReceiptState::Pending));
+  expect_error(receiver.receipt(1), ErrorCode::IoError);
+  angaria::detail::write_unsigned_le<std::uint64_t>(bytes, 0,
+      static_cast<std::uint64_t>(recorded::ProgressReceiptState::Issued));
+  expect_error(receiver.try_receive(), ErrorCode::IoError);
+  EXPECT_EQ(copied._header._publication, id);
+  EXPECT_EQ(std::get<std::uint64_t>(require_value(copied.decode(_codec)).at(0)), 42u);
+
+  receiver = recorded::RecordedAcknowledgedConsumer{};
+  auto replacement = require_value(recorded::RecordedAcknowledgedConsumer::open(_options));
+  const auto recovered = require_delivery(replacement.try_receive());
+  EXPECT_EQ(recovered._message._header._publication, id);
+  EXPECT_NE(recovered._token._consumer, delivery._token._consumer);
+  require_value(replacement.acknowledge(recovered._token));
+}
+
 TEST_F(RecordedAcknowledgedQueueTest, PinnedReceiveKeepsItsTokenAndEpochZeroTimeWithoutAnotherCommit)
 {
   create();
