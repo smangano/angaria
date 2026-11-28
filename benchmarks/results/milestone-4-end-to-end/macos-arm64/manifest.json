@@ -1,0 +1,2697 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "case": "saturation-64",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 1
+    },
+    {
+      "attempt": 2,
+      "case": "saturation-64",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 1
+    },
+    {
+      "attempt": 3,
+      "case": "saturation-64",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 1
+    },
+    {
+      "attempt": 4,
+      "case": "saturation-64",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 2
+    },
+    {
+      "attempt": 5,
+      "case": "saturation-64",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 2
+    },
+    {
+      "attempt": 6,
+      "case": "saturation-64",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 2
+    },
+    {
+      "attempt": 7,
+      "case": "saturation-64",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 3
+    },
+    {
+      "attempt": 8,
+      "case": "saturation-64",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 3
+    },
+    {
+      "attempt": 9,
+      "case": "saturation-64",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 3
+    },
+    {
+      "attempt": 10,
+      "case": "saturation-64",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 4
+    },
+    {
+      "attempt": 11,
+      "case": "saturation-64",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 4
+    },
+    {
+      "attempt": 12,
+      "case": "saturation-64",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 4
+    },
+    {
+      "attempt": 13,
+      "case": "saturation-64",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 5
+    },
+    {
+      "attempt": 14,
+      "case": "saturation-64",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 5
+    },
+    {
+      "attempt": 15,
+      "case": "saturation-64",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 5
+    },
+    {
+      "attempt": 16,
+      "case": "saturation-64",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 6
+    },
+    {
+      "attempt": 17,
+      "case": "saturation-64",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 6
+    },
+    {
+      "attempt": 18,
+      "case": "saturation-64",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 6
+    },
+    {
+      "attempt": 19,
+      "case": "saturation-256",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 7
+    },
+    {
+      "attempt": 20,
+      "case": "saturation-256",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 7
+    },
+    {
+      "attempt": 21,
+      "case": "saturation-256",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 7
+    },
+    {
+      "attempt": 22,
+      "case": "saturation-256",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 8
+    },
+    {
+      "attempt": 23,
+      "case": "saturation-256",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 8
+    },
+    {
+      "attempt": 24,
+      "case": "saturation-256",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 8
+    },
+    {
+      "attempt": 25,
+      "case": "saturation-256",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 9
+    },
+    {
+      "attempt": 26,
+      "case": "saturation-256",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 9
+    },
+    {
+      "attempt": 27,
+      "case": "saturation-256",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 9
+    },
+    {
+      "attempt": 28,
+      "case": "saturation-256",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 10
+    },
+    {
+      "attempt": 29,
+      "case": "saturation-256",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 10
+    },
+    {
+      "attempt": 30,
+      "case": "saturation-256",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 10
+    },
+    {
+      "attempt": 31,
+      "case": "saturation-256",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 11
+    },
+    {
+      "attempt": 32,
+      "case": "saturation-256",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 11
+    },
+    {
+      "attempt": 33,
+      "case": "saturation-256",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 11
+    },
+    {
+      "attempt": 34,
+      "case": "saturation-256",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 12
+    },
+    {
+      "attempt": 35,
+      "case": "saturation-256",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 12
+    },
+    {
+      "attempt": 36,
+      "case": "saturation-256",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 12
+    },
+    {
+      "attempt": 37,
+      "case": "saturation-1024",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 13
+    },
+    {
+      "attempt": 38,
+      "case": "saturation-1024",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 13
+    },
+    {
+      "attempt": 39,
+      "case": "saturation-1024",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 13
+    },
+    {
+      "attempt": 40,
+      "case": "saturation-1024",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 14
+    },
+    {
+      "attempt": 41,
+      "case": "saturation-1024",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 14
+    },
+    {
+      "attempt": 42,
+      "case": "saturation-1024",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 14
+    },
+    {
+      "attempt": 43,
+      "case": "saturation-1024",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 15
+    },
+    {
+      "attempt": 44,
+      "case": "saturation-1024",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 15
+    },
+    {
+      "attempt": 45,
+      "case": "saturation-1024",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 15
+    },
+    {
+      "attempt": 46,
+      "case": "saturation-1024",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 16
+    },
+    {
+      "attempt": 47,
+      "case": "saturation-1024",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 16
+    },
+    {
+      "attempt": 48,
+      "case": "saturation-1024",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 16
+    },
+    {
+      "attempt": 49,
+      "case": "saturation-1024",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 17
+    },
+    {
+      "attempt": 50,
+      "case": "saturation-1024",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 17
+    },
+    {
+      "attempt": 51,
+      "case": "saturation-1024",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 17
+    },
+    {
+      "attempt": 52,
+      "case": "saturation-1024",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 18
+    },
+    {
+      "attempt": 53,
+      "case": "saturation-1024",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 18
+    },
+    {
+      "attempt": 54,
+      "case": "saturation-1024",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 18
+    },
+    {
+      "attempt": 55,
+      "case": "paced-50k",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 19
+    },
+    {
+      "attempt": 56,
+      "case": "paced-50k",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 19
+    },
+    {
+      "attempt": 57,
+      "case": "paced-50k",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 19
+    },
+    {
+      "attempt": 58,
+      "case": "paced-50k",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 20
+    },
+    {
+      "attempt": 59,
+      "case": "paced-50k",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 20
+    },
+    {
+      "attempt": 60,
+      "case": "paced-50k",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 20
+    },
+    {
+      "attempt": 61,
+      "case": "paced-50k",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 21
+    },
+    {
+      "attempt": 62,
+      "case": "paced-50k",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 21
+    },
+    {
+      "attempt": 63,
+      "case": "paced-50k",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 21
+    },
+    {
+      "attempt": 64,
+      "case": "paced-50k",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 22
+    },
+    {
+      "attempt": 65,
+      "case": "paced-50k",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 22
+    },
+    {
+      "attempt": 66,
+      "case": "paced-50k",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 22
+    },
+    {
+      "attempt": 67,
+      "case": "paced-50k",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 23
+    },
+    {
+      "attempt": 68,
+      "case": "paced-50k",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 23
+    },
+    {
+      "attempt": 69,
+      "case": "paced-50k",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 23
+    },
+    {
+      "attempt": 70,
+      "case": "paced-50k",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 24
+    },
+    {
+      "attempt": 71,
+      "case": "paced-50k",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 24
+    },
+    {
+      "attempt": 72,
+      "case": "paced-50k",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 24
+    },
+    {
+      "attempt": 73,
+      "case": "paced-100k",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 25
+    },
+    {
+      "attempt": 74,
+      "case": "paced-100k",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 25
+    },
+    {
+      "attempt": 75,
+      "case": "paced-100k",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 25
+    },
+    {
+      "attempt": 76,
+      "case": "paced-100k",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 26
+    },
+    {
+      "attempt": 77,
+      "case": "paced-100k",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 26
+    },
+    {
+      "attempt": 78,
+      "case": "paced-100k",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 26
+    },
+    {
+      "attempt": 79,
+      "case": "paced-100k",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 27
+    },
+    {
+      "attempt": 80,
+      "case": "paced-100k",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 27
+    },
+    {
+      "attempt": 81,
+      "case": "paced-100k",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 27
+    },
+    {
+      "attempt": 82,
+      "case": "paced-100k",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 28
+    },
+    {
+      "attempt": 83,
+      "case": "paced-100k",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 28
+    },
+    {
+      "attempt": 84,
+      "case": "paced-100k",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 28
+    },
+    {
+      "attempt": 85,
+      "case": "paced-100k",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 29
+    },
+    {
+      "attempt": 86,
+      "case": "paced-100k",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 29
+    },
+    {
+      "attempt": 87,
+      "case": "paced-100k",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 29
+    },
+    {
+      "attempt": 88,
+      "case": "paced-100k",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 30
+    },
+    {
+      "attempt": 89,
+      "case": "paced-100k",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 30
+    },
+    {
+      "attempt": 90,
+      "case": "paced-100k",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 30
+    },
+    {
+      "attempt": 91,
+      "case": "history-0",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 31
+    },
+    {
+      "attempt": 92,
+      "case": "history-0",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 31
+    },
+    {
+      "attempt": 93,
+      "case": "history-0",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 31
+    },
+    {
+      "attempt": 94,
+      "case": "history-0",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 32
+    },
+    {
+      "attempt": 95,
+      "case": "history-0",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 32
+    },
+    {
+      "attempt": 96,
+      "case": "history-0",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 32
+    },
+    {
+      "attempt": 97,
+      "case": "history-0",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 33
+    },
+    {
+      "attempt": 98,
+      "case": "history-0",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 33
+    },
+    {
+      "attempt": 99,
+      "case": "history-0",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 33
+    },
+    {
+      "attempt": 100,
+      "case": "history-0",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 34
+    },
+    {
+      "attempt": 101,
+      "case": "history-0",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 34
+    },
+    {
+      "attempt": 102,
+      "case": "history-0",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 34
+    },
+    {
+      "attempt": 103,
+      "case": "history-0",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 35
+    },
+    {
+      "attempt": 104,
+      "case": "history-0",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 35
+    },
+    {
+      "attempt": 105,
+      "case": "history-0",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 35
+    },
+    {
+      "attempt": 106,
+      "case": "history-0",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 36
+    },
+    {
+      "attempt": 107,
+      "case": "history-0",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 36
+    },
+    {
+      "attempt": 108,
+      "case": "history-0",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 36
+    },
+    {
+      "attempt": 109,
+      "case": "history-65536",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 37
+    },
+    {
+      "attempt": 110,
+      "case": "history-65536",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 37
+    },
+    {
+      "attempt": 111,
+      "case": "history-65536",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 37
+    },
+    {
+      "attempt": 112,
+      "case": "history-65536",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 38
+    },
+    {
+      "attempt": 113,
+      "case": "history-65536",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 38
+    },
+    {
+      "attempt": 114,
+      "case": "history-65536",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 38
+    },
+    {
+      "attempt": 115,
+      "case": "history-65536",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 39
+    },
+    {
+      "attempt": 116,
+      "case": "history-65536",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 39
+    },
+    {
+      "attempt": 117,
+      "case": "history-65536",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 39
+    },
+    {
+      "attempt": 118,
+      "case": "history-65536",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 40
+    },
+    {
+      "attempt": 119,
+      "case": "history-65536",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 40
+    },
+    {
+      "attempt": 120,
+      "case": "history-65536",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 40
+    },
+    {
+      "attempt": 121,
+      "case": "history-65536",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 41
+    },
+    {
+      "attempt": 122,
+      "case": "history-65536",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 41
+    },
+    {
+      "attempt": 123,
+      "case": "history-65536",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 41
+    },
+    {
+      "attempt": 124,
+      "case": "history-65536",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 42
+    },
+    {
+      "attempt": 125,
+      "case": "history-65536",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 42
+    },
+    {
+      "attempt": 126,
+      "case": "history-65536",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 42
+    },
+    {
+      "attempt": 127,
+      "case": "credit-1",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 43
+    },
+    {
+      "attempt": 128,
+      "case": "credit-1",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 43
+    },
+    {
+      "attempt": 129,
+      "case": "credit-1",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 43
+    },
+    {
+      "attempt": 130,
+      "case": "credit-1",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 44
+    },
+    {
+      "attempt": 131,
+      "case": "credit-1",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 44
+    },
+    {
+      "attempt": 132,
+      "case": "credit-1",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 44
+    },
+    {
+      "attempt": 133,
+      "case": "credit-1",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 45
+    },
+    {
+      "attempt": 134,
+      "case": "credit-1",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 45
+    },
+    {
+      "attempt": 135,
+      "case": "credit-1",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 45
+    },
+    {
+      "attempt": 136,
+      "case": "credit-1",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 46
+    },
+    {
+      "attempt": 137,
+      "case": "credit-1",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 46
+    },
+    {
+      "attempt": 138,
+      "case": "credit-1",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 46
+    },
+    {
+      "attempt": 139,
+      "case": "credit-1",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 47
+    },
+    {
+      "attempt": 140,
+      "case": "credit-1",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 47
+    },
+    {
+      "attempt": 141,
+      "case": "credit-1",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 47
+    },
+    {
+      "attempt": 142,
+      "case": "credit-1",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 48
+    },
+    {
+      "attempt": 143,
+      "case": "credit-1",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 48
+    },
+    {
+      "attempt": 144,
+      "case": "credit-1",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 48
+    },
+    {
+      "attempt": 145,
+      "case": "credit-64",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 49
+    },
+    {
+      "attempt": 146,
+      "case": "credit-64",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 49
+    },
+    {
+      "attempt": 147,
+      "case": "credit-64",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 49
+    },
+    {
+      "attempt": 148,
+      "case": "credit-64",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 50
+    },
+    {
+      "attempt": 149,
+      "case": "credit-64",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 50
+    },
+    {
+      "attempt": 150,
+      "case": "credit-64",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 50
+    },
+    {
+      "attempt": 151,
+      "case": "credit-64",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 51
+    },
+    {
+      "attempt": 152,
+      "case": "credit-64",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 51
+    },
+    {
+      "attempt": 153,
+      "case": "credit-64",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 51
+    },
+    {
+      "attempt": 154,
+      "case": "credit-64",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 52
+    },
+    {
+      "attempt": 155,
+      "case": "credit-64",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 52
+    },
+    {
+      "attempt": 156,
+      "case": "credit-64",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 52
+    },
+    {
+      "attempt": 157,
+      "case": "credit-64",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 53
+    },
+    {
+      "attempt": 158,
+      "case": "credit-64",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 53
+    },
+    {
+      "attempt": 159,
+      "case": "credit-64",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 53
+    },
+    {
+      "attempt": 160,
+      "case": "credit-64",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 54
+    },
+    {
+      "attempt": 161,
+      "case": "credit-64",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 54
+    },
+    {
+      "attempt": 162,
+      "case": "credit-64",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 54
+    },
+    {
+      "attempt": 163,
+      "case": "slow-consumer",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 55
+    },
+    {
+      "attempt": 164,
+      "case": "slow-consumer",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 55
+    },
+    {
+      "attempt": 165,
+      "case": "slow-consumer",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 55
+    },
+    {
+      "attempt": 166,
+      "case": "slow-consumer",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 56
+    },
+    {
+      "attempt": 167,
+      "case": "slow-consumer",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 56
+    },
+    {
+      "attempt": 168,
+      "case": "slow-consumer",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 56
+    },
+    {
+      "attempt": 169,
+      "case": "slow-consumer",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 57
+    },
+    {
+      "attempt": 170,
+      "case": "slow-consumer",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 57
+    },
+    {
+      "attempt": 171,
+      "case": "slow-consumer",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 57
+    },
+    {
+      "attempt": 172,
+      "case": "slow-consumer",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 58
+    },
+    {
+      "attempt": 173,
+      "case": "slow-consumer",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 58
+    },
+    {
+      "attempt": 174,
+      "case": "slow-consumer",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 58
+    },
+    {
+      "attempt": 175,
+      "case": "slow-consumer",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 59
+    },
+    {
+      "attempt": 176,
+      "case": "slow-consumer",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 59
+    },
+    {
+      "attempt": 177,
+      "case": "slow-consumer",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 59
+    },
+    {
+      "attempt": 178,
+      "case": "slow-consumer",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 60
+    },
+    {
+      "attempt": 179,
+      "case": "slow-consumer",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 60
+    },
+    {
+      "attempt": 180,
+      "case": "slow-consumer",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 60
+    },
+    {
+      "attempt": 181,
+      "case": "paused-consumer",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 61
+    },
+    {
+      "attempt": 182,
+      "case": "paused-consumer",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 61
+    },
+    {
+      "attempt": 183,
+      "case": "paused-consumer",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 61
+    },
+    {
+      "attempt": 184,
+      "case": "paused-consumer",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 62
+    },
+    {
+      "attempt": 185,
+      "case": "paused-consumer",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 62
+    },
+    {
+      "attempt": 186,
+      "case": "paused-consumer",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 62
+    },
+    {
+      "attempt": 187,
+      "case": "paused-consumer",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 63
+    },
+    {
+      "attempt": 188,
+      "case": "paused-consumer",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 63
+    },
+    {
+      "attempt": 189,
+      "case": "paused-consumer",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 63
+    },
+    {
+      "attempt": 190,
+      "case": "paused-consumer",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 64
+    },
+    {
+      "attempt": 191,
+      "case": "paused-consumer",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 64
+    },
+    {
+      "attempt": 192,
+      "case": "paused-consumer",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 64
+    },
+    {
+      "attempt": 193,
+      "case": "paused-consumer",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 65
+    },
+    {
+      "attempt": 194,
+      "case": "paused-consumer",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 65
+    },
+    {
+      "attempt": 195,
+      "case": "paused-consumer",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 65
+    },
+    {
+      "attempt": 196,
+      "case": "paused-consumer",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 66
+    },
+    {
+      "attempt": 197,
+      "case": "paused-consumer",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 66
+    },
+    {
+      "attempt": 198,
+      "case": "paused-consumer",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 66
+    },
+    {
+      "attempt": 199,
+      "case": "long-64",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 67
+    },
+    {
+      "attempt": 200,
+      "case": "long-64",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 67
+    },
+    {
+      "attempt": 201,
+      "case": "long-64",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 67
+    },
+    {
+      "attempt": 202,
+      "case": "long-64",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 68
+    },
+    {
+      "attempt": 203,
+      "case": "long-64",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 68
+    },
+    {
+      "attempt": 204,
+      "case": "long-64",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 68
+    },
+    {
+      "attempt": 205,
+      "case": "long-64",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 69
+    },
+    {
+      "attempt": 206,
+      "case": "long-64",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 69
+    },
+    {
+      "attempt": 207,
+      "case": "long-64",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 69
+    },
+    {
+      "attempt": 208,
+      "case": "short-control-H0",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 70
+    },
+    {
+      "attempt": 209,
+      "case": "short-control-H0",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 70
+    },
+    {
+      "attempt": 210,
+      "case": "short-control-H0",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 70
+    },
+    {
+      "attempt": 211,
+      "case": "short-control-H0",
+      "position": 4,
+      "profile": "angaria",
+      "round": 70
+    },
+    {
+      "attempt": 212,
+      "case": "short-control-H0",
+      "position": 5,
+      "profile": "recorded-spsc",
+      "round": 70
+    },
+    {
+      "attempt": 213,
+      "case": "short-control-H0",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 71
+    },
+    {
+      "attempt": 214,
+      "case": "short-control-H0",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 71
+    },
+    {
+      "attempt": 215,
+      "case": "short-control-H0",
+      "position": 3,
+      "profile": "angaria",
+      "round": 71
+    },
+    {
+      "attempt": 216,
+      "case": "short-control-H0",
+      "position": 4,
+      "profile": "recorded-spsc",
+      "round": 71
+    },
+    {
+      "attempt": 217,
+      "case": "short-control-H0",
+      "position": 5,
+      "profile": "recorded-connection",
+      "round": 71
+    },
+    {
+      "attempt": 218,
+      "case": "short-control-H0",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 72
+    },
+    {
+      "attempt": 219,
+      "case": "short-control-H0",
+      "position": 2,
+      "profile": "angaria",
+      "round": 72
+    },
+    {
+      "attempt": 220,
+      "case": "short-control-H0",
+      "position": 3,
+      "profile": "recorded-spsc",
+      "round": 72
+    },
+    {
+      "attempt": 221,
+      "case": "short-control-H0",
+      "position": 4,
+      "profile": "recorded-connection",
+      "round": 72
+    },
+    {
+      "attempt": 222,
+      "case": "short-control-H0",
+      "position": 5,
+      "profile": "recorded-acknowledged-connection",
+      "round": 72
+    },
+    {
+      "attempt": 223,
+      "case": "short-control-H0",
+      "position": 1,
+      "profile": "angaria",
+      "round": 73
+    },
+    {
+      "attempt": 224,
+      "case": "short-control-H0",
+      "position": 2,
+      "profile": "recorded-spsc",
+      "round": 73
+    },
+    {
+      "attempt": 225,
+      "case": "short-control-H0",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 73
+    },
+    {
+      "attempt": 226,
+      "case": "short-control-H0",
+      "position": 4,
+      "profile": "recorded-acknowledged-connection",
+      "round": 73
+    },
+    {
+      "attempt": 227,
+      "case": "short-control-H0",
+      "position": 5,
+      "profile": "nanomsg",
+      "round": 73
+    },
+    {
+      "attempt": 228,
+      "case": "short-control-H0",
+      "position": 1,
+      "profile": "recorded-spsc",
+      "round": 74
+    },
+    {
+      "attempt": 229,
+      "case": "short-control-H0",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 74
+    },
+    {
+      "attempt": 230,
+      "case": "short-control-H0",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 74
+    },
+    {
+      "attempt": 231,
+      "case": "short-control-H0",
+      "position": 4,
+      "profile": "nanomsg",
+      "round": 74
+    },
+    {
+      "attempt": 232,
+      "case": "short-control-H0",
+      "position": 5,
+      "profile": "angaria",
+      "round": 74
+    },
+    {
+      "attempt": 233,
+      "case": "short-control-H128",
+      "position": 1,
+      "profile": "recorded-connection",
+      "round": 75
+    },
+    {
+      "attempt": 234,
+      "case": "short-control-H128",
+      "position": 2,
+      "profile": "recorded-acknowledged-connection",
+      "round": 75
+    },
+    {
+      "attempt": 235,
+      "case": "short-control-H128",
+      "position": 3,
+      "profile": "nanomsg",
+      "round": 75
+    },
+    {
+      "attempt": 236,
+      "case": "short-control-H128",
+      "position": 4,
+      "profile": "angaria",
+      "round": 75
+    },
+    {
+      "attempt": 237,
+      "case": "short-control-H128",
+      "position": 5,
+      "profile": "recorded-spsc",
+      "round": 75
+    },
+    {
+      "attempt": 238,
+      "case": "short-control-H128",
+      "position": 1,
+      "profile": "recorded-acknowledged-connection",
+      "round": 76
+    },
+    {
+      "attempt": 239,
+      "case": "short-control-H128",
+      "position": 2,
+      "profile": "nanomsg",
+      "round": 76
+    },
+    {
+      "attempt": 240,
+      "case": "short-control-H128",
+      "position": 3,
+      "profile": "angaria",
+      "round": 76
+    },
+    {
+      "attempt": 241,
+      "case": "short-control-H128",
+      "position": 4,
+      "profile": "recorded-spsc",
+      "round": 76
+    },
+    {
+      "attempt": 242,
+      "case": "short-control-H128",
+      "position": 5,
+      "profile": "recorded-connection",
+      "round": 76
+    },
+    {
+      "attempt": 243,
+      "case": "short-control-H128",
+      "position": 1,
+      "profile": "nanomsg",
+      "round": 77
+    },
+    {
+      "attempt": 244,
+      "case": "short-control-H128",
+      "position": 2,
+      "profile": "angaria",
+      "round": 77
+    },
+    {
+      "attempt": 245,
+      "case": "short-control-H128",
+      "position": 3,
+      "profile": "recorded-spsc",
+      "round": 77
+    },
+    {
+      "attempt": 246,
+      "case": "short-control-H128",
+      "position": 4,
+      "profile": "recorded-connection",
+      "round": 77
+    },
+    {
+      "attempt": 247,
+      "case": "short-control-H128",
+      "position": 5,
+      "profile": "recorded-acknowledged-connection",
+      "round": 77
+    },
+    {
+      "attempt": 248,
+      "case": "short-control-H128",
+      "position": 1,
+      "profile": "angaria",
+      "round": 78
+    },
+    {
+      "attempt": 249,
+      "case": "short-control-H128",
+      "position": 2,
+      "profile": "recorded-spsc",
+      "round": 78
+    },
+    {
+      "attempt": 250,
+      "case": "short-control-H128",
+      "position": 3,
+      "profile": "recorded-connection",
+      "round": 78
+    },
+    {
+      "attempt": 251,
+      "case": "short-control-H128",
+      "position": 4,
+      "profile": "recorded-acknowledged-connection",
+      "round": 78
+    },
+    {
+      "attempt": 252,
+      "case": "short-control-H128",
+      "position": 5,
+      "profile": "nanomsg",
+      "round": 78
+    },
+    {
+      "attempt": 253,
+      "case": "short-control-H128",
+      "position": 1,
+      "profile": "recorded-spsc",
+      "round": 79
+    },
+    {
+      "attempt": 254,
+      "case": "short-control-H128",
+      "position": 2,
+      "profile": "recorded-connection",
+      "round": 79
+    },
+    {
+      "attempt": 255,
+      "case": "short-control-H128",
+      "position": 3,
+      "profile": "recorded-acknowledged-connection",
+      "round": 79
+    },
+    {
+      "attempt": 256,
+      "case": "short-control-H128",
+      "position": 4,
+      "profile": "nanomsg",
+      "round": 79
+    },
+    {
+      "attempt": 257,
+      "case": "short-control-H128",
+      "position": 5,
+      "profile": "angaria",
+      "round": 79
+    }
+  ],
+  "build": {
+    "compiler": {
+      "argv": [
+        "/usr/bin/c++",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+    },
+    "coordinator_python": "3.10.15 (main, Oct  3 2024, 02:33:33) [Clang 14.0.6 ]",
+    "executable_architecture": {
+      "argv": [
+        "file",
+        "/private/tmp/angaria-end-to-end-build/angaria_ipc_comparison"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "/private/tmp/angaria-end-to-end-build/angaria_ipc_comparison: Mach-O 64-bit executable arm64"
+    },
+    "hardware_optional": {
+      "argv": [
+        "/usr/sbin/sysctl",
+        "-n",
+        "machdep.cpu.brand_string"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Apple M4"
+    },
+    "host": {
+      "machine": "x86_64",
+      "node": "Sal-MacBook-Air.local",
+      "processor": "i386",
+      "release": "27.0.0",
+      "system": "Darwin",
+      "version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:57 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8132"
+    },
+    "logical_cpus": 10,
+    "sha256": {
+      "CMakeCache.txt": "484ce0628a07c5eae504d77684e413f4a6d547a316d1210288dc46bf953945d3",
+      "angaria-flags.make": "579614c457305a3fe60d1ca4d5b31c6d59aa6e48dbb72a91fb97c9a95a7ee034",
+      "angaria-link.txt": "8f2db5a19791b4cc585019ca320bffb376e6022009b7693ac732f2bdb9d66035",
+      "angaria.a": "d4c3859b4942fa8f03a758ac473473c735383c87c6750df16a1c65fbca2b5d25",
+      "angaria_ipc_comparison-flags.make": "354dd42a47c5565df4f6644d994f95dbc497ad0078709a010b4296006e37e6d3",
+      "angaria_ipc_comparison-link.txt": "84fed67a3147a7095fb8facbdb15d0c232aa938db04882e4c46c6f4ccd867b20",
+      "executable": "6d746b03f465438b19a5b5a01cd484d11fb532f68d1ef3c17b6a3eef53312ad0",
+      "nanomsg.a": "12051477bd533a40b776d53686b6468b3e0d26650b1fd5388ebf589a24211462"
+    }
+  },
+  "cases": {
+    "credit-1": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 1,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "credit-64": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 64,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "history-0": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 0,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "history-65536": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 65536,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "long-64": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 139264,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 8192
+    },
+    "paced-100k": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 10000,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "paced-50k": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 20000,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "paused-consumer": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 4096,
+      "pause_ns": 20000000,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "saturation-1024": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 1024,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "saturation-256": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 256,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "saturation-64": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    },
+    "short-control-H0": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 0,
+      "interval_ns": 0,
+      "messages": 16,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 0
+    },
+    "short-control-H128": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 128,
+      "interval_ns": 0,
+      "messages": 16,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 0,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 0
+    },
+    "slow-consumer": {
+      "budget_ms": 60000,
+      "collection": "none",
+      "history": 8192,
+      "interval_ns": 0,
+      "messages": 20480,
+      "pacing_spin": 1,
+      "pause_at": 0,
+      "pause_ns": 0,
+      "payload_bytes": 64,
+      "processing_delay_ns": 50000,
+      "qualification": 1,
+      "ring_slots": 8,
+      "scenario": "concurrent",
+      "socket_buffer_bytes": 131072,
+      "warmup_messages": 4096
+    }
+  },
+  "complete": true,
+  "completed_utc": "2026-11-28T08:45:29.921522+00:00",
+  "dependency": {
+    "nanomsg_archive_sha256": "acf65c0ef312f431aa3c4cb114326781c999ec0c977067f3a1f0c81b5ec8710f",
+    "nanomsg_commit": "73e89d2ca28d11cbd39bb15e8d2e1edeb7eec68a",
+    "nanomsg_version": "1.3.0"
+  },
+  "failures": [],
+  "format": 1,
+  "host": {
+    "cmake_cache": "/private/tmp/angaria-end-to-end-build/CMakeCache.txt",
+    "compiler_version": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "cpu": "Apple M4",
+    "executable": "/private/tmp/angaria-end-to-end-build/angaria_ipc_comparison",
+    "executable_sha256": "6d746b03f465438b19a5b5a01cd484d11fb532f68d1ef3c17b6a3eef53312ad0",
+    "git_dirty": true,
+    "git_head": "8bcd30810b55a69d00eeed1625a3018e3ced1527",
+    "git_tracked_dirty": false,
+    "host_label": "Local Apple M4 macOS ARM64; ordinary end-to-end qualification",
+    "machine": "x86_64",
+    "platform": "macOS-27.0.1-x86_64-i386-64bit",
+    "python": "3.10.15",
+    "repetitions": 6,
+    "runner_arguments": [
+      "collect",
+      "/private/tmp/angaria-end-to-end-build/angaria_ipc_comparison",
+      "--output",
+      "benchmarks/results/milestone-4-end-to-end/macos-arm64",
+      "--source-commit",
+      "8bcd308",
+      "--host-label",
+      "Local Apple M4 macOS ARM64; ordinary end-to-end qualification"
+    ],
+    "smoke": false,
+    "started_utc": "2026-11-28T08:42:03.794853+00:00",
+    "summary_method": "median of per-run quantiles; samples are not pooled",
+    "timeout_seconds": 90
+  },
+  "host_label": "Local Apple M4 macOS ARM64; ordinary end-to-end qualification",
+  "methodology": "All permutations for core cases; cyclic rotations for long and legacy controls. No discarded attempts.",
+  "raw_sha256": {
+    "raw/attempt-0001.tar.gz": "20eb1259e894acea4c224eec8667f0a724de3bbcd2bb83a6f57b4fabbce31637",
+    "raw/attempt-0002.tar.gz": "7538ef5ee3929b221954797ab1acc4cfe8f2c9734a945db5db4096c60858dcc3",
+    "raw/attempt-0003.tar.gz": "deb9d907fa8584d684b3d2aef205c43eec5eae27844ce70b07da0419dbc0c18e",
+    "raw/attempt-0004.tar.gz": "425297c11ee792bb89c62ac96340fed7a576b83e8cb903e69420813a9fe9e69d",
+    "raw/attempt-0005.tar.gz": "f154f9c0d13c511f095632c40506affc5c0087166adc87268fd97833644cb4b4",
+    "raw/attempt-0006.tar.gz": "fd916277c6a9fac1fd223692b5ef68e62f45821efd20a7ede866e227e9813ade",
+    "raw/attempt-0007.tar.gz": "d35ca3e960fecd5bf6d4aa40ca20b5f1bbf51929136405bd81e2ff0c0b364baf",
+    "raw/attempt-0008.tar.gz": "eb0cf70be98247b694914e766d52580720f160d15fb74bfc7a95c7825477f35c",
+    "raw/attempt-0009.tar.gz": "d492be5da7a7b4dd881a9d6e06e6891d8dcaf3ea91eb94cccce7576283a71337",
+    "raw/attempt-0010.tar.gz": "dad9e1dfbe4dd5049bfe0fe07e92fb2daeb76289573dab1b507e7018b5effd73",
+    "raw/attempt-0011.tar.gz": "c9e0e8e95cd460a453a38eed976402340d6c23a15f75dd26de6fe73425ec4dfe",
+    "raw/attempt-0012.tar.gz": "1814d5c2172dfc8e14abc29f128816d31c32394f60b0c3c4864f4d7af5230141",
+    "raw/attempt-0013.tar.gz": "016ed7989e6ce3c604201ecf02b01a18225a715112c728b9cae1affd95f8aa5f",
+    "raw/attempt-0014.tar.gz": "a7746d75c5d879e66670194d7e466a0030526bb6841fb7ab55d095eae142a858",
+    "raw/attempt-0015.tar.gz": "3db3be70b8ec6fe9a5558bbabf1db40971aebaf7e60197c455e6e8089b806573",
+    "raw/attempt-0016.tar.gz": "c017df5acce5f4891940cce6d21e76f405ba640e0c56bd621cf587d29287182a",
+    "raw/attempt-0017.tar.gz": "caedd7d0df8e9b2b1e7a909e357779f6acb1231af583504eb44734b4a5af637f",
+    "raw/attempt-0018.tar.gz": "2afed362e67113b58cab0f1cc692349ed52d1caa4e70857d42e442d5363bb146",
+    "raw/attempt-0019.tar.gz": "ac4ced1315c945984b3336d5f3763a47efb51424fa804d714aafa3c6c36fea7a",
+    "raw/attempt-0020.tar.gz": "a579d7b0c3a910fb0385f8f167dd6a7c71ce1a0ba94ccc2ca5966588dea82990",
+    "raw/attempt-0021.tar.gz": "a04b5dc9647f93a04e20dc75be1a32ad86c744cc5bd146d074d0ef4b3bc7f9d6",
+    "raw/attempt-0022.tar.gz": "c01825482d7944df63808b8bd55fc9edbc1f98deb99484d134119ebb22850fbd",
+    "raw/attempt-0023.tar.gz": "873f63f90134f979cca3e61746f125c4969877d17594d86b7a3a99a33276bea2",
+    "raw/attempt-0024.tar.gz": "ecbbb8934408efa292fb9c0c148360bf1027187313bc22adeadd7765a8422153",
+    "raw/attempt-0025.tar.gz": "8f5bf694f7571420b91ee67681dcc49070f652198c9409a65aaf81aa8b40be10",
+    "raw/attempt-0026.tar.gz": "00eb6f202cdc83b7e86e31fd174da31e9d91725002398373a6736618bd448a35",
+    "raw/attempt-0027.tar.gz": "268b8dcd5659c1226adcbec6cc774aba2cff44b014216455d9e0312ab0dd036e",
+    "raw/attempt-0028.tar.gz": "7b287deb54a027d1d64bf87f95b49d0c5d72c705c7e518b3155fc9d4ba43f458",
+    "raw/attempt-0029.tar.gz": "dd667d895f6eb0a9ff3c7e79276d2510e556e86183458e5acb5dd04f8955a8e6",
+    "raw/attempt-0030.tar.gz": "b18b1ffd74336be37cbfbae163300db79167c7bbd31a9bf2e4a5f4b40e1f27ab",
+    "raw/attempt-0031.tar.gz": "73e6080bc450d70dc792d4ee409ab13024b00fe549016b9b04c9113e63329b26",
+    "raw/attempt-0032.tar.gz": "4fc97d9fc60a6e447332716554f78f75d3b49eaf8c6bdb093189d2ba41619cbc",
+    "raw/attempt-0033.tar.gz": "0380deea74c908cbf4e9a7328ce7f1b2831af2e73b8b1d11e4c94184e6e9bf95",
+    "raw/attempt-0034.tar.gz": "4fc36e4b9fcadab77c981bb6a3aa43fd8c56d3f73ee457deeb729c6b576e0e64",
+    "raw/attempt-0035.tar.gz": "74be61c7acf8bd94557b8a32dab98cf7cee71d7ff3a4d5bc3d2fd6e7f41bc9fe",
+    "raw/attempt-0036.tar.gz": "f24ceed58c4af206c1135747da0d40ca4f1c7184d314415d41089e25a9073245",
+    "raw/attempt-0037.tar.gz": "183946d4a7797c41f4f35d6e81bbfb02e5a4b2733afb4e2948bd8e6a71ffb91e",
+    "raw/attempt-0038.tar.gz": "7920d21ec192e5478e00566957f676687567ea66e3d0c1f1b64c5be2ad4bc900",
+    "raw/attempt-0039.tar.gz": "49f310d1a972b3173b301390904952b47959338015e048d4c36d86a1f81b63f9",
+    "raw/attempt-0040.tar.gz": "893270806646144b5fc66c193d5cfa4162a64494f0b8e9187ddae9b3c0d4635a",
+    "raw/attempt-0041.tar.gz": "e7e504649c0abdc7279008e9bbebdbfca14b6074b664312ea4463dd1eff7c04d",
+    "raw/attempt-0042.tar.gz": "27874e067c1d283c876184cfcb8960c2abf73a02353ed752e1dd335a3ea89a95",
+    "raw/attempt-0043.tar.gz": "d3b053b88adb26baae6db2d948fcd1038e78ede27c4d0491cc527dc615f34b3e",
+    "raw/attempt-0044.tar.gz": "52510615ec67cf124a8b894e3a147888ed3fb2389717c708cd14c697c2e009e3",
+    "raw/attempt-0045.tar.gz": "7154b8b51a0e7afb3c8d94ef877ab4385b5bc4bf74b1ab59bc03d7d8d5c87869",
+    "raw/attempt-0046.tar.gz": "0bcb333497b15b2532ee7a9a1a18767f5c3d8c3de16c9f3caf0ba9b2322dcac7",
+    "raw/attempt-0047.tar.gz": "d98a3a77bafb4680178364055deac76e532d69022ed2006ad02c79d886f34ce9",
+    "raw/attempt-0048.tar.gz": "639da8d725fca7e4a7c75ab5c34f9669793a7f7c148c9b103632ea416d6c15b9",
+    "raw/attempt-0049.tar.gz": "76e9bea118ada3fcac2eb364ccc272fe7cfcf372f413853d750ddd09a219587a",
+    "raw/attempt-0050.tar.gz": "82204d0a41f52f8145c9ca16ff829f0c997c90f2861a7a47650d973c1e9c8fff",
+    "raw/attempt-0051.tar.gz": "ea7113d1000c7e9e21bb9c90453c86e4a1df9b5c68f4e0975d6528cac381958a",
+    "raw/attempt-0052.tar.gz": "24807b14eb180b7e83e39b8e921ae8cada591751551e5f58f3b7b9586df0d4dc",
+    "raw/attempt-0053.tar.gz": "d829341fb0f8a6a3ee942e85a7444c92cb5ef18d0c4f8c3d19650aeea2ac64e1",
+    "raw/attempt-0054.tar.gz": "459575db1b0646cf0517461053a1aaabb124271b8f03acf19ae97c733c7b556e",
+    "raw/attempt-0055.tar.gz": "758ca8b2ee55b038cfae4ff287b93ad943836e949d4ce138edf6bc4c40af3083",
+    "raw/attempt-0056.tar.gz": "2bc7f122fe09147edc01df9263a122de230ad546cf839d654bea81f4a57c9b6b",
+    "raw/attempt-0057.tar.gz": "58680db297b25fcf620bece09a658ff20215ba9532f7e609e49c6b79dea77119",
+    "raw/attempt-0058.tar.gz": "11df779ba4e980a5b09450776a8bdffdffcfaf4fb22d6e76cf536fb82afda257",
+    "raw/attempt-0059.tar.gz": "1778dbecef490d39005dda01c97edb17e1066a8042bf56c4aa6fc7fe2a0a5179",
+    "raw/attempt-0060.tar.gz": "e5f7079341eb124d33a5ac84376c2c4d8eae7e3ff4173abc837de8a7e04ad322",
+    "raw/attempt-0061.tar.gz": "a9c18eaeb78a4a4c6503cd5862417298cd71237ddac5c5fb9367e6be6633e180",
+    "raw/attempt-0062.tar.gz": "6cd9939805d0152568a9a6681a27d95d65c5352c962a8046b0cfbe2417880cb5",
+    "raw/attempt-0063.tar.gz": "2c5c1d569ecfd88457753507362a4f125bdcf44017005ca4f7c7b6b5a003082b",
+    "raw/attempt-0064.tar.gz": "7eb2416ec6a194f6cb5bfec1aea72cef560d1643e48e8e0e60045f8e4c0bd125",
+    "raw/attempt-0065.tar.gz": "6e68c096a2e40cdc1dde9cecc45d63cf1de13bf65fb59e8da6e4d0ced55314f9",
+    "raw/attempt-0066.tar.gz": "3ebd5465b5c2ff72eee976d8f1359fd54ad3ac66850494edcf02fce1c25be4c6",
+    "raw/attempt-0067.tar.gz": "acb6671479ac02d891b864ea9766d6829430554def867bcf55c9b13018f2353b",
+    "raw/attempt-0068.tar.gz": "9bcce42e40e2c5f2d79ca7f5ad2b40a0056f831a1653d4d9f66c1569ea469279",
+    "raw/attempt-0069.tar.gz": "d60ef0647a92f0fee47412a47e2fcc117aa13b9b8f1821977aeb877119ff5fa3",
+    "raw/attempt-0070.tar.gz": "79d1539bae4557653e01eb96130d87a0a34ae96923b64d3ee83bff33c85bb4b3",
+    "raw/attempt-0071.tar.gz": "7fa174abba005ddc469d95cf0c12f7e8e9badf8a4bbf11e07658d3259049f6f7",
+    "raw/attempt-0072.tar.gz": "b415edc8ea41159f14f83d41cb576c17ea2052cb656412bfeaeccf942261c2c2",
+    "raw/attempt-0073.tar.gz": "d0a57aa0b672d6011ea2eb3cb4b6074c9416d46570a49a5e992085d1613d9e89",
+    "raw/attempt-0074.tar.gz": "d8400a97dffade121f98f19193a1ce32b1ee0ef6f7d361ebeb60c79baf5dbe6c",
+    "raw/attempt-0075.tar.gz": "6ad33d87e2217a25c6b1e1860efe834603bcc382b761b0b17ffaba918ebe7ca9",
+    "raw/attempt-0076.tar.gz": "5d633bd5aae516a19d8438348f82fc93a6ae0026e4fb33880e6366ba46da88ad",
+    "raw/attempt-0077.tar.gz": "52900ffeea2a38193a391d3c5abf5f304c4d9c8d8ad442ef7f6ff9aae016e51f",
+    "raw/attempt-0078.tar.gz": "d134c610660b08a68f24d4197d033f52072979c9b64f4f1fa33fc769c7a0797f",
+    "raw/attempt-0079.tar.gz": "2dc48e10f3a6c9bd08485fcde6a86a29de9093a84e61a7237aaef86f8d33e8b3",
+    "raw/attempt-0080.tar.gz": "ed6d8b42ec727891fe0e7172b5ce1b5a933ab28fcdf4c875923777e02dddd49d",
+    "raw/attempt-0081.tar.gz": "2a80bc369b70fc3f1843f58a0f424b71569c48097e5e9e1e8141adba81180461",
+    "raw/attempt-0082.tar.gz": "31866b8fd16709f239a74d786e83102ee99ae354f85e7cd7364dc9c0b3281ced",
+    "raw/attempt-0083.tar.gz": "c23ce4d8162d2394373dbd4ca0d5a3d0636d1fdd58d427d71803e900f5a9ebec",
+    "raw/attempt-0084.tar.gz": "3f47c8d8b0b4078b7a5c08d004c9ec2ef61094f6879527325cf9b70dbe39b2e2",
+    "raw/attempt-0085.tar.gz": "a575ac204ff31779f2f9dc9bc050e3d7c8da8dba630d2e9b2100797de3f277f2",
+    "raw/attempt-0086.tar.gz": "453175e81e9f802501b21a699bb1cd38b749397684f0b6bdf1413ce59b373361",
+    "raw/attempt-0087.tar.gz": "d4f74667263626844a10ded5663c7083983d203f8e517ecd0d8196ef1a7306e4",
+    "raw/attempt-0088.tar.gz": "64e16c799b8a2e9e65bafa947157f71ffb648f253f2d46da67d217f9059a2cfa",
+    "raw/attempt-0089.tar.gz": "d4fe359e4fb07310df70bb78d46c9b562d9de19296573feabdadc33750c4015f",
+    "raw/attempt-0090.tar.gz": "9cbd36d32c85d0fcf9c62529549e6b0a7ebd50243876caf95f2f9aa0e9601464",
+    "raw/attempt-0091.tar.gz": "160125645d4f411e278dc902cc517d64c8643c66dbec3ffcf1de20383b049967",
+    "raw/attempt-0092.tar.gz": "50a0936e08deabffacb85f62bcbf9febe7032f00450a36972757be69cbf34c0a",
+    "raw/attempt-0093.tar.gz": "bad33321e1928c9e196b6c94e296ceee5b9ac9a792012049c2b0fef1ec58bd1d",
+    "raw/attempt-0094.tar.gz": "53072bcd15cd076be616ec93ee8edd7b95e162c0e946398595d6720f10cee6fc",
+    "raw/attempt-0095.tar.gz": "1a7b8e4230efc8fe6557c586df79d1c9307866f6bbef729f2e72800c1aaea87e",
+    "raw/attempt-0096.tar.gz": "7f017c674aac48f177764e74607c5b8205b7adaefeb32b0d2c47b37894c46dd9",
+    "raw/attempt-0097.tar.gz": "244026f030377500c868a8302e67ae1e8aeac9bfc62b2c22fd08a55135e1a5fd",
+    "raw/attempt-0098.tar.gz": "4f8ce4d6ea6c33256be4660b6eea0f9d31e2077581bd4ac24ec4d5aa0fb93c0b",
+    "raw/attempt-0099.tar.gz": "6b1d7c18703a7973e46c9d53c01cb259ebe14a70ff05b64a596ce07f893e68c4",
+    "raw/attempt-0100.tar.gz": "df459151c312bd15daef036c9f7cfca0db830a7f9c895bb08f6395107e584345",
+    "raw/attempt-0101.tar.gz": "5f49ce60053ce1cedb4cde577e14b58deb4e02a0a8cda6f5b0ac2d0043951739",
+    "raw/attempt-0102.tar.gz": "a88eb04b4daf70b1cbaaa8c032d643230cca4457ed5a737ecfbdcaeb6534598d",
+    "raw/attempt-0103.tar.gz": "19bc943f7bb29a39aca3716a9b4106e6550f79f5c172e9fb28b40f1cdbc94ddd",
+    "raw/attempt-0104.tar.gz": "e3545f5a21862d292852499c751cc0ac04cf26cedd469cbaa7eb599c2dbb50fb",
+    "raw/attempt-0105.tar.gz": "3d6329736b4d801b4e933ef1f84e62355881ec08691e91de00bfd7a9ebf5563c",
+    "raw/attempt-0106.tar.gz": "e8add61e25e793bd7af0d806b759faa60578725a5766acdec6fa62f06d17c804",
+    "raw/attempt-0107.tar.gz": "d943cda10bcccc0aad3f4178c89dc01b05e7b815b68496dad63730ec226448d6",
+    "raw/attempt-0108.tar.gz": "836211afe84593c08abd2819616af4a724ad8d0b4330e6a9eea2d74d926050e1",
+    "raw/attempt-0109.tar.gz": "9453d6d0dc6e1c1e92c031227e5ee5ff5d347173ce842da61342b4817edd140c",
+    "raw/attempt-0110.tar.gz": "1869284473e253d56aec428280ff8ad5ee7f1963e3eea8839b73d7962ce1de25",
+    "raw/attempt-0111.tar.gz": "8c8fa3a271bb7233c6375138eb1e8fffa46f3d88096d0549af1af24ee4c0be9e",
+    "raw/attempt-0112.tar.gz": "b9562dbca94081f16fd8d6dc3ede09cfebdcb41071b29c6b258e0133bfb38200",
+    "raw/attempt-0113.tar.gz": "5f447cef2d6df9312e25acf51da5b3a74be281b44b644e4bf81a9e3158747cbc",
+    "raw/attempt-0114.tar.gz": "d8a0b39214ae42c1f527b70b5512e0a35b53fa755cdc3bafb76ee4896b67c182",
+    "raw/attempt-0115.tar.gz": "29b47f25c7a70b3e7ec40d010f1365a519095b080ed01ed67bdfa61267814e24",
+    "raw/attempt-0116.tar.gz": "cb680862b72da5c1d640b3ac00a36ab73a9e3cb6725f2eefdb33ca32a040c4d9",
+    "raw/attempt-0117.tar.gz": "9237dcf96d62b06039f77a5034530481d943f998d867a6f38963ed32799a5062",
+    "raw/attempt-0118.tar.gz": "10d8d774fbddcc714e7aa365b31d8f27a81fa5d7fd23ebcad05959ed442f01da",
+    "raw/attempt-0119.tar.gz": "2eb454912204614ec938845f5befb783e851b80ac4022bdcd45d9aa5fa34d395",
+    "raw/attempt-0120.tar.gz": "7f65315ba229fb148141ceef82985f9bbef7821d17c7675f336f9b68e7afcc68",
+    "raw/attempt-0121.tar.gz": "7d1fc64434cb44e01a489b62ca120dd81c620ef4025b99411cc398ca48012581",
+    "raw/attempt-0122.tar.gz": "4f074bad298380db3a9e3db44decb8202d2a11e91080ba14fdb5212158cc7205",
+    "raw/attempt-0123.tar.gz": "4506187297b1e1edd9a1b8ffc493f1546e665a16023ad887817f64e7d8682816",
+    "raw/attempt-0124.tar.gz": "2b3315a29ac75fbcfddec4ab210d922335d71e17b50e1981216acd1d7e82c823",
+    "raw/attempt-0125.tar.gz": "f6155beb944d918c9cd67b6b7682d04878771cd97a89fe2a1c192e5f79e954ac",
+    "raw/attempt-0126.tar.gz": "b742f79275304a868e7b7c16fec309806f08ccdf396014bbb0dde32128835303",
+    "raw/attempt-0127.tar.gz": "164d3ebfce5e034740476d4a79fb89c23319fad54e30ddbd3603fb0bd9e25909",
+    "raw/attempt-0128.tar.gz": "daad9dceabad37e7f8e6cbf425cd6a2b810e1ed7a38628efb37d2d67997c1f50",
+    "raw/attempt-0129.tar.gz": "b862339fac9a102c0350f4485097744d6cda0a844d643ad660b1ac86a366f03e",
+    "raw/attempt-0130.tar.gz": "0ccdd8357e77be4359ca67b1348d982d03808879bd4631f892cca89a65ccdd3b",
+    "raw/attempt-0131.tar.gz": "7239ec608a9803c90afde58335691e87ffeba1892ec255c44f1bd12794b8fe15",
+    "raw/attempt-0132.tar.gz": "e21ea27466e767e39f416787d69588338fb8bad23a068440f21007f026c70ec4",
+    "raw/attempt-0133.tar.gz": "2f0c824256614e2c88a521c8d9fe6330f5eaddf17a807a0c1c39b03896c20f11",
+    "raw/attempt-0134.tar.gz": "1530cbcc943dc571ecdc7e6d74459455aa5350a82b109bf9b9f5965a1f2a1811",
+    "raw/attempt-0135.tar.gz": "62cef4de4b49cb3b9ba3b0768705233e1db3a09c120524a514bb34cd6c2b25c1",
+    "raw/attempt-0136.tar.gz": "78ccc6dfdbb4ca804b0105b5af2b587c8b10ed307f7a66bf48ba2954817fe2b1",
+    "raw/attempt-0137.tar.gz": "db93a2d3d7a7a1f0601a3f13548bd1dcfca216735d2a07d0d4144a052232786a",
+    "raw/attempt-0138.tar.gz": "e788dee3a69d05bdb35bb65559a8ddd0a41a69063be3986ffa89e0dc10467e52",
+    "raw/attempt-0139.tar.gz": "d724057331011cf3b0dc0a0e6071fc62b007bb5aa9be71b3eaf6b1b32eb94578",
+    "raw/attempt-0140.tar.gz": "64975b18c0dfacca52eeeed7d88de966529559587059759b776d52e03947af35",
+    "raw/attempt-0141.tar.gz": "bdb6b0655f5dc79919666f71156580014f5004ff02e0c6c8bbdb323ec132c27c",
+    "raw/attempt-0142.tar.gz": "178af24bddb54d11bcd8e8dfc695764a0e3803f8592a08c3fa3accfe2acc0d77",
+    "raw/attempt-0143.tar.gz": "cd1f24dad033b72369aff441c463b50a6b4c6d7fdef3f667931c5b6ad45be676",
+    "raw/attempt-0144.tar.gz": "4e66d8efa57a21b93e2580baf12185c0e9d94fb59c358e146ef11c65d47feafc",
+    "raw/attempt-0145.tar.gz": "b76a4920f8c95dd50a213888e62875cad29059d47018cab8010d90d95f04373b",
+    "raw/attempt-0146.tar.gz": "90c0a40be3c3f40319a61ee61016f89206c192f0d5379e8867dcf2f5dd1046bf",
+    "raw/attempt-0147.tar.gz": "759cd695af6a57ae021e9fe7e59ffce02f5e67790e9307f7d8dbdc18d02a1ce8",
+    "raw/attempt-0148.tar.gz": "54c79a0e8cbbdb8bde5f4933eb07b94a5c4951d26676fc7b2ed6b7f44698b463",
+    "raw/attempt-0149.tar.gz": "8bf195828016bbd3aa39740785e5306f6485c02d04033cdb31bb675e817478d8",
+    "raw/attempt-0150.tar.gz": "f1196f789618241275c802029d49dd8554f29c5e2f2a0e399401cbb424f38015",
+    "raw/attempt-0151.tar.gz": "ed124f8ae5221c4dddee7edc03330ee3681f25a04b33e6c844a5c65169ae0236",
+    "raw/attempt-0152.tar.gz": "4fc0df8dae72f2641235419027a87c3907984f64edd59dbf6684426722c7988f",
+    "raw/attempt-0153.tar.gz": "ce59197bbe9095288e75627d7426e11b6594e7330bc55644d27bf107853f8c3e",
+    "raw/attempt-0154.tar.gz": "dd281c60859160385650ad59aada5725cec27b83103eb4646f4e0727f35b4c05",
+    "raw/attempt-0155.tar.gz": "02b9169aa18ee4aac0ab2bde5ea219e5a9545dd83e65eb38517660d18826b325",
+    "raw/attempt-0156.tar.gz": "b262d9092a0c59521484ad9a1434d3635e649c4b76a443f47e41be06afc9ceac",
+    "raw/attempt-0157.tar.gz": "871b50ba37ab84c12b58385c358433401c645a1cf6988440a95360d90fb21ced",
+    "raw/attempt-0158.tar.gz": "eba9b1a403c8338e46066efe20fd104a0e6590d0919b6caf9f3c8e58f889bbf3",
+    "raw/attempt-0159.tar.gz": "6cf8627e7c0e668e181814170a2cbb0d8b78b5d25d2bf40aaf566f962c40ea01",
+    "raw/attempt-0160.tar.gz": "a4a4715138f8886db121a825bb9c3eaa8292e6ec621d58baec10afe8ef24541a",
+    "raw/attempt-0161.tar.gz": "0ae483443238d76522d7f267290fc22ef3d9e290d7b4e4df163b98cca6783e63",
+    "raw/attempt-0162.tar.gz": "1fcd605fee723ceced250ab5c55ec3eca0ce8ff57f3d7de1f5382111a2804f63",
+    "raw/attempt-0163.tar.gz": "7632b9267a97912909c002fa348dc45c97775f376d4ef1650573bb607d5fa361",
+    "raw/attempt-0164.tar.gz": "b8d3d341c03c09bfa0cd14af6cb317f1cba12477b829a00cc3d153c419937aee",
+    "raw/attempt-0165.tar.gz": "90b0f3e6eeacfbb4a52dfcea1229eb3081421e886af004b99e868462adc5bc5e",
+    "raw/attempt-0166.tar.gz": "0613fadacb0e402c7cc2cc636ba903ddfde9f53dea8fc1f2bd2e78be5f9b6de7",
+    "raw/attempt-0167.tar.gz": "12575bcc898455eb0c7fb73000d366df7989b8601c06b54226d1badc0f7d2630",
+    "raw/attempt-0168.tar.gz": "9055a5655992c5a526a01f92662b6656c26e3ec9a8fcbd3cb9fe5a58fe2e40b9",
+    "raw/attempt-0169.tar.gz": "75a53605bf9b1622d6dbc9c1e154197ff7acd9f92991e2d9e05a51fbf8cbce6d",
+    "raw/attempt-0170.tar.gz": "13e22e08e189dcb89e436d92fd400afaaed0d8478a0ec0eda22ad1b196795edb",
+    "raw/attempt-0171.tar.gz": "a0d47fd8279e50a2f7b5996ead8413ef069ad3d719cc291e1168c593b48390c6",
+    "raw/attempt-0172.tar.gz": "0d4fc69c6c8bb3c4ad7aa05c16e9df6d2351745e5ae0b3fa4ada6a8663db0fb1",
+    "raw/attempt-0173.tar.gz": "4d27beb4b2189228f0553bdc84125c7226a95b34a0a768971f230b3d91bc476a",
+    "raw/attempt-0174.tar.gz": "14d7a12d23aec0a0725d156f1ba2f190ec326e61d4c9f1217e7ef8c3668348ae",
+    "raw/attempt-0175.tar.gz": "2196f30c8a73284f8fb24a173ef49e619fb4faaee0b1c78fde3caabc1e67d73f",
+    "raw/attempt-0176.tar.gz": "d2a534add06e38668b47f8459f78cd1ed8301a4f6ddfac52ccac8f3b303e9f79",
+    "raw/attempt-0177.tar.gz": "df805452efc8692342d9e93a9c3ab4dbf625b16d316b63cb410660bbf7c1876a",
+    "raw/attempt-0178.tar.gz": "8fb28c653f2447ac798df4514a8bdc568f5e82d3f32873c41661dada3444508e",
+    "raw/attempt-0179.tar.gz": "a3d305a1c1125f15f88a41d72b22f1d966216972cbc849192b76ebb4cec6948f",
+    "raw/attempt-0180.tar.gz": "b4d33139e7be97df091ecf6da24eed3499264b06af618602d7db2c2f9477f228",
+    "raw/attempt-0181.tar.gz": "6f9d4b63a84939925025e8c306bad3a6a954f455e9f4e84735b60083c96bd893",
+    "raw/attempt-0182.tar.gz": "498014c3ab4f7fdfacc5275256a9f5bf6724549a0f5e40035c899f56eef2a154",
+    "raw/attempt-0183.tar.gz": "9f496b7846ad953af099354951429e8cfb5df9596c3e0ab8473e497130ec41fe",
+    "raw/attempt-0184.tar.gz": "f8e106e922aeccba0a2da48bfb9501be35ea765b492e99195c8652132656718a",
+    "raw/attempt-0185.tar.gz": "761d6b15a01b3b65f4e7351eabd68190daafd7a3fabe7c5895c431f77afa7e35",
+    "raw/attempt-0186.tar.gz": "65c9f0df8e1264c46094ca079a0cd1a09a67addf99af1cfa73bb51eca65c0d6c",
+    "raw/attempt-0187.tar.gz": "4ea6fffb468b6d8fa11a2e8386e1bb0dd9b8b7436c6071df33aa3c05a3efd666",
+    "raw/attempt-0188.tar.gz": "34e926fc234b30b4ba8a76fbca1243e256c4edd527bbbd08d5fe22d045de5f71",
+    "raw/attempt-0189.tar.gz": "844be6d6e10126bd3d36a95e46f922cf0d74ff977004927cd536910e0286d495",
+    "raw/attempt-0190.tar.gz": "efc3c7e4c4ab0baf31e5bc978f77a3b91a57076389e45c7c239c45f78e3e39e7",
+    "raw/attempt-0191.tar.gz": "c492008e6da70c55938d1e95e9ad620e7762c7def0b9334ecc54d1e532b0e664",
+    "raw/attempt-0192.tar.gz": "3fd591a52e64ddaefb8284bd5e9d524c7670df8078d9b09a7f063c0c99cd4173",
+    "raw/attempt-0193.tar.gz": "0238261896ba2c06059865b710ba9c4cf595444a5ef17cb071eae32bcb01220a",
+    "raw/attempt-0194.tar.gz": "ff2c39e16f17158e5db735fd741c7f9c78f4f2caff70efbd1cd378055f71e41e",
+    "raw/attempt-0195.tar.gz": "2196a23a8736921382f8a2ec8caaab42a4db48c91e0680aff48e31205c88f3d5",
+    "raw/attempt-0196.tar.gz": "c247d55607dd77bb3db74ffed5202866526f276768a3dade8d326cbe90e6c893",
+    "raw/attempt-0197.tar.gz": "9a5245275d4aa2a7ae01841f867e265b20c5930e541503511b5c45357bfaa0e1",
+    "raw/attempt-0198.tar.gz": "ec545d5b058ca88eac4419f90849899d80f286bce3ab3bc2de65a0f23a864d32",
+    "raw/attempt-0199.tar.gz": "d3a83b1df88845b86004d54f6aac6fb759ebc3741456d5328c163e941d7043e3",
+    "raw/attempt-0200.tar.gz": "b96946e3e47b6a1fee13b7e9ab056b027733685fab3acd749c3d2f766bbe7452",
+    "raw/attempt-0201.tar.gz": "1b6900190614fca9e9d8cc31bda32d228bcc8f8398150b629c7e42fee4535e8f",
+    "raw/attempt-0202.tar.gz": "cb565cecced903cac5f9524846c9d41ab1355f03710d665bb2b9e5437d814a43",
+    "raw/attempt-0203.tar.gz": "986175209efbfdd5017195202a02b2cb779f6ad88d382bcbc6ec56eae313fa9f",
+    "raw/attempt-0204.tar.gz": "87b706020e35591e6c6430c264cffa2b028db3ff001420e55716428a18051cb4",
+    "raw/attempt-0205.tar.gz": "d1399a770befaf62ef1cb59017a70f8984246c622ef1a10eda71ad46f4c0be5b",
+    "raw/attempt-0206.tar.gz": "46bd26f2f38ef53f51bbd68bd57806a3a05bf9b3b5010323ad8a2ff37420f22b",
+    "raw/attempt-0207.tar.gz": "b0cb8b8e4041b1d2b4b9300090f64af33ac089fe5da73b831646bd55d0277fed",
+    "raw/attempt-0208.tar.gz": "8c312953b616c271bc0d83b57230338f7bc4ebe6e901a15278de8cee88d3ebce",
+    "raw/attempt-0209.tar.gz": "fffe59460fe62e7535ef6fd53599624d99b3ca901e6c358c6116a8226d41202c",
+    "raw/attempt-0210.tar.gz": "f5502ed79caff5a919e96b1ab1a13d77d3f5da36d6d8fda6b37a3ded3b9a5ea0",
+    "raw/attempt-0211.tar.gz": "9baac8cb5fc9dde181064a8b7d9ae458791aa5b5d092322941edf01e3490e1ad",
+    "raw/attempt-0212.tar.gz": "ed18a8112290f2ef5c41ba3b0791867040bf9c24b363a1864997f092f625f949",
+    "raw/attempt-0213.tar.gz": "ffedeff00a1f1acbc764f7f8903b68ac25eb58efc79159e71209270ec1f47cc8",
+    "raw/attempt-0214.tar.gz": "8fbc529e9e7204039c0dccf96086d061a911fd82b75ed72c45ba2c4c5ba09487",
+    "raw/attempt-0215.tar.gz": "af8ba278875b7b42bcbddf3bf9e1cfc5986fed6e4e0247469d548c124ca467dd",
+    "raw/attempt-0216.tar.gz": "7e41e603374402bfb2f42335138f8fc06eabf7c0d7be79fba3473f709dd1f3d0",
+    "raw/attempt-0217.tar.gz": "21e8297315192c3faf7edbf0d8a31b59c93a00c4f0a920c3c6b3f520824e0dd6",
+    "raw/attempt-0218.tar.gz": "aa32c7f99e3610f4d7b2e53f7c8e52b8c9e48de3f04377d9f20fc439cfb533ff",
+    "raw/attempt-0219.tar.gz": "11d39392884a763ea4d3827f74027f9f6686dfa989799b5fa4b54d3d4cf1f63c",
+    "raw/attempt-0220.tar.gz": "32017118db28a4cd09673f7db7091c40a8d437727b58cc8b2f89e84372d32783",
+    "raw/attempt-0221.tar.gz": "15968ecf41c01fb37479003822666c8b89966a119346e2ecadafd07daa611856",
+    "raw/attempt-0222.tar.gz": "a26b651320486ef43ef59197980e3c830edb2fdd8bb1230131dcd18655fa0fe3",
+    "raw/attempt-0223.tar.gz": "a4c642fcc733c8cd0c2ca69cfa26b2afa16e302866c058797c70739b6fdee5d2",
+    "raw/attempt-0224.tar.gz": "0a3b538d2338452f9cfae8809a5d0249f1cf920110839f0d900c3b8cd510321b",
+    "raw/attempt-0225.tar.gz": "21401eb8525e1c8aad28c8181d57d6afb6ebf10e74183a5c8e97513596f0255b",
+    "raw/attempt-0226.tar.gz": "8352736e6f264e017c02f6b2e183b65079ef8cc6841aba825d93312b2d31a3d4",
+    "raw/attempt-0227.tar.gz": "8a6c1081ee2ba1f4874b2a7ff3ee1998ecb02ad587dc0ac1b0cdad414a347678",
+    "raw/attempt-0228.tar.gz": "025f1af80624595e5f61aa5a502a063f52b71c4b467fd6676ce4ca9c49e20c39",
+    "raw/attempt-0229.tar.gz": "fcaf910d7d66761e4c09cbd3f09db17872800da2471ff5fd1d3944ee95b50867",
+    "raw/attempt-0230.tar.gz": "16912a9b7f76368731c40565c5fbcdc0faa826789f9850326378da4904c378ad",
+    "raw/attempt-0231.tar.gz": "d89779eb456aaf335365d66b343d789557975238bf5f80e20b271f031adf1815",
+    "raw/attempt-0232.tar.gz": "28f0db057a51c7ffbd5b4c2cfb99f707a45be029faffed8bcfea45e84a1cdbdb",
+    "raw/attempt-0233.tar.gz": "4bab6e1e980dcfd3ced2124231a033db24a3096831bb66448f7e05047c1a6fd6",
+    "raw/attempt-0234.tar.gz": "4473cd8cc4dba9eb7662a0f8effa811c3f5339439935611cf402eda260393de9",
+    "raw/attempt-0235.tar.gz": "ed598da88e2c3da0eebc2149bcc0a3b562aeab86bf1a98a7f4a15ab7a9e12646",
+    "raw/attempt-0236.tar.gz": "7e168d5e1ca29e4a3cffea1c8d86dd32037742f966807e31112c6135f2070f4e",
+    "raw/attempt-0237.tar.gz": "7c3610812e6df309728856a69c7eddb6be6b3c17f7f074e0b762b2af6464fa56",
+    "raw/attempt-0238.tar.gz": "1f0bf7d08e03de24fdedbdd5a6d851e566f92afa1037a71a965796c2b99866c5",
+    "raw/attempt-0239.tar.gz": "898aa262207497b7f7e355467cca50f82bdcf21b642daa425af42e807192714f",
+    "raw/attempt-0240.tar.gz": "a7aa0ab6cfaafdf14f5d7b6cade97a67f710f9dc87643c2b2c60c3d24506be09",
+    "raw/attempt-0241.tar.gz": "7c49aa928486e25c408fd25508710d437c53d536e07db2304a14b97df346815c",
+    "raw/attempt-0242.tar.gz": "c94727f911e5bcf40c1e82cc48568ba3785cd9fd4a68ed40887ca20544c34f23",
+    "raw/attempt-0243.tar.gz": "896e625d4d678c3d3ea4f94517c34f676bbbf6c731dd6f4d65f5025696d32bd4",
+    "raw/attempt-0244.tar.gz": "0045eed2775fd467d4c85807256cb6c63bc7b53b7cd138a816fa7abead75405d",
+    "raw/attempt-0245.tar.gz": "eb09404034d18972c6f8427628f7e52e30d48f5e04a133394b1adade5c76edfb",
+    "raw/attempt-0246.tar.gz": "36b7895ad9ad415e90090ab6dea5d86155b0844ff812a6c5eb77fee90b52a86f",
+    "raw/attempt-0247.tar.gz": "28aab596c2136477612d211e4f2d04f0dca33a439278709c8c4b2e49d8c51d59",
+    "raw/attempt-0248.tar.gz": "6be71de0bffea9f4a2dd504df2e18c21586a254d1991869bc7706d199e8f8eff",
+    "raw/attempt-0249.tar.gz": "8161720a84dc295d5af2d04db9db592adbf1f0abac1974b146f99ffdfe151f18",
+    "raw/attempt-0250.tar.gz": "355c3b7e96e1aa9d27599871a6058d838db8da85beba1a9c1b050c80a8709a0c",
+    "raw/attempt-0251.tar.gz": "19cbc7abe2b6a9d50598bcead17b75431213ce4b21dc61e7f224539a9db29143",
+    "raw/attempt-0252.tar.gz": "4c5ed0b76fc7e71bdee86e11ead52e2a62c5e1766028dcc5a1b4a690ec654ba2",
+    "raw/attempt-0253.tar.gz": "759101e5271f1ac6f304054e7da6d01df8a12605013a255bbb38e4e181f46612",
+    "raw/attempt-0254.tar.gz": "63cb4a43a1369a72ec710d00da556acbafd30694df09d412d4bad7e14929e893",
+    "raw/attempt-0255.tar.gz": "b6e9004adc8e4e7f30dd62757a54520df95074ee3d53e0412297e6e09efe125d",
+    "raw/attempt-0256.tar.gz": "4a54e297d4a28e999f712e5462721f77452b547fb0264401bbe8a3880949b5d4",
+    "raw/attempt-0257.tar.gz": "1b59276d1af681d8159d3aa3973ae001cecbf1592cc93b28a8751b752863e965"
+  },
+  "smoke": false,
+  "source": {
+    "commit": "8bcd30810b55a69d00eeed1625a3018e3ced1527",
+    "sha256": {
+      "CMakeLists.txt": "f2aad67b532a665407c4f672486121ab18397912a51de0d54b6e1d5392c8f8aa",
+      "VERSION": "c1bb015a51de8efa1adbd9a1293f394fc189fd89ccdabbec29a4a8b5f7dc9e2c",
+      "benchmarks/diagnostic_totals.h": "508851fb557b9148bb24c4f032dfa3c8eb084b71d88196a51e86a7e91b777a62",
+      "benchmarks/end_to_end_report.py": "957954d93321c2e391a8550f229521672ce7f6057e78844375fc4a3f30238e5e",
+      "benchmarks/end_to_end_validation.py": "1fb2e22c278f9d512cc37462cd0f59bb0251e674627b2cae37b6d62e2ea2ed13",
+      "benchmarks/ipc_comparison.cpp": "41cc9c2abc69fbb999617b45336977542dbd50dc7b60380b975349e18b3dbf6e",
+      "benchmarks/ipc_comparison_support.h": "7e6c8dd6ab4b957ab7f16cbdb9a0ad6b5a1a1d3730ec552cbc8dd5a562901eb6",
+      "benchmarks/ipc_operation_diagnostics.h": "8feaecbaea7e6cef04f741b0d84cca003ae8a17663ef51ac02a09dcebf14993d",
+      "benchmarks/native_transport.cpp": "083f4fa8d806a96218f32da8fe24df88e591f17f75f406b3fd7f76d4b3742bbc",
+      "benchmarks/producer_log_append_study.py": "91b871d9befb4403e4e6e5d1af50e3efbf56c5d6abf1df4a09a7c1e5a0835545",
+      "benchmarks/recorded_connection_study.py": "93f5edd478b64acf1daefc07a619ac6e4c526a8d1c062e9f9eb95429033a4464",
+      "benchmarks/recorded_spsc.cpp": "1f375dedc8aa1ae29ec3b31cfed0c48dae681172f0ac3edda0f952174803a686",
+      "benchmarks/recorded_spsc.h": "05d9cd805f0d14d9ed4bf9febaffeb9a2009cef4fd35133d0d063262e2e6af77",
+      "benchmarks/run_end_to_end.py": "f3ef05c37886723b56fb700a24bd8ac4c3c26f74eebb24bb03f7ba904b0c9c4c",
+      "benchmarks/run_ipc_comparison.py": "e25b41258f777455134dc18fda9e711fde7568c9169a0bfe273964ff4d3d5618",
+      "benchmarks/run_native.py": "8ab629b462ae65554d7b2c642e64f0c269c8db69079903d3708c808ce8104787",
+      "benchmarks/transport_diagnostics.cpp": "1700a0eeb2e681c9343959f5f0af5611decfb9b0da2befb0cfc23a337f4b197c",
+      "benchmarks/transport_support.h": "c6e1ce10716d04de8016fb8bceefc46260ff55ddf5e94b19b674978fb3f5539a",
+      "examples/api_review.cpp": "a5d02bbe609944cf7469b8d28c7d28b965ed9142b824f1bae13d652ffaddaa74",
+      "examples/primer/01_session.cpp": "059f5752f8d3b828f42d891d4f15c8a7687c95ced6ced1f7cdf8050294b8f3d9",
+      "examples/primer/02_tasks.cpp": "a2983cbfc8f31275d8cbe36340019320c596b5a450648abb24e56f24b8f1f32d",
+      "examples/primer/03_schemas.cpp": "c8f134f8d350f82bd6b5e91349b660f383a3053c13eb793fae224479e3b18efa",
+      "examples/primer/04_connections.cpp": "33476fdee346338ce18075f49f5e3b1f83ca623df24b450aec757a894a356e2c",
+      "examples/primer/05_fanout.cpp": "17ab3ec51005397f093ddfb7595baf5ff0b442c58731a0f565c3c0f0c0bfc47a",
+      "examples/primer/06_processes.cpp": "7c38f2ebe21133c9a3f97a62742b8faea54e66b69cca33ee1c20edfc96227c3d",
+      "examples/primer/07_configuration.cpp": "311103fc045228ef461864729bacddcb7ed162ebfd04cd7bc2f300ec32a952ff",
+      "examples/primer/08_registry.cpp": "24e2e43881a1d5d42437ee2d63924db24fbf58a306920adeed3d5b77a8dae563",
+      "examples/primer/09_payload.cpp": "b3bf310cf23226e3fb9f2757ed9647f775ba59eea84f4fbbc67ff40100d8187b",
+      "examples/primer/10_logical_fields.cpp": "b7d52670c8f5b1626aa86fb3280f28315bf9e1dec935e788d956a02eecfddeea",
+      "examples/primer/11_message_record.cpp": "33aea04d9a9e1c09ed611f537f371e8891b6cbe7aa83181e94a3fab09bc5b77b",
+      "examples/primer/12_capture.cpp": "bf5681f2a19c7560a0a8d6967b9062e705e99bb36af0d5e6d67608d43c58ae3f",
+      "examples/primer/13_process_exchange.cpp": "5eb03806b5f63405081aa5a8652de1220a954888b3d5a5d2af8bc8de61987819",
+      "examples/primer/14_direct_send.cpp": "3f3bb173661c6bd142510a18ed4cd76234712b797fb448347222ccc78b97be6c",
+      "examples/primer/15_receive.cpp": "d925ec8c00897a22373260b388af3e14fb486880da8a5c77480d1d47a687a490",
+      "examples/primer/16_allowed_loss.cpp": "5c5d7cdd3c1d26efede1985802886f907e34aa3cffb5454c5ca655d28c9d3e69",
+      "examples/primer/17_native_pipeline.cpp": "1da36a73e5d12dd836d50e95dce041ac52bc93cfebcbce142e607ff1683af882",
+      "examples/primer/native_pipeline/consumers.cpp": "221354b2e68c451bd1fe5105b16a18dba35bd97c3431ce523933443f5247c2d0",
+      "examples/primer/native_pipeline/producers.cpp": "28d26ae1e24684befc329a55a24943e3ab66c555bd1c21d80505b663cc6dcb33",
+      "examples/primer/native_pipeline/roles.h": "7e3cb8da9d33464510c9776d1f5613152c0f43c2346d5e7beaa3b1b3e23e1203",
+      "examples/queue_demo.cpp": "905f92486c76247124b422f566d59b864db9bff3df0140b5330153abd68335f8",
+      "examples/trading_api.cpp": "cc9d786b6c4e2ff40410d9ec88789e20b78b345baaa62a03cddf7a19de580910",
+      "include/angaria/bip.h": "e390c9d21ce09b69078e32f9a2683b6f36421012f17e62664bfcbdc3ceb02eae",
+      "include/angaria/capture.h": "380440fc4190039f1fc7f05ba8528f445ef41cc5fe82081aa25f3df7ca795f3c",
+      "include/angaria/constants.h": "a31f28f7382ec21beedce5e82f4dfc29d411262c5d1e8db02db0d69d7689b609",
+      "include/angaria/descriptors.h": "79a01992784553e0001eed71237e11bed706e3044103f4701a8efce6c0a14a90",
+      "include/angaria/detail/append_layout.h": "5a30240006a40c6b805fca52fd45c98382349647d6a08f89353422814547bf96",
+      "include/angaria/detail/byte_operations.h": "23d31f10895a8792a7c4fa842790302b70f97c6d174211fecd196d47ca6d67ba",
+      "include/angaria/detail/checked_arithmetic.h": "e6eca84faf3d1bf0581a7c20a004bb9efe0ee5730bc387c7ad3884d3db94e9cf",
+      "include/angaria/detail/cpptoml.h": "8ea2e0a0721fcce532e9d13e5fc8cc266698e5116a4ad437f0bdbb9a870b7a26",
+      "include/angaria/detail/error_support.h": "d5d06a2e27a0471dcfe3674d0e33dfe0ed45f0ff487b1268046022a218255806",
+      "include/angaria/detail/field_representation.h": "b12bcb5fd56a13daae01af273963de5170b3d9e6012bbf536b7e7e581d73c6bb",
+      "include/angaria/detail/identity_helpers.h": "fa4599046c15c0a0b88c46d7c782e8083014ec9c6909e3cb0710a8bb321bdb9c",
+      "include/angaria/detail/mapped_format.h": "dfc898a6fc6184f25502e54287f719a2bdda2e34fcc2d3ee142fab142cb71a12",
+      "include/angaria/detail/record_layout.h": "758e42a13883c8b015c4a8397af456004af6e131f41b1d06ac060a930fae2664",
+      "include/angaria/detail/registry.h": "515f599a34fff7e83b1e7fa29fe1fd2f21f45d59889b1ca2cd3bad003b0bcb2b",
+      "include/angaria/detail/text_escaping.h": "83f09e65c1a80ce5f6d070036236afbd881d2450cdf4aa2458dc7b9e388df9e3",
+      "include/angaria/detail/wire_codes.h": "8e9f92c246d9852f818d97d4542c82959407d31c24bb8a43e0ee56752a3a92e7",
+      "include/angaria/exceptions.h": "9e9e5141690c8088bf795d1d73a4085efba85ea91dc90d700f6769c58a52dcd3",
+      "include/angaria/field.h": "05219f724bee4b7b0f68a34f15ee909dd91489c5bb7be0c839cc90dbd91cf634",
+      "include/angaria/funcs.h": "a7bd75b05f4791813d6fa4724359d406bbbd97f9d79b241032d78b96df85d91e",
+      "include/angaria/identities.h": "1a6cc4a20f4a657d54bd395b9502dd45297beba1ff17d39c3abe491a88cec4af",
+      "include/angaria/inspection.h": "258508679a7c27d398bdbe09bcdd152968430dd83a3fd2f81622681ed446dc46",
+      "include/angaria/message.h": "80746755a7832d21d13bf24e457a128ecb3128bb923a5b5a26e16c379e7ccda2",
+      "include/angaria/message_record.h": "a298d72af62967b2119487c6cd3c1a62069d0fa7440c0f41d190b3aa1cabf8da",
+      "include/angaria/payload.h": "9fc92abd1ad26800cd480a88877bba2749be6c6696e2effa712cd02481b07c8a",
+      "include/angaria/proposed/api.h": "de84abebf298cd17a7ad340252f854d1cffd8083366ab06711e37ed9dfbed2ee",
+      "include/angaria/proposed/core.h": "c544c774234581dfc15458f348a0fb8d9755a08486433a0f60903fabee286826",
+      "include/angaria/proposed/log.h": "b5c62b725a1d865a19fc2566ac8d6c8f2ed60b22e1d5eca3c45bd697ca77396e",
+      "include/angaria/proposed/schema.h": "d6fbe9c4ccd242e64241b79319ac350931ac23773e3c9a26c11f66d25d50fb6a",
+      "include/angaria/registry.h": "dba489d434b715aa48a2a95f615c47bf3d951b28f5d5e8e06d9f1a4e9137156d",
+      "include/angaria/results.h": "e6eb4ecbd0fb073c74f475e461e8cf8001543d34ae318e6d48ceec2c0cfcb601",
+      "include/angaria/runtime.h": "e7d651b2a69215c66f997698d314168c49d33294a46164cd5dc90245ad148177",
+      "include/angaria/session.h": "8435d057a4bb2e0eab68abfc1bdc0956f9e297c3a2a527b95d24db4829d410f1",
+      "include/angaria/types.h": "47eb6654423c53946e03dca5d43bd72416f9c12abcbc65f1537709d18fe3d378",
+      "src/build_version.h.in": "c7475708f50f1314c81e9052f73376dba4a37eb2719110779e23e127b9d6e8f3",
+      "src/capture.cpp": "f7bfd5d605823133728bc9366c97ffec73f01b8245fafc0964ca5ac27c990998",
+      "src/configuration.cpp": "520cb47b937827706c16717a2d840c4c7d613aef027310f295705941ef5b3488",
+      "src/configuration.h": "e4bb2047297dc61230a8baf3579bc7e52ce97631b939496dba01066f494d7f5a",
+      "src/configuration_runtime.cpp": "c9ff0f55d7dfffafe3dfae2a9b68a2d037c2d1acd5eb2735e2e54b87bb2fee49",
+      "src/configuration_runtime.h": "d1fc462828068bb66f1f6efcc963346643e73b73ce228ca5c5fbc65ac06f0459",
+      "src/coordination_descriptor.cpp": "2616dcc4a77b0a1ba690e1dc5646e15c7ed0c2b74d54dde10a61be020fdb50bf",
+      "src/coordination_descriptor.h": "2a9e96597ba97db0568bcbc50f1b68bfd1dc34ae4397715d62b909635acbfa7d",
+      "src/definition_metadata.h": "b5342e4c1d5752761336b16585fefbf011f46b8144d3284770a004b4a8deb52c",
+      "src/delivery_access.h": "50826c8e92a36a1f40dfe77038fd02c298e9f69c3244fbda4945ba908ae55fc4",
+      "src/delivery_history.h": "e56f4052a6f6947fd108dc75afb168cf5ed0d7a135a61bc9c605e219f34941ed",
+      "src/delivery_loss.cpp": "0056b92e86cb43502e517ccd99d45f91a22ff748a8bcb7988a54655e7066e469",
+      "src/delivery_loss.h": "16037f9c6cee1cc20538b9c91529e30d8432b26a674e1b788e4f7ac62054baeb",
+      "src/delivery_progress.cpp": "458a9682b907861fbae1b21e2e5dee81b8cb0585f91183eb003ba0afa4bcb0c6",
+      "src/delivery_progress.h": "11b221ec6603b14592dd3b3980978ca34d1b1dd560a8b11a9683e37e261647f0",
+      "src/delivery_runtime.cpp": "8bf54ea63fa4680688e4a4623227cd1135ee81612db38308ffeaadf7c3c91907",
+      "src/delivery_runtime.h": "6f38166eee895ce092ed856a0846da1fa3524928e47c56eccc08230003354208",
+      "src/delivery_state.cpp": "91bf9faa3f0d7a0c50f4a3b76837a0feac8f0f58c2f13234da6f1fcc833029eb",
+      "src/delivery_state.h": "1ebc4cfe25107164d2491d2774ec77321e770dd15aa9196b839354db8e70ef1e",
+      "src/delivery_words.h": "84fb4086e3b8995f6320a0a4ce65aa32cb40584f88d3870159851c93fc610a7d",
+      "src/endpoint_runtime.cpp": "c150129b1072738b0882612f4ebc077db1a710f7aa68ebd1f77e9ebaeedcd1de",
+      "src/inspection.cpp": "82065c91cf7f1c6a596226d9723a92f96ddb39324673a29187f1ebb041915f24",
+      "src/journal_atomic.h": "b4a7b6ef53d99247e9a48ce71cfb902ecc15b7c24d5e2f1586431a0d48aa53c2",
+      "src/journal_format.cpp": "23dd8f0fae1c1b405d4732cc970c9e07c8990d9333719009e1286c1114ad364b",
+      "src/journal_format.h": "0b8ffd0e09a3554fd0c182353333ac4fe7260859e9ab55b0fa6dcbc8e90c567a",
+      "src/journal_metadata.h": "5d413765042d524a617fbe824182f1185e6517f33542880d8675fd2fb6d7f77c",
+      "src/journal_validation.cpp": "e1f2f7ec37244cd26b6a49ab620b38470f2fe8c17454aac6e64c5ff0dc8f6ccc",
+      "src/journal_validation.h": "74cb51993368bc53e2bf4bdf0fc4415cb873a214d044424311df526668c6484e",
+      "src/loss_redo.cpp": "2199331b0322ee801f2718e8382d561abd66a2cd2f1045f902e2767d3f2104b3",
+      "src/loss_redo.h": "8f189b87341b14d07eb1376d706a32bb021317d699c5aad173091c3967c4e6af",
+      "src/mapped_payload.cpp": "6a86fd4e971823553829ae540a94fa58315b0be1c55b7f73c7e7dfb210a7d583",
+      "src/mapped_payload.h": "355ec0270235d56d0ae0c83b39b76e6f5058b4846e4d7ba428ff9f08e06289a9",
+      "src/mapped_read_window.h": "fd6c49e731d2b46a84d33453df2935538661a73e86d322701efdc5fe86b9c9b6",
+      "src/mapped_region.cpp": "6ab27ac63d802d44c678efc15e34fe729e4bb841980028cc6a11d551f5cfa9df",
+      "src/mapped_superblock.cpp": "298311895d71d8bc078446e90931992f8bb4c0f76aa21ac94b3a3418df4329b7",
+      "src/mapped_superblock.h": "53aea8e3ddf797fdc4be09dc3dcf86cd6cfbfd30f431d309412dd75e8ad87e7d",
+      "src/message.cpp": "86c210f4710c444ce3291e7ea2a60cc45e46f13f99cd287ccba2498cebae5604",
+      "src/message_record.cpp": "3f0390e13332458806809d7fe13c773623d3938458759cb290034721e49cc4fa",
+      "src/message_retention.h": "a7a87a0d9b3e9b77e9a3f5f4d32f1187c5ab3257ec9931580703173dfc3507dd",
+      "src/mutation_journal.cpp": "93757d6f6dd1b33952cd356d1227e841ae5cc641073c55740ea1266277a04c7b",
+      "src/mutation_journal.h": "6067611a8060cb4ea6e1ab348198607f5fe6eecf55b6b242abd77e84a8cda9e6",
+      "src/native_atomic.cpp": "7b641a8ccc1d459791e25828db283902f9b54b3b0bbd88b54f41c8f3a61c94c2",
+      "src/native_atomic.h": "10ba2cee412425e4485f672f7bd247df21d1411f2cb05bd061aca1f907c3756f",
+      "src/native_claim.cpp": "cd6605bf935571ee94821db1db225c272487f03a2534bcf848e3bc1000936ec9",
+      "src/native_claim.h": "78b6638ac1186220fc9249c9e0fb6d64166337918f445cb643a313ced810a68b",
+      "src/native_file.cpp": "c792dc2c1d9f2c9de413f5de4ec363f95dfbfc3b7139987bd67c4ea6483b31c1",
+      "src/native_file.h": "a6a2c8317caf9236445460ed71f860308855e4d9522f916ebe39f6aaf8c711fa",
+      "src/native_file_state.h": "534e0b95f8d2d2be6b33f1f77583cf761cee8b33905d0a69b00fb5d93ba4eb63",
+      "src/native_reservation.cpp": "81dda315832f594b94cbeca3a807dcff79177d68e0270de821e22a0f932f219d",
+      "src/payload.cpp": "d7460fdc92339d3fe0a15cab8941933dceab23f5313b264cb0c8483429dc11f4",
+      "src/payload_runtime.h": "4439b1dde321d23be3d9458390b18cfa50ac783b2f5d35fc0452bcb9a76ea886",
+      "src/performance_diagnostics.cpp": "9215bffad92d655e03186a56cdb3a61445c44e0fae250f04f0ef6bc70ce7aa18",
+      "src/performance_diagnostics.h": "fff0ca47c22dd76c8ebb5b4922a59fa89858417eef6777c45d3544e407b0084d",
+      "src/producer_log.cpp": "b989b2f6f53b2329c31586be4c0d6c58a170ac6e9666cb75dc1304a3d4d98509",
+      "src/producer_log.h": "93aea7a9c55993ed396b805cdf68fc2d4f326cef76a9e236a330546dfa0b22e9",
+      "src/producer_log_format.cpp": "8c95bd3c7d51073eb4e007fba29f182330a3526384448a53ddd9cedece5be265",
+      "src/producer_log_format.h": "95074776a735dc0b07c779aa0dd5e43234fe986ceee55c732026bcae92d88b69",
+      "src/publication_metadata.cpp": "ae9d369da213dbc8b4d5f7e49a172aff25ae7a504ff14a5734e6a77f4e147682",
+      "src/publication_metadata.h": "348844d9de7d3f014fec55b18f0a6d118d42da2a7e9265608efd8c72cadadf32",
+      "src/publication_runtime.cpp": "6ab0d91cc59a5493e413d0ab153be41862ff845e362a840dc1f021fb73455439",
+      "src/publication_runtime.h": "920a221784ed04268ad6f7a577c62496432232cec1b2fa27997ca2513613168b",
+      "src/recorded_progress.cpp": "f3c1cf8354ac4a5df8ca4d9179add4b0c488a00654fcd1abbe5935b6a5a0f5ab",
+      "src/recorded_progress.h": "fe26f9785da607bccc0b8d9c86462777357b3ddda4981405f615602cccc8b6fd",
+      "src/recorded_queue.cpp": "dd8ec82b9964f13484d1f16a8074bdef3fd1e7c774082690f26d6ab2c6209616",
+      "src/recorded_queue.h": "f2eae71fcd121441b222948f7586b045d64bda9eb156e5479c9ae74022bd72a8",
+      "src/registry_access.h": "736cf1f9164ea80d2fa2855fac848f147848d1efc53a5184b97b47bfd4899977",
+      "src/registry_snapshot.cpp": "1d5576c86b79e71d42253cd5385b6d41fd3a91354e8b45bf5c3ee9a7225eae24",
+      "src/role_lock.cpp": "f56f7c2f2d791586a73110de300bd5ec92428aedc92c4d2ba0272e9c92241e2c",
+      "src/role_lock.h": "7b086f5cae0acb9c1756c3d00306433e018a2621f834e1c468b5548c3da03224",
+      "src/runtime_session.cpp": "5f5c05f0014d4e125d3767e4f4d2bf6069277f5c91e115ad0f58432f9a09a209",
+      "src/runtime_state.cpp": "e85a2b68f69d29f76656bf490fc7dabc627b23d26c4377f00c3e1f37c44a269d",
+      "src/runtime_state.h": "96b1bb10c0205949ef1072aa469c37f3d205ca212d201374301215a3c929713e",
+      "src/schema_metadata.cpp": "e1a9db3a7bc970cc0086b4098b893304d664ae55e9f0a4093dcef0eae343b57a",
+      "src/schema_metadata.h": "998c2a5fa733fe6310b011196559de0652b6619a0c40638ec9e8e5343442d2f0",
+      "src/schema_registry.cpp": "75c68c665abff0487415f084495f2d25c03f80fed93f24e6b26719c6edc51e88",
+      "src/schema_runtime.cpp": "8c5f77f440728d687592903dc4bdcf4fd9554e687b664979dfa578239230c59a",
+      "src/session.cpp": "9f75f8c25b4f43c1af56509b0e7e146a020ab9520a017a07748fb93470a569e2",
+      "src/session_controller.cpp": "1c322c3c12b4a44ff8006a686ff52e9629b8385694292e8e64962178143641d9",
+      "src/session_controller.h": "f502b3ea8ca3e31d4c3e7aa5d52b28bea74f8be184dd4186cc77f02fd9dc3bb8",
+      "src/session_log.cpp": "e54849c7499349ac1c5fa50e4362398ea73ee5a08c7d9f53dc3b34474ac84f6e",
+      "src/session_log.h": "5ef26b605c5156e7ca5440ac91965c0326e9e5db6ecfb70e56b6f66f5608b6a4",
+      "src/session_metadata.cpp": "da76ebee3e7b704b76c5b37cf8b1565005376ffaf104eff0a76fbda4744d4c1f",
+      "src/session_metadata.h": "c7057a700248fd15d32c35b5af03fbc959c45128a967b33e7e9e7f3b106a431a",
+      "src/source_lifecycle.cpp": "953e4ea893dc6f4d0523fd4d9b623d8baa784ca068fe7e5b841c215532aa48ae",
+      "src/source_receive.cpp": "b6a752dcfd0413cc73b34867a714c6cfccaf7db02088057d19078be55092f0ae",
+      "src/source_runtime_state.h": "f57dbc40feb2a0ccd090249305a8fc8bc5f284c486af2877862c11bd3d2dba33",
+      "src/task_claim_redo.cpp": "146eb6c946786602f334316d3f09286c897b3fe1bf0613dacfad6ad334848fe0",
+      "src/task_claim_redo.h": "f0896ea2d348a72d9e92aa5d5adbebdce4ed6256801132aa3302f5dc32f3047a",
+      "src/task_registry.cpp": "1842c21a27fc870b5ec68f8689b0c388414cf87c707f760b1bdacc3fd07b3c82",
+      "src/task_runtime.cpp": "e4e687bb577a9a548baf65effd604f8a32217e3f3823dcd2175196d7357756d6",
+      "src/topology_append.cpp": "225a20a0ed35270637f0475ca118f7390a07475783df18b5cd7436cf8e63ad20",
+      "src/topology_append.h": "6cb82f1ead83368533e974a4a4ffc1f6933c245839d003d350835e1e47d66ca9",
+      "src/topology_metadata.cpp": "e4c1fe9beda2d8dc131d24cde0b27df0ff17af3655dcb6ae95db29343bd4ef7f",
+      "src/topology_metadata.h": "fe005f60fbfa5d730604ee9d3786d58051d10eee8858d73b3db47dcd328bb21a",
+      "src/topology_mutations.cpp": "342bfddbfb83d1f32a19549296e0ad2f67ce159751950ade74ff74aa96a901f6",
+      "src/topology_mutations.h": "7b8d797f35aba060db1c478eb1978eeb46a2414f628ddbe88e355a64c17ac9ab",
+      "src/topology_policy.cpp": "0c0f04940c9986f4a7647715e08b965c945c925ab925106adebfd2fffff457be",
+      "src/topology_policy.h": "4aed60db987e2fd5426f0f2cf58cbc63cb79bf021f1224bd08aebef162e490de",
+      "src/topology_registry.cpp": "5a459ccb50a83a7d13007568469a2958e4976008152ffdf9ca82545a6fedf0b3",
+      "src/topology_runtime.cpp": "3593e43d93f00152665612b2e0d37c54c7199ac41949ed40808c36baffa4297f",
+      "src/topology_state.h": "dad94e6b3c1974fca169931897efe361f34a00be18c4e9cf49b3eb3c981ad505",
+      "test/allocation_capture.h": "a5903a512d57052a3a8b786a1bf1a174a30ff525facf7091e5dfe9daba1b2864",
+      "test/capture_diagnostic_worker.cpp": "784bf50b577e6b14db93882c42e122426ec81ab2fcbb760399432370bea699e9",
+      "test/delivery_progress_fixture.h": "715dcefb785fccb7c508a20a565672dfdc3f87bc055c6ef9282c07cfed65296a",
+      "test/ipc_comparison.py": "ceeff1a6b8eeb78d6523516091d254291f5b5811f47194a0ee05e18ab9f667cd",
+      "test/journal_fixture.h": "6c9c8d179ec6b89f85afd1b2a52d0aba525cef13a3469adc7d477a3303a4092d",
+      "test/native_activation_worker.cpp": "beca9e2b1e5ed8f6cc5678d2e1a98a0b24910a5ba9fa5aea019ebb0726a61274",
+      "test/native_atomic_worker.cpp": "e3a22d1016ddb5751609c8ceb372441738e44718423eac688c4c7a0f9061a9e4",
+      "test/native_controller_shutdown.cpp": "d3f7d509f2785337214663f0e124c932a1de0719f50856fd450fb8a5cc3e0c59",
+      "test/native_controller_worker.cpp": "0fe0f54ec725b3696afcd1cdda62226f8f0b55f10f984252fecbf52c905fafed",
+      "test/native_delivery_progress_worker.cpp": "1c1dcb0a8e638df59b9a52dbe385e03c10f752536736de270ef8a3cb03128882",
+      "test/native_fixture.h": "cadc87e519f5860e8ac0555eb09f794c2ecaba8e1566541307a475222c6730c8",
+      "test/native_journal_worker.cpp": "a097addad1ca877dc944a8c259c047293b354e0b9ddd1a4f395470a056dbb2e1",
+      "test/native_log_budget.h": "c2cd62495b7f619acf072c55d4f136ae1b70407e61cdd057293467e45f538506",
+      "test/native_loss_worker.cpp": "926b89e938e6503893749114370651588c87b033766d58e227f3faba9e0aa3ce",
+      "test/native_process.h": "fbe403b9b454b0dd5c993615057e25d90569565a933ba3c351a4d71714d3f03f",
+      "test/native_publication_worker.cpp": "f91a53e6af93b392f257ff51a2d775bdd5e2190ac5876b1305ac602a7bda3c00",
+      "test/native_registration_worker.cpp": "1112581be24271d663e5cc52c2a0465ee925945e0bdaa2021e1a9772ed570fb6",
+      "test/native_registry_worker.cpp": "8ccb3429df063dac1c26d4817d82d447bc73dc18dae2ed80b49be2ec5bfd9f34",
+      "test/native_schema_worker.cpp": "2e936af3ce744500b45e478815b2bc466ea307a2ca61f92ac989b067d4bad988",
+      "test/native_session_worker.cpp": "f43c2d7c3e6782f897f3435965baa436dfce19008ca28672006c9018e36f176f",
+      "test/native_source_worker.cpp": "d5243841c419f4768118c7d5c8da2871330ab3ea72807d17a697616892e4fc20",
+      "test/native_storage_startup.cpp": "96e0d6b332d2e9c5884cc4896f1c5b9e1427688b89243e92bd5684f5816b4ce7",
+      "test/native_topology_worker.cpp": "dd0b7db6f55c8c1a6bb1a82ba04662e50956265654707f6fa2d71d9f3d0c1490",
+      "test/native_transport_io_worker.cpp": "3a43e15ada243451e8291870d9bbc96bbd25051714a3d404ffbee2545c04126a",
+      "test/native_transport_worker.cpp": "1e61a9160ca6baf110e77180b3c1f74e1272d404a3ceb54dc00b152b43a1a7ce",
+      "test/performance_samples.h": "80bad55bdafcbe8e7aeaf17f8448b2c46de9ad169a95693bde9684218a3dbbdb",
+      "test/process_support.h": "bdddc8cf01c5fa89bbefc7d8d2401b3ff0be395ce6bf92879735640a7a71cd80",
+      "test/producer_log_fixture.h": "34bc735418ed68e1440b7a50903a00f08bebbf99ae6edacdc8279373f3d2c857",
+      "test/producer_log_worker.cpp": "a0c1f5a257e6c8773688f00124a039b2faaa0ad558f01cb382b697dece948b90",
+      "test/publication_storage_fixture.h": "52df1cedf5836e84270307e0c243e7657c1cbfa35ed42e3084ca409648ba48a3",
+      "test/queue_demo.cmake": "d03c1f884bb5dafedfab628d4b0e7400942a23878ccea30bc598b811f8f983b8",
+      "test/recorded_acknowledged_fixture.h": "cb28d1338560dc51e87faf656d3c8137e77605efb819bc449df03aa87bffc5dd",
+      "test/recorded_acknowledged_queue_worker.cpp": "a478e195c5f723d8b93e6bb67bedda233a5df844760c327d1093661c15db0550",
+      "test/recorded_queue_fixture.h": "ae643d7120c709bf03066854f79feedb947eae0b3a09b839443cacd41f0c3656",
+      "test/recorded_queue_independence_fixture.h": "9c9a213866f610ffb1586e083e57dbfb92e9c34fedf403518413b09d587e58df",
+      "test/recorded_queue_independence_worker.cpp": "c38646f339c041e60e42c539816df6a51290dac1e6a2f070c6c7a5f7f122f899",
+      "test/recorded_queue_worker.cpp": "687caafde7f7bc6805c794450dc21a241525a8ba225c053380efa5566bed4f4d",
+      "test/recorded_spsc_worker.cpp": "808c23c53ff1c2ec78e5c433f9ed053ca4b6c63afdd78626d34b72845b9031c1",
+      "test/result_assertions.h": "d7c8d4685e78a2417c3a0dc1cb00a97675cfb711ffaa2a5a65a6f85d9dcb2229",
+      "test/result_helpers.h": "4985073478a049c4e57fa8a0b7a26263f7d71aae8dd4e5020fe24bd5d1ccdaa5",
+      "test/source_fixture.h": "edf357bdf4b9aa01f4b205545da3e5cf45f59b93fc9a98bb75dc8a1ac1de32bf",
+      "test/test.cpp": "eedadcf938b8a66bbb193236a8b612656d4d55de80e47bc8bfa4d66aa34743e4",
+      "test/test_activation_recovery.cpp": "92cc79e25d9dc8d8daa657e7af6d9aec1f5ee05845e02adcc5a15d8d94a110f7",
+      "test/test_allowed_loss.cpp": "be463b0a8067621c76849ca7b2cad3531bf6a0d1b8342241748823a13e7cbc33",
+      "test/test_api_contract.cpp": "12bc612f456234e5414b947c24b6787ad9d572af367aad41ab4055993d38e528",
+      "test/test_append_layout.cpp": "bfed8b3ceded38ceae7280d82fe904f758dd96f4c103ceb53fbc51dc35c857e6",
+      "test/test_capture.cpp": "5e3354ef98023dd612f0f90a9100217b70b6443879323cc31239f8be41902c0c",
+      "test/test_configuration.cpp": "7fb0f709c9cc8b73b5f43d0a23de83109775fac6603e81a0638eb096ec5e5a66",
+      "test/test_delivery_claim_cleanup.cpp": "7ed8e65465aa07ba1be0aa5ae87f896ac637fdfb923e8c186444f0a0217912b0",
+      "test/test_delivery_compatibility.cpp": "6fa8ec9c0e23b76aacec52a2c9d1157c3b8d9a0d6683ee120e603ee8f12046a1",
+      "test/test_delivery_framing.cpp": "336c9f752472370f4c1b8a2c9a43916ba2ecd782efc922371f53d8284f8eb3c9",
+      "test/test_delivery_progress.cpp": "6cafb8ca42a08a49f72c15a785d9eb9f7ea2fe51985701b1ce81546471b88667",
+      "test/test_delivery_progress_recovery.cpp": "5239136bfba39d148fe5a24a6a5849c77e78d6c568db7461e30b06f6a0a844dd",
+      "test/test_delivery_state.cpp": "bf360cdbd00ef1cc59093bcf5e9e77399da7ae30c4b4aefea09bcd623b6a75ab",
+      "test/test_delivery_validation.cpp": "27f0f2cea9ab7479e51634dc301e19cc4564e2dc9bfb520b1f9d6dd3c3cca7b1",
+      "test/test_endpoint_runtime.cpp": "f102eb8c07b91ba014297b0579d1bc8de65401eaf26d28214915bdd05a1e200a",
+      "test/test_field.cpp": "b925d95856b31ed8d2a5c0359319d55fb239f429d87a46a9021cc5343b16e53d",
+      "test/test_file_configuration.cpp": "3dfb9c9c1585634640b1d0d6441b96ad6fd6b88414187d9b5ee04d6279a0d827",
+      "test/test_identities.cpp": "d8cecc458890e052cc6d23c7e108c1252900829763e17d910670af5bf530d243",
+      "test/test_inspection.cpp": "ba68f5a6ba6313161ccb7b4def37a6071fefae85f09c47eb48544e47b4fe26d7",
+      "test/test_ipc_comparison_deadlines.cpp": "05fe70029260d86f3d3880f80ea9a06e695bb722208710bc76f38d808440469e",
+      "test/test_journal_bulk_redo.cpp": "b270d2891a318fe3d18d82153311467ea7a93b4bc789c05b897f578d8f93b681",
+      "test/test_journal_format.cpp": "abe0b1c5c497a2cecdad4c3116b3c5d283158efc33ef0807a9f8fd40ae52b378",
+      "test/test_journal_validation.cpp": "c5adad7724f01b1caa566fd29571cbe0211f5872e278df253e34eaefdb1c9441",
+      "test/test_loss_configuration.cpp": "d55f584434fc56fbd01688adae91037d2db9b15cc2ad1218cb49c50ad65f2b74",
+      "test/test_loss_recovery.cpp": "37bdfae282e2a1bb513e1acee2b7ab46f59ad325cb2c0f6af1693a9c7d357156",
+      "test/test_loss_redo.cpp": "618768df4fb253d91aa98008df7cc83dbf3f4a4f2b64bc03427785d04ccc3d42",
+      "test/test_loss_validation.cpp": "c80c65b72e79380a9d348dfd547b747961a850b5428d9f08b1aaaa4eed0f95a9",
+      "test/test_mapped_format.cpp": "66db9e8e16d5a11fa99fade124b19be3c735c496b11cd542eeb74a7ab5001993",
+      "test/test_mapped_payload.cpp": "14afed41fa1fa8f7e8ed543469272a930ad08e15619515337cc130a03dd5eb6d",
+      "test/test_mapped_superblock.cpp": "ea08cfcb986ad87ae7fe6cad18c9070c8a1c398825e58afb51194be5202b51e8",
+      "test/test_message.cpp": "4ca40a19b43f154f93a22a74a1ac1e9bdf3c824ed31b44bf67dbecd774be06d2",
+      "test/test_message_record.cpp": "69df1049cfabf02961969e5e56ca134bee02c8af904bd4bb64e834841efd591c",
+      "test/test_mutation_journal.cpp": "e4e962b72c6b7ef6ec9ebc5e7939bb9e0cec60d4e8021c7d5a0c57efffbec0e1",
+      "test/test_native_atomic.cpp": "71539fa1d1a1b678dd877bbe79432b279350e316d40852d984de4adf000790b6",
+      "test/test_native_file.cpp": "2bfcefdf2c1dafa825b71087ac80f9e9b9feba43a6d80ecd36ac88adc5146c61",
+      "test/test_payload.cpp": "a467d8af9830e2ecd80c1de3395c61ca19b75f81b34c8e835608ab19d60325fc",
+      "test/test_payload_rollback.cpp": "cfa517e4d541a2b31e219adb8aaff826b2f94e1b94d8944ef272432c2df38440",
+      "test/test_performance_diagnostics.cpp": "fe8426252f96f19704716933fb548b93a99e774513cc4a944a2950334f2893cc",
+      "test/test_producer_log.cpp": "bfe8fab70334f4abc3f5763df72d33d14228a808e8257afeb9d3689dc203b9f2",
+      "test/test_producer_log_append_performance.cpp": "755bc877760fb98cb22ac9a4275aa4c8ee2e6aee48f1c33285247957496edb5c",
+      "test/test_producer_log_format.cpp": "79fb063c1dadce1ee92d443914c0abd0d4b37905d7b22c7d4113c4018d407d1e",
+      "test/test_producer_log_performance.cpp": "06e577b17640e8592d7956eef3afd34aa69aaa4a2c0103732482f9ea8db014f2",
+      "test/test_publication_api.cpp": "c962201b00c6136e77fd5bc19f914bda4ac4d73e795b24ed7d1becb6ee018ba2",
+      "test/test_publication_metadata.cpp": "2cd9db7b1cb02b93b3db36e0ae4458d32fa0b8139371d8781040deb3b25dfe00",
+      "test/test_publication_recovery.cpp": "0bcc80c55ab5847035833459097b6682bb76382a979d66c5997098564e03492b",
+      "test/test_publication_runtime.cpp": "fe57681f0dd24ca578baafadd43d7cc48ee5aa499979eea34e4cde90d1d01012",
+      "test/test_recorded_acknowledged_performance.cpp": "e1a068b83bf9ca077ba76dbd2d9950cdd5d9ffa26c68d118f8eafa5a501a0de5",
+      "test/test_recorded_acknowledged_queue.cpp": "fe229b5a9278e530e9c1dbd2aafde7133c498c82e6943df36492d28bf2c8f835",
+      "test/test_recorded_progress.cpp": "680bef8bb0eca1f5e6b6b2a0424ff64c7da0417dd8989b4db827a73635bcb264",
+      "test/test_recorded_queue.cpp": "43ff6c7081f47e0c3660ef10684ba1f313667805c69f449c409faa300b825793",
+      "test/test_recorded_queue_format.cpp": "d182d6b19d8f6cb792ba3de40e006d79b4704e0590ecfe08d1e428b0ce987273",
+      "test/test_recorded_queue_independence.cpp": "93200c10f41d7782dd66d9534a45e0520b627e006248efc9aa2a0215e61e40d1",
+      "test/test_recorded_queue_performance.cpp": "53c9e8c0e7261c8a7631c2eeea7c2738cc8e1b632730bd049b6610a5e154b390",
+      "test/test_recorded_queue_restart.cpp": "f5237cdfa408886ab630ae865a9e53c4b2e9bff22c4167decf3fa80056f84ab1",
+      "test/test_recorded_spsc.cpp": "fbaa1b8fd7e07b91634e896e7d6f83a6fb3ae718441046e33b0bdc0d5ba01ae6",
+      "test/test_registry_qualification.cpp": "8f679e8b27017ba6491fa0243b9d925fd44327f5c07c934d0913afa57f974973",
+      "test/test_registry_snapshot.cpp": "37d21dd9414c27f97f4d6e0ef9741e3d5db63408677308f8c7a9044e3139fea7",
+      "test/test_runtime_access.cpp": "c6753b2acd082b3adcc047062608daa24bac0b34e13a73bd2f63512359f6619a",
+      "test/test_runtime_session.cpp": "2c4d4a22fd2c50a5b67d9d6821002ce9d38c3978024ae8f9cdf9af58247b7948",
+      "test/test_schema_metadata.cpp": "1c51d5f6ac94195349fa2b0b924473fba4d9e70e38a11773f562df2ac500a86c",
+      "test/test_schema_recovery.cpp": "c42c58efe221653786c508c461752bbbf7ba08ef289f07a300435715f30da9bf",
+      "test/test_schema_registry.cpp": "b5a03afd4a29b1a951f0e54ac1d7a75b5d61432cd024279fd1b3e3613c9266ca",
+      "test/test_session.cpp": "5add5c3994ce10af66d813c6c50ff04b063193f9d8644ae9d851d678dfab5dc5",
+      "test/test_session_controller.cpp": "ef5750751d231ba64b2bc88b33223a8d4d7a44a7be089b961555ab66c6494b25",
+      "test/test_session_metadata.cpp": "baca8f164fd98cf7c6f1f9207960f94c1b1c3cb7bcbbe7293bcf24b10807757d",
+      "test/test_shared_helpers.cpp": "d7122454943c981f398d86b06fa930d8da09913fbbb4cafcfdfbae1f489d1f1f",
+      "test/test_source_deadlines.cpp": "304b275994e09fc327010624347e2c71b1a2a5c4d20cc8a000100e0957a194ad",
+      "test/test_source_lifecycle.cpp": "2f81638746dbc0e7761ef4946adbab2619c015971116aa4f6a0c8f54e8882312",
+      "test/test_source_recovery.cpp": "5734839b5467a3c8c52c13ef853ca82d1000b1923d2e01496e5fd2fb781b3183",
+      "test/test_source_runtime.cpp": "befc4dbb93f7d959db0db4acf7cd95d66963e6a56d468e416f0fe625bb27a1c0",
+      "test/test_task_catalog_validation.cpp": "cfbe2930145c94ee2b0cb4e6833a8873bb267b8fdd75bc24e46572b81046fa66",
+      "test/test_task_registration.cpp": "12ce05f3aa31146800e82d48af61b8d683e02859816d635eb310227d346683df",
+      "test/test_task_registration_recovery.cpp": "995dde8f08380469fe33023bfb83ba12e38111f58540a6ea051de2aaee9b4971",
+      "test/test_topology_activation.cpp": "2cdcf939353bb6fbf4cf496c8d0e9c68755baf425eee3a049be108629788e3a6",
+      "test/test_topology_metadata.cpp": "d35aee84e580278c0728c10271b6648302a27d08b7ef3335f3b98dbc7b105d15",
+      "test/test_topology_recovery.cpp": "455ee0446de75788269d2d843dbf5fa39713ee5ce7b91a2bbacc064df133d891",
+      "test/test_topology_registry.cpp": "d137bd3d5afe225b2a6df4b2778f5be790d0d380edce9673adcddba99ad5de19",
+      "test/test_transport_exhaustion.cpp": "5efb1e6257d644473ffad702ff6a952a1fd20483f758ca7b8f6c9bb918900fbf",
+      "test/test_transport_io.cpp": "a5eb5be61b46a8d1b2837ba6c1fcca29cf95a5bd4ce1407784f4e2d57012f42e",
+      "test/test_transport_recovery.cpp": "a2e001f2be68a7d96cc7a8d9546f9d1de7eefeda652e12e14b7e6d4ed54f7449",
+      "test/wire_fixture.h": "3971376eaf95fc8764dd06e0cf0774e32864fab41141bf13400a0ac3f730ff4b",
+      "tools/inspect.cpp": "0aba35e238397e4d0e2449806a63cf07cac1bdc79eb78f80587d13c0de17f67b"
+    },
+    "version": "0.4.38"
+  }
+}

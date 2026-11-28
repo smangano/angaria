@@ -212,7 +212,7 @@ class Workers:
         return errors
 
 
-def common_identity(report, role, profile, case, version):
+def common_identity(report, role, profile, case, version, dependency=None):
     check(type(report.get("format_version")) is int and report["format_version"] == FORMAT_VERSION,
           "Unsupported IPC report version")
     check(report.get("profile") == profile and report.get("role") == role, "Wrong IPC report identity")
@@ -225,7 +225,7 @@ def common_identity(report, role, profile, case, version):
           "Missing exact nanomsg source commit")
     check(type(report.get("nanomsg_archive_sha256")) is str and re.fullmatch(r"[0-9a-f]{64}", report["nanomsg_archive_sha256"]),
           "Missing nanomsg source archive hash")
-    check(all(report.get(key) == value for key, value in pinned_dependency().items()),
+    check(all(report.get(key) == value for key, value in (pinned_dependency() if dependency is None else dependency).items()),
           "Executable dependency differs from this checkout's selected source pin")
     for part in ("current", "revision", "age"):
         check(integer(report.get("nanomsg_runtime_abi_" + part), "nanomsg runtime ABI") ==

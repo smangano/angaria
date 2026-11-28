@@ -9,12 +9,84 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
+#include <string>
+#include <vector>
 
 namespace
 {
   namespace ipc = angaria::benchmarks::ipc;
   using angaria::benchmarks::BenchmarkFailure;
+
+  ipc::Options parse_options(std::initializer_list<const char*> extra)
+  {
+    std::vector<std::string> arguments{"ipc_comparison", "--profile", "nanomsg", "--role", "producer",
+                                       "--directory", "/unused-qualification-fixture"};
+    for (const auto* argument : extra)
+    {
+      arguments.emplace_back(argument);
+    }
+    std::vector<char*> pointers;
+    for (auto& argument : arguments)
+    {
+      pointers.push_back(argument.data());
+    }
+    return ipc::parse_options(static_cast<int>(pointers.size()), pointers.data());
+  }
+
+  TEST(IpcComparisonQualification, ExtendedStreamsRequireExplicitConcurrentQualification)
+  {
+    // Larger runs must not silently change the old bounded comparison. Warmup
+    // belongs to the same attachment and must leave a nonempty measured slice.
+    EXPECT_THROW((void)parse_options({"--messages", "129"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--history", "129"}), BenchmarkFailure);
+    const auto options = parse_options({"--qualification", "1", "--messages", "262144",
+        "--history", "65536", "--warmup-messages", "8192", "--pacing-spin", "1"});
+    EXPECT_TRUE(options._qualification);
+    EXPECT_TRUE(options._pacingSpin);
+    EXPECT_EQ(options._messages, 262144u);
+    EXPECT_EQ(options._history, 65536u);
+    EXPECT_EQ(options._warmupMessages, 8192u);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--messages", "262145"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--history", "65537"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--warmup-messages", "16"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--scenario", "backlog"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "true"}), BenchmarkFailure);
+  }
+
+  TEST(IpcComparisonQualification, ConsumerWorkAndPauseHaveExplicitMeasuredBounds)
+  {
+    const auto options = parse_options({"--qualification", "1", "--warmup-messages", "4",
+        "--processing-delay-ns", "1000", "--pause-at", "3", "--pause-ns", "20000000"});
+    EXPECT_EQ(options._processingDelayNs, 1000u);
+    EXPECT_EQ(options._pauseAt, 3u);
+    EXPECT_EQ(options._pauseNs, 20000000u);
+    EXPECT_THROW((void)parse_options({"--warmup-messages", "1"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--pacing-spin", "1"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--pause-at", "3"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--pause-ns", "1"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--warmup-messages", "4",
+        "--pause-at", "12", "--pause-ns", "1"}), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1", "--budget-ms", "1",
+        "--processing-delay-ns", "1000000"}), BenchmarkFailure);
+  }
+
+  TEST(IpcComparisonQualification, ResourceWindowsSubtractEveryCounterAndRejectRegression)
+  {
+    // Independent snapshots demonstrate that warmup counters disappear from
+    // both CPU categories and faults, rather than only from a combined total.
+    const ipc::ProcessResources start{100, 200, 3, 4};
+    const auto delta = ipc::resource_difference({500, 900, 8, 6}, start);
+    EXPECT_EQ(delta._userNs, 400u);
+    EXPECT_EQ(delta._systemNs, 700u);
+    EXPECT_EQ(delta._minorFaults, 5u);
+    EXPECT_EQ(delta._majorFaults, 2u);
+    EXPECT_THROW((void)ipc::resource_difference({99, 900, 8, 6}, start), BenchmarkFailure);
+    EXPECT_THROW((void)ipc::resource_difference({500, 199, 8, 6}, start), BenchmarkFailure);
+    EXPECT_THROW((void)ipc::resource_difference({500, 900, 2, 6}, start), BenchmarkFailure);
+    EXPECT_THROW((void)ipc::resource_difference({500, 900, 8, 3}, start), BenchmarkFailure);
+  }
 
   TEST(IpcComparisonDeadlines, ExpirationGuardsHaveTheirOwnExceptionType)
   {
@@ -27,6 +99,7 @@ namespace
     // The target is valid (strictly before its deadline), but the deadline has
     // elapsed by the time this wait checks the clock.
     EXPECT_THROW((void)ipc::wait_until(0, expired), ipc::DeadlineExceeded);
+    EXPECT_THROW((void)ipc::spin_until(0, expired), ipc::DeadlineExceeded);
   }
 
   TEST(IpcComparisonDeadlines, InvalidScheduleAfterExpirationRetainsItsFailureCause)
@@ -35,6 +108,7 @@ namespace
     // A malformed target is not a normal work-budget stop, even though that
     // target/deadline is also in the past.
     EXPECT_THROW((void)ipc::wait_until(0, 0), BenchmarkFailure);
+    EXPECT_THROW((void)ipc::spin_until(0, 0), BenchmarkFailure);
   }
 
   TEST(IpcComparisonDeadlines, InvalidClockRangeAfterExpirationRetainsItsFailureCause)

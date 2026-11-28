@@ -121,4 +121,6 @@ The [matched comparison adapter](../benchmarks/ipc_comparison.cpp) includes a `r
 
 The [retained 0.4.37 measurements](../benchmarks/results/milestone-4-recorded-acknowledged/README.md) include separate acknowledged and unacknowledged matrices on native macOS ARM64 and hosted Linux x86_64, with delivery and consumer acknowledgment-return latency, common-T0 and active completed rates, all attempt ranges and exact workload/build provenance. Different Linux CPU models keep the two modes' results separate; no isolated acknowledgment-overhead ratio is inferred.
 
+Step **4.36**, framework **0.4.38**, adds [longer end-to-end qualification](end-to-end-qualification.md) with both modes and nanomsg on the same host and build. The [results](../benchmarks/results/milestone-4-end-to-end/README.md) keep delivery and consumer ACK latency separate, show credit-dependent queueing, CPU and fault counts, and qualify short versus longer streams without a universal throughput claim.
+
 These guarantees concern process interruption on a running coherent local system. Synchronous flushing, recovery from power loss and live log reclamation are separate concerns; acknowledgment does not introduce them.

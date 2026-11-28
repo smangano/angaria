@@ -89,6 +89,12 @@ namespace angaria::benchmarks::ipc
     std::uint64_t _socketBufferBytes = 131'072;
     std::uint64_t _intervalNs = 0;
     std::uint64_t _ringSlots = 8;
+    bool _qualification = false;
+    std::uint64_t _warmupMessages = 0;
+    std::uint64_t _processingDelayNs = 0;
+    std::uint64_t _pauseAt = 0;
+    std::uint64_t _pauseNs = 0;
+    bool _pacingSpin = false;
     std::string _scenario{"concurrent"};
     std::string _collectionName{"none"};
     detail::diagnostics::Collection _collection{detail::diagnostics::Collection::None};
@@ -176,6 +182,27 @@ namespace angaria::benchmarks::ipc
       {
         options._intervalNs = parse_count(argument, flag);
       }
+      else if (flag == "--qualification" || flag == "--pacing-spin")
+      {
+        require(argument == "0" || argument == "1", "Boolean benchmark options require 0 or 1");
+        (flag == "--qualification" ? options._qualification : options._pacingSpin) = argument == "1";
+      }
+      else if (flag == "--warmup-messages")
+      {
+        options._warmupMessages = parse_count(argument, flag);
+      }
+      else if (flag == "--processing-delay-ns")
+      {
+        options._processingDelayNs = parse_count(argument, flag);
+      }
+      else if (flag == "--pause-at")
+      {
+        options._pauseAt = parse_count(argument, flag);
+      }
+      else if (flag == "--pause-ns")
+      {
+        options._pauseNs = parse_count(argument, flag);
+      }
       else
       {
         require(false, "Unknown IPC benchmark option");
@@ -188,8 +215,20 @@ namespace angaria::benchmarks::ipc
     require(options._profile != Profile::RecordedSpsc, "SPSC profile requires the experimental study build");
 #endif
     require(haveProfile && haveRole && haveDirectory, "IPC benchmark requires profile, role and directory");
-    require(options._messages >= 1 && options._messages <= 128, "Messages must be in 1..128");
-    require(options._history <= 128, "History must be in 0..128");
+    require(options._messages >= 1 && options._messages <= (options._qualification ? 262'144 : 128),
+            "Messages exceed the selected benchmark mode's limit");
+    require(options._history <= (options._qualification ? 65'536 : 128),
+            "History exceeds the selected benchmark mode's limit");
+    require(!options._qualification || options._scenario == "concurrent",
+            "End-to-end qualification requires the concurrent scenario");
+    require(options._qualification || (options._warmupMessages == 0 && options._processingDelayNs == 0 &&
+                options._pauseAt == 0 && options._pauseNs == 0 && !options._pacingSpin),
+            "Warmup, processing delay, pause and spin pacing require qualification mode");
+    require(options._warmupMessages < options._messages, "Warmup must leave at least one measured message");
+    require((options._pauseAt == 0 && options._pauseNs == 0) ||
+                (options._pauseAt != 0 && options._pauseAt < options._messages - options._warmupMessages &&
+                 options._pauseNs != 0),
+            "A consumer pause needs a nonzero measured index and duration");
     require(options._payloadBytes == 64 || options._payloadBytes == 256 || options._payloadBytes == 1024,
             "Payload bytes must be 64, 256 or 1024");
     require(options._budgetMs >= 1 && options._budgetMs <= 600'000, "Budget ms must be in 1..600000");
@@ -197,10 +236,14 @@ namespace angaria::benchmarks::ipc
                 options._socketBufferBytes <= static_cast<std::uint64_t>(std::numeric_limits<int>::max()),
             "Socket buffer bytes must be in 1024..INT_MAX");
     require(options._intervalNs <= nanoseconds_per_second, "Interval ns must be in 0..1000000000");
+    require(options._processingDelayNs <= nanoseconds_per_second && options._pauseNs <= nanoseconds_per_second,
+            "Processing delay and pause must be in 0..1000000000 ns");
     const auto lastScheduledOffset = detail::checked_multiply(options._messages - 1, options._intervalNs);
     const auto budgetNs = detail::checked_multiply(options._budgetMs, nanoseconds_per_millisecond);
     require(lastScheduledOffset.has_value() && budgetNs.has_value() && *lastScheduledOffset < *budgetNs,
             "The last scheduled message must precede the phase deadline");
+    require(options._processingDelayNs < *budgetNs && options._pauseNs < *budgetNs,
+            "Processing delay and pause must each fit inside the data budget");
     return options;
   }
 
@@ -261,6 +304,32 @@ namespace angaria::benchmarks::ipc
     rusage usage{};
     require(::getrusage(RUSAGE_SELF, &usage) == 0, "Process CPU read failed");
     return checked_add(timeval_ns(usage.ru_utime), timeval_ns(usage.ru_stime));
+  }
+
+  struct ProcessResources
+  {
+    std::uint64_t _userNs{};
+    std::uint64_t _systemNs{};
+    std::uint64_t _minorFaults{};
+    std::uint64_t _majorFaults{};
+  };
+
+  inline ProcessResources process_resources()
+  {
+    rusage usage{};
+    require(::getrusage(RUSAGE_SELF, &usage) == 0 && usage.ru_minflt >= 0 && usage.ru_majflt >= 0,
+            "Process resource read failed");
+    return {timeval_ns(usage.ru_utime), timeval_ns(usage.ru_stime),
+            static_cast<std::uint64_t>(usage.ru_minflt), static_cast<std::uint64_t>(usage.ru_majflt)};
+  }
+
+  inline ProcessResources resource_difference(const ProcessResources& end, const ProcessResources& start)
+  {
+    require(end._userNs >= start._userNs && end._systemNs >= start._systemNs &&
+                end._minorFaults >= start._minorFaults && end._majorFaults >= start._majorFaults,
+            "Process resource counters moved backwards");
+    return {end._userNs - start._userNs, end._systemNs - start._systemNs,
+            end._minorFaults - start._minorFaults, end._majorFaults - start._majorFaults};
   }
 
   inline std::uint64_t peak_rss_bytes()
@@ -353,6 +422,26 @@ namespace angaria::benchmarks::ipc
       pause.tv_sec = static_cast<time_t>(remaining / nanoseconds_per_second);
       pause.tv_nsec = static_cast<long>(remaining % nanoseconds_per_second);
       require(::nanosleep(&pause, nullptr) == 0 || errno == EINTR, "IPC benchmark wait failed");
+    }
+  }
+
+  // Qualification deliberately separates scheduled admission from the actual
+  // send start. Spin pacing avoids a nanosleep and scheduler wakeup per item;
+  // the caller still retains every scheduled instant to expose overload delay.
+  inline std::uint64_t spin_until(std::uint64_t targetNs, std::uint64_t deadlineNs)
+  {
+    require(targetNs < deadlineNs, "IPC benchmark target is outside its deadline");
+    for (;;)
+    {
+      const auto now = monotonic_ns();
+      if (now >= deadlineNs)
+      {
+        throw DeadlineExceeded{};
+      }
+      if (now >= targetNs)
+      {
+        return now;
+      }
     }
   }
 

@@ -1,0 +1,12 @@
+{
+  "attempts": 257,
+  "figures": [
+    "latency-throughput.png",
+    "history-sensitivity.png",
+    "offered-load.png",
+    "backpressure.png",
+    "cpu-faults.png",
+    "long-stream.png",
+    "legacy-controls.png"
+  ]
+}
