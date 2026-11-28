@@ -1,5 +1,7 @@
 # Single-destination Publication validation measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.25**, framework **0.4.27**. The [guide and risk assessment](../../../docs/performance-single-destination.md) explain the specialization: keep all destination validation, but skip the 8 KiB uniqueness bitmap when a Publication has exactly one destination. Multi-destination uniqueness checks remain. APIs, stored formats, recovery guarantees, synchronization and history-scan frequency are unchanged.
 
 ## Native timing results

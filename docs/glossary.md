@@ -8,6 +8,7 @@ Framework **0.4.39** admits this protocol through the public API. The [public re
 
 | Term | Meaning in the current protocol |
 | --- | --- |
+| **Process token** | Private retained process identity initialized at binding and invalidated in a forked child by the existing coordination handler. Its hot probe needs no PID syscall or local lock; it does not supply a Task claim. See [ownership checks](performance-fork-aware-ownership.md). |
 | **Producer stream** | One Task-owned append log shared by its outbound Queues, with independent allocation/commit state. |
 | **Committed tail** | The atomic end offset of that stream's immutable accepted prefix. Its publication accepts a message; reserved file length and ring hints do not. |
 | **Replay cut** | A fixed acquired committed boundary and record count, bound to one producer file identity. Iteration excludes later acceptances. A Session archive captures a vector of these per-producer cuts; it does not create a single global instant or recover exact consumer execution order. See [public replay](public-runtime-admission.md#replay-export-and-inspection). |

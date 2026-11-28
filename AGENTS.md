@@ -16,6 +16,9 @@ Boost and Intel TBB are permitted dependencies when warranted by the implementat
 - Assess a precaution's runtime cost against the likelihood and impact of the failure it prevents, given the supported operating conditions and assumptions.
 - After that risk assessment, a justified tradeoff may favor performance over overly defensive or overengineered precautions. Existing checks and tests are open to reassessment; their presence alone does not justify retaining a costly precaution.
 - Record the rationale, assumptions, accepted risks, and supporting measurements in the design or PR. Make any changes to documented guarantees explicit, and update affected documentation and tests accordingly.
+- Keep benchmark reports, plots, summaries, provenance and archive checksums in Git. Store bulky raw samples, compressed attempt archives and profiler dumps in the maintainer benchmark archive instead of committing them. See [benchmark archive policy and restoration](benchmarks/results/README.md).
+- Preserve every original attempt, including failures, timeouts and unfavorable results. Verify the external copy before removing tracked payloads; expiring CI artifacts are temporary transfer copies, not permanent retention.
+- Restore the recorded raw inputs before strict verification or figure regeneration. Do not replace raw-evidence checks with summary-only checks. Archiving does not authorize rewriting Git history.
 
 ## Shared helpers
 

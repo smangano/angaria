@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wall -Wextra -Werror -O3 -DNDEBUG -Wl,--wrap=getpid -Wl,--dependency-file=CMakeFiles/angaria_public_runtime_performance.dir/link.d CMakeFiles/angaria_public_runtime_performance.dir/test/test_public_runtime_performance.cpp.o -o angaria_public_runtime_performance  libangaria.a /usr/lib/x86_64-linux-gnu/libgtest_main.a /usr/lib/x86_64-linux-gnu/libgtest.a

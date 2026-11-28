@@ -1,5 +1,7 @@
 # Gate resource-check measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Milestone **4.23**, framework **0.4.25**. The [design and risk assessment](../../../docs/performance-gate-resources.md) explain removing the duplicate resource check before native gate acquisition. The [diagnostic method](../../../docs/performance-diagnostics.md) defines workloads, counters and outcomes. After-lock identity checks still precede a usable guard; the accepted tradeoff is delayed diagnosis of unsupported namespace replacement, including indefinite blocking on an obsolete held lock.
 
 ## Provenance

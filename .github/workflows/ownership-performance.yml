@@ -1,0 +1,124 @@
+name: Paired ownership performance qualification (on demand)
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Frozen baseline commit (default is merged PR 70)
+        type: string
+        default: ee200f06d2f757bfeb6cd7cddbe1b03eb328714b
+
+permissions:
+  contents: read
+
+jobs:
+  qualification:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-ownership' || github.event.label.name == 'qualify-ownership-confirmation'
+    name: ${{ matrix.host }} ownership qualification
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: Linux x86_64
+            runner: ubuntu-24.04
+            architecture: x86_64
+            artifact: linux-x86_64
+          - host: macOS ARM64
+            runner: macos-15
+            architecture: arm64
+            artifact: macos-arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      ANGARIA_BASELINE: ${{ inputs.baseline || github.event.pull_request.base.sha || 'ee200f06d2f757bfeb6cd7cddbe1b03eb328714b' }}
+      ANGARIA_HOST: ${{ matrix.host }}
+      ANGARIA_EXPECTED_ARCH: ${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check native architecture
+        run: test "$(uname -m)" = "$ANGARIA_EXPECTED_ARCH"
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ libboost-dev libgtest-dev python3 python3-venv
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install boost googletest
+      - name: Prepare plotting environment and check paired analysis
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/angaria-performance-python"
+          "$RUNNER_TEMP/angaria-performance-python/bin/python3" -m pip install matplotlib
+          echo "$RUNNER_TEMP/angaria-performance-python/bin" >> "$GITHUB_PATH"
+          echo "MPLCONFIGDIR=$RUNNER_TEMP/angaria-matplotlib" >> "$GITHUB_ENV"
+          python3 -B test/test_ownership_performance.py
+      - name: Build both frozen revisions before any timing
+        shell: bash
+        run: |
+          mkdir -p build
+          git worktree add --detach "$RUNNER_TEMP/angaria-ownership-base" "$ANGARIA_BASELINE"
+          for revision in base head; do
+            source="$PWD"
+            if test "$revision" = base; then source="$RUNNER_TEMP/angaria-ownership-base"; fi
+            cmake -S "$source" -B "build/ownership-$revision" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" -DBUILD_TESTING=ON -DANGARIA_BUILD_BENCHMARKS=ON -DANGARIA_BUILD_IPC_COMPARISON=ON -DANGARIA_ENABLE_DIAGNOSTICS=OFF -DANGARIA_ENABLE_CACHEGRIND=OFF
+            cmake --build "build/ownership-$revision" --target angaria_ipc_comparison --parallel 3
+          done
+          cmake --build build/ownership-head --target angaria_public_runtime_performance --parallel 3
+      - name: Assert Linux hot messaging makes no getpid calls outside timings
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p build/ownership-checks
+          ctest --test-dir build/ownership-head --no-tests=error -V -R '^public_runtime_performance$' | tee build/ownership-checks/getpid-ctest.log
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path("build/ownership-checks/getpid-ctest.log").read_text()
+          for name in ("GetpidInterceptionObservesActualCalls", "LinuxHotMessagingAvoidsGetpidCallsInBothModes"):
+              assert "[       OK ] PublicRuntimePerformance." + name in text, "Missing Linux getpid assertion: " + name
+          PY
+          cp build/ownership-head/CMakeFiles/angaria_public_runtime_performance.dir/link.txt build/ownership-checks/
+          cp build/ownership-head/CMakeFiles/angaria_public_runtime_performance.dir/flags.make build/ownership-checks/
+      - name: Collect adjacent BASE/HEAD pairs on this same runner
+        shell: bash
+        run: >-
+          python3 -B benchmarks/ownership_performance.py collect
+          --base-root "$RUNNER_TEMP/angaria-ownership-base"
+          --base-executable build/ownership-base/angaria_ipc_comparison
+          --head-executable build/ownership-head/angaria_ipc_comparison
+          --base-commit "$(git -C "$RUNNER_TEMP/angaria-ownership-base" rev-parse HEAD)"
+          --head-commit "$(git rev-parse HEAD)" --output build/ownership-paired
+          --host-label "GitHub hosted $ANGARIA_HOST; same-runner ownership BASE/HEAD"
+      - name: Qualify the full HEAD workload matrix using the same built binary
+        if: github.event.label.name != 'qualify-ownership-confirmation'
+        shell: bash
+        run: >-
+          python3 -B benchmarks/run_end_to_end.py collect build/ownership-head/angaria_ipc_comparison
+          --runtime public --output build/ownership-head-full --source-commit "$(git rev-parse HEAD)"
+          --host-label "GitHub hosted $ANGARIA_HOST; ownership optimization full HEAD qualification"
+      - name: Verify paired evidence and summaries independently
+        run: python3 -B benchmarks/ownership_performance.py verify build/ownership-paired
+      - name: Retain every paired attempt and untimed check
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ownership-paired-${{ matrix.artifact }}
+          path: |
+            build/ownership-paired/
+            build/ownership-checks/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain the separate full HEAD qualification
+        if: always() && github.event.label.name != 'qualify-ownership-confirmation'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ownership-head-full-${{ matrix.artifact }}
+          path: build/ownership-head-full/
+          if-no-files-found: warn
+          retention-days: 14

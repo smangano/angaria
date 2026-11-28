@@ -1,5 +1,7 @@
 # Direct delivery lookup measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.19**, framework **0.4.21**. The [guide and risk assessment](../../../docs/performance-delivery-lookup.md) explain exact oldest-pending resolution. The [diagnostic method](../../../docs/performance-diagnostics.md) defines workloads, counters and outcomes.
 
 ## Provenance

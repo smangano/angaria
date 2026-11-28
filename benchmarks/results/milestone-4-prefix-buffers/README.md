@@ -1,5 +1,7 @@
 # Prefix-buffer reuse measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Milestone **4.22**, framework **0.4.24**. The [design and risk assessment](../../../docs/performance-prefix-buffers.md) explain fixed record-prefix buffers and scan-local manifest scratch space. The [diagnostic method](../../../docs/performance-diagnostics.md) defines workloads, counters and outcomes.
 
 ## Provenance and execution settings

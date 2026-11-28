@@ -1,5 +1,7 @@
 # Public runtime admission — retained qualification
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Both retained full matrices are complete: 207 Mac attempts and 207 Linux attempts, all successful, source `462193232d0c96ae5f958a63464f9782a34ac09f`. Each manifest has 207 raw-archive hashes and no failures. Every report has zero pending messages, accepted counts equal delivered counts, and acknowledged counts equal accepted counts for the acknowledged profile. The figures below summarize medians of per-run measurements; samples are not pooled. Core cases have six runs per profile. The longer finite stream has three.
 
 The public profiles exercise Session, Task, QueueWriter, and SourceQueueSet, including publication ID issuance, send retries, ordinary publication-status lookup, header/identity validation, and complete-payload verification. The unacknowledged profile still records messages for replay. The acknowledged consumer additionally commits an application acknowledgment after verifying each delivery. Producer send/status reports acceptance; it does not wait for that acknowledgment. Nanomsg has neither Angaria's replay log nor its application acknowledgment semantics, so delivery comparisons do not imply equivalent guarantees.
@@ -14,7 +16,7 @@ Framework **0.4.39**, PR [#70](https://github.com/smangano/angaria/pull/70). The
 - [Focused checks](focused/): strict Release **745/745 CTest entries**, public contracts and deterministic performance guards. Instrumented checks cover zero hot allocations, Session-gate attempts/acquisitions, prefix/topology work and explicit native read/map/unmap/stat/growth. Informational same-process cycle times are not IPC latency or a measured speedup.
 - Two untimed preflight stops are retained in [preflight-7a033bb](preflight-7a033bb/failure.log) and [preflight-7f59b60](preflight-7f59b60/failure.log). The first found a retired-driver reference in shared metadata; the second correctly rejected an uncommitted smoke-guard edit. Neither launched timed participants or belongs in the 414-attempt full-matrix population. The collector fix and a real-metadata regression test are committed.
 
-Each host directory retains every `raw/attempt-*.tar.gz`, command/control transcript, binary sample sidecar, manifest hash, computed report and available build provenance. No timed outlier was removed. `qualification-summary.json` and `comparison.csv` derive from those bytes; `figures.json` lists the complete plot set. Data from different cases or hosts is never pooled. Full matrices use balanced orders, warmup, configured pacing, slow/paused consumers and longer finite streams; see [methodology](../../../docs/end-to-end-qualification.md) and [public performance scope](../../../docs/public-runtime-performance.md).
+The external archive retains every host's `raw/attempt-*.tar.gz`, command/control transcript and binary sample sidecar. Each host directory here keeps the manifest hashes, computed reports and available build provenance. No timed outlier was removed. `qualification-summary.json` and `comparison.csv` derive from those bytes; `figures.json` lists the complete plot set. Data from different cases or hosts is never pooled. Full matrices use balanced orders, warmup, configured pacing, slow/paused consumers and longer finite streams; see [methodology](../../../docs/end-to-end-qualification.md) and [public performance scope](../../../docs/public-runtime-performance.md).
 
 ```sh
 python3 -B benchmarks/run_end_to_end.py verify benchmarks/results/milestone-4-public-runtime/macos-arm64
@@ -22,7 +24,7 @@ python3 -B benchmarks/run_end_to_end.py verify benchmarks/results/milestone-4-pu
 python3 -B benchmarks/run_end_to_end.py render benchmarks/results/milestone-4-public-runtime/linux-x86_64
 ```
 
-`render` independently reconstructs raw evidence before drawing; it needs Matplotlib. Use a new output path and the pinned source/build instructions in the public performance guide to collect another matrix. The 14-day workflow artifacts are copied here so their expiration does not remove the measurement evidence.
+`render` independently reconstructs raw evidence before drawing; it needs Matplotlib. Use a new output path and the pinned source/build instructions in the public performance guide to collect another matrix. The original 14-day workflow artifacts are preserved in the external archive, so their expiration does not remove the measurement evidence. Restore the catalog-listed payloads before using the commands above.
 
 ## Linux x86_64
 

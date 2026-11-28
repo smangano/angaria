@@ -1,0 +1,47 @@
+Internal ctest changing into directory: /home/runner/work/angaria/angaria/build/ownership-head
+UpdateCTestConfiguration  from :/home/runner/work/angaria/angaria/build/ownership-head/DartConfiguration.tcl
+Parse Config file:/home/runner/work/angaria/angaria/build/ownership-head/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/runner/work/angaria/angaria/build/ownership-head/DartConfiguration.tcl
+Parse Config file:/home/runner/work/angaria/angaria/build/ownership-head/DartConfiguration.tcl
+Test project /home/runner/work/angaria/angaria/build/ownership-head
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 5
+    Start 5: public_runtime_performance
+
+5: Test command: /home/runner/work/angaria/angaria/build/ownership-head/angaria_public_runtime_performance
+5: Working Directory: /home/runner/work/angaria/angaria/build/ownership-head
+5: Test timeout computed to be: 30
+5: Running main() from ./googletest/src/gtest_main.cc
+5: [==========] Running 4 tests from 1 test suite.
+5: [----------] Global test environment set-up.
+5: [----------] 4 tests from PublicRuntimePerformance
+5: [ RUN      ] PublicRuntimePerformance.GetpidInterceptionObservesActualCalls
+5: [       OK ] PublicRuntimePerformance.GetpidInterceptionObservesActualCalls (0 ms)
+5: [ RUN      ] PublicRuntimePerformance.LinuxHotMessagingAvoidsGetpidCallsInBothModes
+5: [       OK ] PublicRuntimePerformance.LinuxHotMessagingAvoidsGetpidCallsInBothModes (13 ms)
+5: [ RUN      ] PublicRuntimePerformance.BufferedMessagingKeepsGateFileAndAllocationWorkOutOfBothHotPaths
+5: PUBLIC_RUNTIME_PERFORMANCE {"mode":"none","prior_history":0,"warmup_cycles":32,"cycles_per_run":256,"runs":5,"median_cycle_ns":1066,"min_cycle_ns":1026.05,"max_cycle_ns":1196.07,"completed_cycles_per_second":938086,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+5: PUBLIC_RUNTIME_PERFORMANCE {"mode":"none","prior_history":128,"warmup_cycles":160,"cycles_per_run":256,"runs":5,"median_cycle_ns":1080.28,"min_cycle_ns":984.668,"max_cycle_ns":1288.68,"completed_cycles_per_second":925688,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+5: PUBLIC_RUNTIME_PERFORMANCE {"mode":"required","prior_history":0,"warmup_cycles":32,"cycles_per_run":256,"runs":5,"median_cycle_ns":1509.79,"min_cycle_ns":1376.34,"max_cycle_ns":1568.62,"completed_cycles_per_second":662346,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+5: PUBLIC_RUNTIME_PERFORMANCE {"mode":"required","prior_history":128,"warmup_cycles":160,"cycles_per_run":256,"runs":5,"median_cycle_ns":1450.01,"min_cycle_ns":1379.28,"max_cycle_ns":1577.23,"completed_cycles_per_second":689651,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+5: [       OK ] PublicRuntimePerformance.BufferedMessagingKeepsGateFileAndAllocationWorkOutOfBothHotPaths (26 ms)
+5: [ RUN      ] PublicRuntimePerformance.RepeatedEmptyPublicReceiveDoesNoHeapFileOrAdministrativeWork
+5: [       OK ] PublicRuntimePerformance.RepeatedEmptyPublicReceiveDoesNoHeapFileOrAdministrativeWork (11 ms)
+5: [----------] 4 tests from PublicRuntimePerformance (51 ms total)
+5: 
+5: [----------] Global test environment tear-down
+5: [==========] 4 tests from 1 test suite ran. (51 ms total)
+5: [  PASSED  ] 4 tests.
+1/1 Test #5: public_runtime_performance .......   Passed    0.05 sec
+
+The following tests passed:
+	public_runtime_performance
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.13 sec

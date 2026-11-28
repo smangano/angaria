@@ -2,6 +2,7 @@
 // records, not a runnable format-3 Session or application schema validation.
 // The exec worker stops actual append operations at the commit boundaries.
 #include "producer_log_fixture.h"
+#include "coordination_descriptor.h"
 #include "native_file.h"
 #include "native_process.h"
 #include "process_support.h"
@@ -745,6 +746,75 @@ TEST_F(ProducerLogTest, AForeignThreadCannotUseTheWriterOrChangeItsCommit)
   EXPECT_EQ(require_value(producer.record_count()), 0u);
   EXPECT_EQ(require_value(producer.committed_end()), recorded::producer_header_bytes);
   EXPECT_FALSE(require_value(producer.append(request))._duplicate);
+}
+
+TEST(ProcessTokenTest, AnEmptyTokenIsInvalidWithoutBinding)
+{
+  EXPECT_FALSE(mapped::owns_process(mapped::ProcessToken{}));
+}
+
+TEST(ProcessTokenTest, FirstUseInstallsForkInvalidationWithoutAFileOrClaim)
+{
+  // A separate exec ensures this cannot pass only because another test opened
+  // a lifetime claim first. The child also attempts a new cold native claim.
+  support::ProducerLogDirectory directory;
+  support::NativeProcess worker({ANGARIA_PRODUCER_LOG_WORKER, directory.path().string(), "process_token"});
+  worker.expect('T');
+  worker.wait_success();
+  EXPECT_TRUE(std::filesystem::is_empty(directory.path()));
+}
+
+TEST_F(ProducerLogTest, AStandaloneReaderInstallsForkChecksBeforeAnyLifetimeClaim)
+{
+  create();
+  {
+    auto producer = writer();
+    require_value(producer.append(support::producer_append_request(
+        require_value(producer.next_publication_id()), payload)));
+  }
+  const auto before = file_bytes(_paths._owner);
+  support::NativeProcess worker({ANGARIA_PRODUCER_LOG_WORKER, _directory.path().string(), "reader_first"});
+  worker.expect('R');
+  EXPECT_EQ(worker.receive<std::uint64_t>(), 1u);
+  worker.wait_success();
+  EXPECT_FALSE(std::filesystem::exists(_directory.path() / "unexpected.claim"));
+  EXPECT_EQ(file_bytes(_paths._owner), before);
+  // Read-only binding never claims or changes the producer incarnation.
+  auto successor = writer();
+  EXPECT_EQ(require_value(successor.claim())._incarnation, 2u);
+}
+
+TEST_F(ProducerLogTest, ReaderThreadAffinityCanBeDisabledOnlyForSerializedUse)
+{
+  create();
+  auto producer = writer();
+  require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  auto bound = reader();
+  auto serialized = require_value(recorded::ProducerLogReader::open(_paths._log, _options, false));
+  std::optional<ErrorCode> boundError;
+  std::optional<std::uint64_t> records;
+  std::thread other([&]
+  {
+    const auto rejected = bound.capture();
+    if (const auto* error = std::get_if<Error>(&rejected))
+    {
+      boundError = error->_code;
+    }
+    const auto captured = serialized.capture();
+    if (const auto* cut = std::get_if<recorded::ProducerReplayCursor>(&captured))
+    {
+      records = cut->record_count();
+    }
+  });
+  other.join();
+  EXPECT_EQ(boundError, ErrorCode::WrongOwner);
+  ASSERT_TRUE(records);
+  EXPECT_EQ(*records, 1u);
+  // Joining is the caller's serialization boundary. The normal thread-bound
+  // reader remains usable on its original thread after the rejected attempt.
+  EXPECT_EQ(require_value(bound.capture()).record_count(), 1u);
+  EXPECT_EQ(require_value(serialized.capture()).record_count(), 1u);
 }
 
 TEST_F(ProducerLogTest, AlternateOwnerPathsAndHardLinkedDataCannotBypassAnActiveWriter)

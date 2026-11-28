@@ -1082,3 +1082,5 @@ The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 The primer and its runnable sources are maintained together throughout the milestones. Examples compile against the public API, and automated walkthroughs check their observable behavior. Each feature change should update the relevant explanation and example; future chapters become runnable only after their operations exist. The [test reading guide](../test/README.md) offers more detailed scenarios, while the API and storage contracts explain guarantees beyond this introduction.
 
 The older [v0 queue demo](../README.md#run-the-queue-demo) exercises an earlier prototype. Its delivery code and file format are separate from the Registry API taught here.
+
+The [fork-aware ownership optimization](performance-fork-aware-ownership.md) preserves the ownership rules taught here while reducing repeated checks during messaging. Applications still open their own handles and claims in each process; moving a handle does not transfer it to another process. The implementation's performance qualification uses these same public calls and retains the process/Thread and replay tests.
