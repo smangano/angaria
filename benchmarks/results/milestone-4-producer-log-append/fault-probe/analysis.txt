@@ -1,0 +1,49 @@
+Temporary diagnostic experiment only; not pooled with frozen baseline.
+
+Execution order: natural-1, physical-prefault-1, natural-2.
+Normal frozen static library linked unchanged; only copied benchmark source modified.
+getrusage(RUSAGE_SELF) calls occur immediately outside each append timing interval.
+Physical-prefault mode touches one byte per native page in uncommitted reserved data only,
+using a temporary setup mapping before writer open. It does not prefault later writer PTEs.
+No accepted record/header bytes are modified by this setup experiment.
+Darwin ru_majflt classification alone does not establish actual disk-read traffic.
+Single prefault invocation and two natural invocations are diagnostic observations,
+not publication-quality paired performance estimates or an end-to-end transport claim.
+
+run,payload_bytes,H,median_ns,minor_faults,major_faults
+natural-1,64,0,5779.938,1,5
+natural-1,256,0,1464.188,0,8
+natural-1,1024,0,740.234,0,23
+natural-1,64,128,78.781,0,5
+natural-1,256,128,658.203,0,9
+natural-1,1024,128,710.281,0,24
+natural-1,64,1024,67.703,2,5
+natural-1,256,1024,88.547,0,8
+natural-1,1024,1024,483.078,0,23
+physical-prefault-1,64,0,61.188,6,0
+physical-prefault-1,256,0,72.266,8,0
+physical-prefault-1,1024,0,117.828,23,0
+physical-prefault-1,64,128,51.438,5,0
+physical-prefault-1,256,128,63.141,9,0
+physical-prefault-1,1024,128,106.125,24,0
+physical-prefault-1,64,1024,52.734,7,0
+physical-prefault-1,256,1024,61.859,8,0
+physical-prefault-1,1024,1024,102.203,23,0
+natural-2,64,0,414.719,1,5
+natural-2,256,0,810.547,0,8
+natural-2,1024,0,510.422,0,23
+natural-2,64,128,56.641,0,5
+natural-2,256,128,412.75,0,9
+natural-2,1024,128,483.078,0,24
+natural-2,64,1024,76.828,2,5
+natural-2,256,1024,72.266,0,8
+natural-2,1024,1024,467.453,0,23
+
+natural-1: 45 append blocks; minor=3; major=110
+physical-prefault-1: 45 append blocks; minor=113; major=0
+natural-2: 45 append blocks; minor=3; major=110
+
+Commands:
+env -u ANGARIA_PROBE_PREFAULT ./fault_probe > natural-1.log 2>&1
+ANGARIA_PROBE_PREFAULT=1 ./fault_probe > physical-prefault-1.log 2>&1
+env -u ANGARIA_PROBE_PREFAULT ./fault_probe > natural-2.log 2>&1

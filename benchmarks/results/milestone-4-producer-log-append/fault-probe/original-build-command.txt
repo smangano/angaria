@@ -1,0 +1,2 @@
+Working directory: /Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design
+/usr/bin/c++ -std=gnu++20 -O3 -g -DNDEBUG -Wall -Wextra -Werror -Iinclude -Isrc -Itest -I/opt/homebrew/include /private/tmp/angaria-append-fault-probe/fault_probe.cpp build/owned-log-normal/libangaria.a /usr/local/lib/libgtest_main.a /usr/local/lib/libgtest.a -o /private/tmp/angaria-append-fault-probe/fault_probe
