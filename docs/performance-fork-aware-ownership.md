@@ -10,9 +10,9 @@ A process ID identifies the process that opened a handle. Checking it protected 
 
 ## Retained process identity
 
-A **process token** is a private value bound during Task attachment or standalone producer-log reader opening. It points to the existing process-lifetime coordination registry. Binding initializes that registry and verifies fork-handler registration before exposing the token or mapping reader data. A default token is invalid. Failed registration fails binding.
+A **process token** is a private value bound during Task attachment or standalone producer-log reader opening. It retains the address of the child-invalidation flag in the existing process-lifetime coordination registry. Binding initializes that registry and verifies fork-handler registration before exposing the token or mapping reader data. A default token is invalid. Failed registration fails binding.
 
-The registry already closes and invalidates inherited coordination descriptors in its child fork handler. That same handler invalidates every inherited process token before child application code resumes. An established ownership probe reads the retained pointer and child-invalidation flag, without a syscall, allocation, local lock or lazy initialization. The registry outlives all handles; a token allocates no per-reader descriptor and conveys no exclusive Task claim.
+The registry already closes and invalidates inherited coordination descriptors in its child fork handler. That same handler invalidates every inherited process token before child application code resumes. An inline established ownership probe reads the retained pointer and child-invalidation flag, without a syscall, allocation, local lock or lazy initialization. The registry outlives all handles; a token allocates no per-reader descriptor and conveys no exclusive Task claim.
 
 Task checks retain attachment, Thread-affinity and parent-claim validation. Source checks reject the wrong process/Thread before loading their atomic Task pointer, then retain and validate the Task for the operation. Buffered and owning sends each validate once at their boundary, before allocation or the producer mutex. Standalone readers keep their own process/Thread guard. Native exclusive claims remain the authority for Task/log/progress ownership.
 

@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   qualification:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-ownership'
-    name: ${{ matrix.host }} paired BASE/HEAD and full HEAD qualification
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-ownership' || github.event.label.name == 'qualify-ownership-confirmation'
+    name: ${{ matrix.host }} ownership qualification
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -96,6 +96,7 @@ jobs:
           --head-commit "$(git rev-parse HEAD)" --output build/ownership-paired
           --host-label "GitHub hosted $ANGARIA_HOST; same-runner ownership BASE/HEAD"
       - name: Qualify the full HEAD workload matrix using the same built binary
+        if: github.event.label.name != 'qualify-ownership-confirmation'
         shell: bash
         run: >-
           python3 -B benchmarks/run_end_to_end.py collect build/ownership-head/angaria_ipc_comparison
@@ -114,7 +115,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Retain the separate full HEAD qualification
-        if: always()
+        if: always() && github.event.label.name != 'qualify-ownership-confirmation'
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ownership-head-full-${{ matrix.artifact }}

@@ -20,14 +20,20 @@ namespace angaria::detail::mapped
   private:
     friend Result<ProcessToken> bind_process_token(const std::filesystem::path& diagnostic);
     friend bool owns_process(const ProcessToken& token) noexcept;
-    explicit ProcessToken(CoordinationRegistry* registry) noexcept : _registry(registry)
+    explicit ProcessToken(const bool* inheritedChild) noexcept : _inheritedChild(inheritedChild)
     {
     }
-    CoordinationRegistry* _registry{};
+    const bool* _inheritedChild{};
   };
 
   Result<ProcessToken> bind_process_token(const std::filesystem::path& diagnostic);
-  bool owns_process(const ProcessToken& token) noexcept;
+  inline bool owns_process(const ProcessToken& token) noexcept
+  {
+    // Binding retains a flag in the immortal registry. Only the fork child's
+    // handler changes it, before user code resumes; the parent never writes it.
+    // No lazy initialization, syscall, allocation or lock belongs in this probe.
+    return token._inheritedChild != nullptr && !*token._inheritedChild;
+  }
 
   // Internal registered descriptor. Only this owner closes a coordination FD;
   // atfork invalidates child copies without unlocking the parent's description.

@@ -83,15 +83,7 @@ namespace angaria::detail::mapped
     {
       return native_io_error(diagnostic, "register coordination fork handlers", registry._registrationError);
     }
-    return ProcessToken{&registry};
-  }
-
-  bool owns_process(const ProcessToken& token) noexcept
-  {
-    // Do not initialize the registry or consult the kernel here. Standalone
-    // readers bind before mapping, so even a descriptor-free registry already
-    // has its child handler installed before this token can escape.
-    return token._registry != nullptr && !token._registry->_inheritedChild;
+    return ProcessToken{&registry._inheritedChild};
   }
 
   CoordinationDescriptor::~CoordinationDescriptor()
