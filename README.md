@@ -26,6 +26,8 @@ Step **4.27**, framework **0.4.29**, records the [recorded unacknowledged delive
 
 Step **4.29**, framework **0.4.31**, adds [focused stall diagnostics and an experimental recorded SPSC connection](docs/stall-study.md). It retains existing log acceptance and replay while exploring consumer delivery without the Session gate. The experiment is benchmark-only; public runtime admission remains planned.
 
+Step **4.30**, framework **0.4.32**, supplies the [independent messaging protocol design](docs/independent-messaging-protocol.md): producer-owned recording/replay and optional consumer-owned acknowledgment progress, with no Session gate in established point-to-point communication. It is a design for review, not an implemented mode. Before 1.0, breaking changes require matching programs/libraries and fresh Sessions; the replacement will not carry a backward-compatibility engine.
+
 On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
 
 ```sh

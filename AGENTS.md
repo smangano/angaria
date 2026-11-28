@@ -57,6 +57,7 @@ Configuration files use TOML. Implement TOML support with [cpptoml](https://gith
 
 ## Framework versioning
 
+- Before `1.0.0`, backward compatibility is not required. Prefer one current runtime over maintaining superseded engines, old-format readers, API adapters or migration paths. Document breaking changes and require fresh development Sessions where needed. Unsupported versions must still be rejected before access; never reinterpret old bytes under a new protocol.
 - `VERSION` is the single source of the framework's `major.minor.build` version; CMake reads it.
 - During roadmap development, major is `0` and minor is the milestone number.
 - Starting with milestone 3, reset build to `1` at each new milestone: its first step is `0.<milestone>.1`. Assign the next unused build number within that milestone once for every new PR, including fixes, documentation, and milestone integration PRs.

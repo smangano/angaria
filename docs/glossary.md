@@ -2,6 +2,21 @@
 
 These definitions describe the terms used in Angaria's storage and recovery design. The [domain-object definitions](milestones/milestone-1.md#domain-objects) cover Registry, Task, Queue, both Queue Set kinds, Message, Publication, and Delivery. Introduce specialized terms with a definition or a link to their canonical definition.
 
+## Proposed independent messaging protocol
+
+These terms belong to the [step-1 protocol design](independent-messaging-protocol.md), which is not implemented by the current Session-gated runtime.
+
+| Term | Meaning in the proposed protocol |
+| --- | --- |
+| **Producer stream** | One Task-owned append log shared by its outbound Queues, with independent allocation/commit state. |
+| **Committed tail** | The atomic end offset of that stream's immutable accepted prefix. Its publication accepts a message; reserved file length and ring hints do not. |
+| **Publication capacity** | The configured maximum accepted publication-record count in the bounded stream. It bounds lookup storage and acknowledged destination receipt reservations. |
+| **Logical credit** | A monotonic per-Queue consumed-sequence watermark limiting producer admission independently of descriptor publication and application acknowledgment. |
+| **Sealed catalog** | The checked Registry/schema/topology snapshot fixed before the first protocol's data operations. Owner replacement changes Task incarnation, not this catalog. |
+| **Source operation image** | A reserved consumer-owned description of one operation's absolute Source, selected Queue and receipt after-state. An atomic selector commits it; interrupted installation is replayed locally. |
+| **Receipt ledger** | Reserved consumer-owned rows retaining each accepted destination's latest issuance and acknowledgment metadata. It is separate from the immutable message log and optional execution-event trace. |
+| **Applied generation** | The committed Source operation whose after-state has finished installation into the working/receipt rows. A lagging value requires replay of the selected operation. |
+
 ## Session storage
 
 | Term | Meaning in Angaria |
