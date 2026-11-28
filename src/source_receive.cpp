@@ -24,7 +24,6 @@ namespace angaria::detail
     try
     {
       const auto task = runtime_source_task(state);
-      runtime_check_messaging_owner(task);
       if (timeout.count() < 0)
       {
         runtime_fail(ErrorCode::InvalidArgument, "source.timeout", "Receive timeout cannot be negative");
@@ -75,7 +74,7 @@ namespace angaria::detail
   {
     try
     {
-      runtime_check_messaging_owner(runtime_source_task(state));
+      const auto task = runtime_source_task(state);
       std::lock_guard lock(state->_mutex);
       require_active(*state);
       const auto consumer = std::get_if<recorded::RecordedAcknowledgedConsumer>(&state->_consumer);
@@ -95,7 +94,7 @@ namespace angaria::detail
   {
     try
     {
-      runtime_check_messaging_owner(runtime_source_task(state));
+      const auto task = runtime_source_task(state);
       std::lock_guard lock(state->_mutex);
       require_active(*state);
       auto* consumer = std::get_if<recorded::RecordedAcknowledgedConsumer>(&state->_consumer);

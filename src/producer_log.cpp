@@ -3,6 +3,7 @@
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/error_support.h"
+#include "coordination_descriptor.h"
 #include "native_atomic.h"
 #include "native_claim.h"
 #include "native_file.h"
@@ -18,8 +19,6 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
-
-#include <unistd.h>
 
 namespace angaria::detail::recorded
 {
@@ -351,13 +350,13 @@ namespace angaria::detail::recorded
   struct ProducerLogReader::State
   {
     LogData _data;
-    std::uint64_t _pid{static_cast<std::uint64_t>(::getpid())};
+    mapped::ProcessToken _process;
     std::thread::id _thread{std::this_thread::get_id()};
     bool _threadBound{true};
 
     void check() const
     {
-      require(_pid == static_cast<std::uint64_t>(::getpid()) && (!_threadBound || _thread == std::this_thread::get_id()),
+      require(mapped::owns_process(_process) && (!_threadBound || _thread == std::this_thread::get_id()),
               ErrorCode::WrongOwner, "Producer log reader belongs to another process or thread");
       require(!_data._failed, ErrorCode::IoError, "Producer log reader requires reopening after validation failure");
     }
@@ -645,6 +644,7 @@ namespace angaria::detail::recorded
     return protect<ProducerLogReader>([&]
     {
       auto state = std::make_unique<State>();
+      state->_process = value(mapped::bind_process_token(logPath));
       state->_threadBound = threadBound;
       state->_data = open_data(logPath, options, false);
       return ProducerLogReader(std::move(state));

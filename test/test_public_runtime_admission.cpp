@@ -1,9 +1,12 @@
 // Public messaging examples: configure the complete graph, attach its Tasks,
 // open endpoints, and handle explicit publication/processing results. Private
-// infrastructure is used only to hold the actual administrative gate below.
+// infrastructure is used only for observation and the administrative/local
+// lock regressions below; ordinary message exchange uses the public API.
 #include "public_runtime_fixture.h"
 #include "result_assertions.h"
 #include "native_fixture.h"
+#include "process_support.h"
+#include "source_runtime_state.h"
 
 #include <gtest/gtest.h>
 
@@ -26,6 +29,19 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+namespace angaria::detail
+{
+  // Existing private friend, defined only in this test translation unit. It
+  // exposes real retained state to hold locks, not a different messaging path.
+  struct SourceAccess
+  {
+    static const std::shared_ptr<SourceQueueSetState>& state(const SourceQueueSet& source)
+    {
+      return source._state;
+    }
+  };
+}
 
 namespace
 {
@@ -743,6 +759,74 @@ namespace
     EXPECT_EQ(WEXITSTATUS(status), 0);
     require_value(source.acknowledge(delivery._token));
     EXPECT_TRUE(std::holds_alternative<ReceiveTimeout>(source.receive()));
+  }
+
+  TEST(PublicRuntimeAdmission, InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation)
+  {
+    // One real self-loop exposes both operation locks through the Source's
+    // retained Task. Another thread holds them when fork copies this process;
+    // no thread in the child could ever unlock those inherited mutexes.
+    PublicRuntimeFixture fixture({._loopback = true});
+    auto& task = fixture.created()._creator;
+    auto writer = require_value(task.open_writer(fixture.queues()[0]));
+    auto source = require_value(task.open_source_set(fixture.sources()[0]));
+    const auto bytes = fixture.payload(67);
+    const auto publication = require_value(task.next_publication_id());
+    require_value(writer.send(publication, fixture.message(bytes)));
+    const auto delivery = std::get<Delivery>(source.receive());
+    const auto& sourceState = angaria::detail::SourceAccess::state(source);
+    const auto taskState = std::atomic_load_explicit(&sourceState->_task, std::memory_order_acquire);
+    std::atomic<bool> locked{};
+    std::jthread holder([&](std::stop_token stop)
+    {
+      std::scoped_lock locks(taskState->_producerMutex, sourceState->_mutex);
+      locked.store(true, std::memory_order_release);
+      while (!stop.stop_requested())
+      {
+        std::this_thread::yield();
+      }
+    });
+    while (!locked.load(std::memory_order_acquire))
+    {
+      std::this_thread::yield();
+    }
+    const auto child = ::fork();
+    ASSERT_GE(child, 0);
+    if (child == 0)
+    {
+      // The alarm turns an accidental inherited-lock attempt into a bounded
+      // failure. _exit leaves all inherited C++ owners untouched on success.
+      ::alarm(2);
+      std::array<DestinationOutcome, 1> outcomes;
+      bool valid = has_error(task.next_publication_id(), ErrorCode::WrongOwner) &&
+          has_error(writer.send(publication, fixture.message(bytes)), ErrorCode::WrongOwner) &&
+          writer.send(publication, fixture.message(bytes), outcomes)._error == ErrorCode::WrongOwner &&
+          has_error(task.publication_status(publication), ErrorCode::WrongOwner) &&
+          task.publication_status(publication, outcomes)._error == ErrorCode::WrongOwner &&
+          has_error(writer.acknowledged_sequence(), ErrorCode::WrongOwner);
+      // This deliberate child-only empty Task makes owner-check ordering
+      // observable: Source ownership must fail before Task validation could
+      // return InvalidState. The actual shared_ptr lock remains a library
+      // implementation detail; the explicit pre-load guard is reviewed too.
+      sourceState->_task.reset();
+      const auto received = source.receive();
+      const auto* error = std::get_if<Error>(&received);
+      valid = valid && error && error->_code == ErrorCode::WrongOwner &&
+          has_error(source.acknowledge(delivery._token), ErrorCode::WrongOwner) &&
+          has_error(source.release(delivery._token), ErrorCode::WrongOwner) &&
+          has_error(source.close(), ErrorCode::WrongOwner);
+      ::_exit(valid ? 0 : 1);
+    }
+    const auto status = angaria::test_support::wait_for_exit(child,
+        "Cannot reap inherited-lock child", "Inherited-lock child exceeded its deadline");
+    holder.request_stop();
+    holder.join();
+    ASSERT_TRUE(WIFEXITED(status)) << "Child signal: " << (WIFSIGNALED(status) ? WTERMSIG(status) : 0);
+    EXPECT_EQ(WEXITSTATUS(status), 0);
+    // Child invalidation and local test corruption must not affect the parent.
+    EXPECT_EQ(std::get<Delivery>(source.receive())._token, delivery._token);
+    require_value(source.acknowledge(delivery._token));
+    EXPECT_EQ(require_value(writer.acknowledged_sequence()), 1u);
   }
 
   TEST(PublicRuntimeAdmission, ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence)

@@ -28,7 +28,7 @@ namespace angaria::detail
   public:
     ~SourceQueueSetState();
     std::shared_ptr<TaskState> _task;
-    std::uint64_t _ownerPid{};
+    mapped::ProcessToken _process;
     std::thread::id _ownerThread;
     bool _threadAffine{};
     SourceQueueSetId _id{};

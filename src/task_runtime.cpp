@@ -230,17 +230,16 @@ namespace angaria::detail
     // The native lease and immutable resources were authenticated at binding.
     // Their owning handles keep them alive; online replacement is unsupported.
     // Check fork/Thread affinity before any inherited local mutex is touched.
-    const auto pid = static_cast<std::uint64_t>(::getpid());
     if (!task || !task->_lease || !task->_attached.load(std::memory_order_acquire))
     {
       runtime_fail(ErrorCode::InvalidState, "task", "Task has no live attachment");
     }
-    if (task->_ownerPid != pid ||
+    if (!mapped::owns_process(task->_process) ||
         (task->_kind == TaskKind::Thread && task->_thread != std::this_thread::get_id()))
     {
       runtime_fail(ErrorCode::WrongOwner, "task", "Task belongs to another process or thread");
     }
-    if (task->_kind == TaskKind::Thread && (!task->_parent || task->_parent->_ownerPid != pid ||
+    if (task->_kind == TaskKind::Thread && (!task->_parent || !mapped::owns_process(task->_parent->_process) ||
         !task->_parent->_attached.load(std::memory_order_acquire)))
     {
       runtime_fail(ErrorCode::WrongOwner, "task.process", "Thread Task requires its retained Process claim");
@@ -365,7 +364,7 @@ namespace angaria::detail
       state->_claim = TaskClaim{state->_session->_controller->session_id(), task, words[0]};
       state->_kind = loaded._definition._descriptor._kind;
       state->_thread = std::this_thread::get_id();
-      state->_ownerPid = static_cast<std::uint64_t>(::getpid());
+      state->_process = runtime_value(mapped::bind_process_token(state->_session->_directory));
       auto plan = fixed_plan(access, task, words[0]);
       plan._commands.push_back(runtime_write_words(loaded._stateOffset, words));
       if (bootstrap)

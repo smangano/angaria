@@ -4,7 +4,6 @@
 #include <mutex>
 #include <utility>
 #include <variant>
-#include <unistd.h>
 
 namespace angaria::detail
 {
@@ -18,7 +17,7 @@ namespace angaria::detail
       }
       try
       {
-        if (state->_ownerPid != static_cast<std::uint64_t>(::getpid()) ||
+        if (!mapped::owns_process(state->_process) ||
             (state->_threadAffine && state->_ownerThread != std::this_thread::get_id()))
         {
           runtime_fail(ErrorCode::WrongOwner, "source.owner", "Source belongs to another process or thread");
@@ -65,7 +64,7 @@ namespace angaria::detail
     // never acknowledges processing. The next owner can recover/redeliver it.
     // No live Source remains to justify blocking its owner with a reservation.
     // A fork child must still leave its parent's local bookkeeping untouched.
-    if (_registered && _ownerPid == static_cast<std::uint64_t>(::getpid()))
+    if (_registered && mapped::owns_process(_process))
     {
       const auto task = std::atomic_load_explicit(&_task, std::memory_order_acquire);
       if (task)
@@ -86,12 +85,14 @@ namespace angaria::detail
     {
       runtime_fail(ErrorCode::InvalidState, "source", "Source has no live handle");
     }
-    if (state->_ownerPid != static_cast<std::uint64_t>(::getpid()) ||
+    if (!mapped::owns_process(state->_process) ||
         (state->_threadAffine && state->_ownerThread != std::this_thread::get_id()))
     {
       runtime_fail(ErrorCode::WrongOwner, "source.owner", "Source belongs to another process or thread");
     }
-    return std::atomic_load_explicit(&state->_task, std::memory_order_acquire);
+    auto task = std::atomic_load_explicit(&state->_task, std::memory_order_acquire);
+    runtime_check_messaging_owner(task);
+    return task;
   }
 
   OperationResult runtime_close_source(const std::shared_ptr<SourceQueueSetState>& state)

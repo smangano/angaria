@@ -3,6 +3,7 @@
 #include "angaria/runtime.h"
 
 #include "angaria/detail/error_support.h"
+#include "coordination_descriptor.h"
 #include "mapped_read_window.h"
 #include "mutation_journal.h"
 #include "session_metadata.h"
@@ -67,7 +68,7 @@ namespace angaria::detail
     TaskKind _kind{TaskKind::Process};
     std::thread::id _thread;
     std::atomic<bool> _attached{false};
-    std::uint64_t _ownerPid{};
+    mapped::ProcessToken _process;
     // A Task is the producer serialization domain. Its writers share one log
     // and issuer; unrelated Tasks and consumer handles have independent locks.
     std::mutex _producerMutex;

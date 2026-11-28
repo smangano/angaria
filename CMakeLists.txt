@@ -198,6 +198,12 @@ if(BUILD_TESTING)
   add_executable(angaria_public_runtime_performance test/test_public_runtime_performance.cpp)
   target_include_directories(angaria_public_runtime_performance PRIVATE src)
   target_link_libraries(angaria_public_runtime_performance PRIVATE angaria GTest::gtest_main)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Intercept this static library's direct libc PID calls in the isolated
+    # guard executable; ordinary benchmarks keep their unmodified linkage.
+    target_compile_definitions(angaria_public_runtime_performance PRIVATE ANGARIA_TEST_WRAP_GETPID=1)
+    target_link_options(angaria_public_runtime_performance PRIVATE "LINKER:--wrap=getpid")
+  endif()
   if(ANGARIA_ENABLE_DIAGNOSTICS)
     target_compile_definitions(angaria_public_runtime_performance PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
   endif()
@@ -213,6 +219,9 @@ if(BUILD_TESTING)
   add_test(NAME public_runtime_controls_validation
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_public_runtime_controls.py")
   set_tests_properties(public_runtime_controls_validation PROPERTIES TIMEOUT 20)
+  add_test(NAME ownership_performance_coordinator
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_ownership_performance.py")
+  set_tests_properties(ownership_performance_coordinator PROPERTIES TIMEOUT 20)
 
   # Isolate allocation replacement hooks from the ordinary correctness suite.
   add_executable(angaria_producer_log_performance test/test_producer_log_performance.cpp)
