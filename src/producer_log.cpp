@@ -406,6 +406,10 @@ namespace angaria::detail::recorded
       checked_queues(options);
       auto state = std::make_unique<State>();
       state->_claim = value(mapped::NativeClaim::acquire_existing(paths._log));
+      if (observer)
+      {
+        value(observer->checkpoint(ProducerLogCheckpoint::RecoveryBeforeScan));
+      }
       state->_data = open_data(paths._log, options, true);
       state->_ownerFile = value(mapped::NativeFile::open_existing(paths._owner, mapped::FileAccess::ReadWrite, owner_file_bytes));
       require(value(state->_ownerFile.size()) == owner_file_bytes &&

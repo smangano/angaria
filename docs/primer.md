@@ -12,6 +12,8 @@ The [independent messaging protocol](independent-messaging-protocol.md) is a des
 
 Steps **4.31–4.33** add private [producer-log byte codecs](producer-log-format.md), [mapped append/recovery/replay](producer-log.md) and [recorded point-to-point endpoints](recorded-queue.md), not a new public application messaging API. A replay cut is a fixed boundary in a producer's accepted message history: messages accepted later are absent from that replay. Returning transport credit frees a small descriptor slot for another message; it does not certify that the application processed the message or erase its recorded bytes. These building blocks will support the future public runtime and replay interface. The seventeen programs below still use the current public runtime and its acknowledged default; no private endpoint, codec or log setup is required to run them.
 
+Step **4.34**, framework **0.4.36**, adds [restart and connection-independence tests](recorded-queue.md#restart-and-connection-independence) for those private endpoints. The tests stop programs while they send or receive and check that accepted messages remain replayable and other connections can keep working. A restarted consumer can receive an unacknowledged message again; freeing transport credit does not prove the application finished its work. The runnable lessons below will adopt the replacement once its public API integration is ready.
+
 ## A few ideas before the code
 
 A **process** is a running program. A **thread** is one path of execution inside a process. Two terminal windows can launch two independent processes, even when both run the same executable.

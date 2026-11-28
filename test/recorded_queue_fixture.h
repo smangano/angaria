@@ -5,6 +5,7 @@
 // checked binding metadata supplied by this fixture's offline catalog owner.
 #include "producer_log_fixture.h"
 #include "recorded_queue.h"
+#include "native_file.h"
 
 #include <array>
 #include <cstddef>
@@ -17,6 +18,17 @@
 
 namespace angaria::test_support
 {
+  // Qualification reads a live control word with native atomic access; it does
+  // not decode shared mutable bytes through the ordinary wire helpers.
+  inline std::uint64_t recorded_queue_credit(const detail::recorded::RecordedQueueOptions& options)
+  {
+    auto file = require_value(detail::mapped::NativeFile::open_existing(
+        options._connectionPath, detail::mapped::FileAccess::ReadOnly));
+    auto mapping = require_value(file.map_read_only(256, 8));
+    const auto word = require_value(detail::mapped::AtomicReadWord::bind(require_value(mapping.bytes()), 0));
+    return word.load_acquire();
+  }
+
   inline detail::recorded::RecordedQueueOptions recorded_queue_options(
       const std::filesystem::path& directory, std::uint64_t capacity = 2,
       std::uint64_t publications = 128, std::uint64_t fileBytes = 1048576)

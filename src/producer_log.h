@@ -49,12 +49,15 @@ namespace angaria::detail::recorded
 
   enum class ProducerLogCheckpoint
   {
+    RecoveryBeforeScan,
     PartialMaterialization,
     BeforeCommit,
     AfterCommit
   };
 
-  // Private qualification seam, absent from ordinary opens. PartialMaterialization
+  // Private qualification seam, absent from ordinary opens. RecoveryBeforeScan
+  // holds the actual log claim before cold committed-prefix validation begins.
+  // It adds no checkpoint to ordinary messaging. PartialMaterialization
   // deliberately writes a provisional prefix before the ordinary complete codec
   // write; it represents an interrupted suffix, not a per-word hardware proof.
   // Observers may pause/terminate the process or return a synthetic error, but

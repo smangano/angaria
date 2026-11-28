@@ -19,7 +19,10 @@
 #include <iostream>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <variant>
+
+#include <sys/resource.h>
 
 namespace
 {
@@ -33,6 +36,22 @@ namespace
   constexpr std::size_t sample_count = 5;
   constexpr std::size_t cycles = 64;
   volatile std::uint64_t observed_checksum{};
+
+  struct FaultSample
+  {
+    std::uint64_t _minor;
+    std::uint64_t _major;
+  };
+
+  FaultSample process_faults()
+  {
+    rusage usage{};
+    if (::getrusage(RUSAGE_SELF, &usage) == -1)
+    {
+      throw std::runtime_error("Cannot sample process page faults");
+    }
+    return {static_cast<std::uint64_t>(usage.ru_minflt), static_cast<std::uint64_t>(usage.ru_majflt)};
+  }
 
   struct CycleResult
   {
@@ -97,6 +116,239 @@ namespace
       ++result._count;
     }
     return result;
+  }
+
+  CycleResult replay_cycles(recorded::RecordedConsumer& receiver, const MessageView& outgoing,
+                            TaskClaim publisher, TaskClaim consumer, std::size_t count)
+  {
+    CycleResult result;
+    for (std::size_t index = 0; index != count; ++index)
+    {
+      const auto received = receiver.try_receive();
+      const auto* message = std::get_if<std::optional<MessageView>>(&received);
+      if (!message || !*message)
+      {
+        result._valid = false;
+        break;
+      }
+      const auto& view = **message;
+      if (view._header._publication != PublicationId{publisher, index + 1} ||
+          view._header._queueSequence != index + 1 || view._header._consumer != consumer ||
+          view._header._schema != outgoing._header._schema || view._header._flags != outgoing._header._flags ||
+          view._header._format != outgoing._header._format || view._header._payloadBytes != outgoing._payload.size() ||
+          view._header._queue != QueueId{4} || !view._header._enqueuedAt || !view._header._dequeuedAt ||
+          !std::equal(view._payload.begin(), view._payload.end(), outgoing._payload.begin(), outgoing._payload.end()))
+      {
+        result._valid = false;
+        break;
+      }
+      result._checksum += view._header._publication._sequence;
+      result._last = view;
+      ++result._count;
+    }
+    return result;
+  }
+
+  void expect_no_native_messaging_work(const diagnostics::Sample& sample)
+  {
+    EXPECT_TRUE(sample._valid);
+    EXPECT_FALSE(sample._overflow);
+    for (const auto counter : {diagnostics::Counter::NativeReadCalls, diagnostics::Counter::NativeMapCalls,
+                               diagnostics::Counter::NativeUnmapCalls, diagnostics::Counter::FileStatCalls,
+                               diagnostics::Counter::FileGrowCalls, diagnostics::Counter::GateAttempts,
+                               diagnostics::Counter::GateAcquisitions})
+    {
+      EXPECT_EQ(sample._counters[static_cast<std::size_t>(counter)], 0u)
+          << diagnostics::counter_names[static_cast<std::size_t>(counter)];
+    }
+  }
+
+  TEST(RecordedQueuePerformance, ReplacementReplayAndEstablishedMessagingStayBoundedAcrossRetainedHistory)
+  {
+    constexpr std::size_t following_stream_cycles = 4096;
+    // Attachment validates the retained prefix. Replacement replay then walks
+    // it once; established messaging must not revisit or reopen old files.
+    for (const std::size_t history : {0u, 128u, 4096u})
+    {
+      std::array<double, sample_count> baselineNs{}, producerOpenNs{}, consumerOpenNs{}, replayNs{}, recoveredNs{}, warmNs{};
+      std::array<std::uint64_t, sample_count> baselineAllocations{}, replayAllocations{}, recoveredAllocations{}, warmAllocations{};
+      std::array<std::uint64_t, sample_count> baselineMinorFaults{}, recoveredMinorFaults{}, warmMinorFaults{};
+      std::array<std::uint64_t, sample_count> baselineMajorFaults{}, recoveredMajorFaults{}, warmMajorFaults{};
+      const auto retained = history + cycles;
+      for (std::size_t sample = 0; sample != sample_count; ++sample)
+      {
+        support::ProducerLogDirectory directory;
+        const auto options = support::recorded_queue_options(directory.path(), 2,
+            history + 3 * cycles + following_stream_cycles, 8 * 1024 * 1024);
+        const auto codec = support::recorded_queue_codec(options);
+        const auto bytes = support::recorded_queue_payload(codec, 42);
+        const auto outgoing = support::recorded_queue_message(options, bytes);
+        require_value(recorded::create_recorded_queue(options));
+        auto sender = require_value(recorded::RecordedProducer::open(options));
+        auto receiver = require_value(recorded::RecordedConsumer::open(options));
+        const auto publisher = require_value(sender.claim());
+        const auto initialConsumer = require_value(receiver.claim());
+        const auto populated = roundtrip_cycles(sender, receiver, outgoing, initialConsumer, 1, history);
+        ASSERT_TRUE(populated._valid);
+        ASSERT_EQ(populated._count, history);
+
+        CycleResult baseline;
+        const auto baselineFaults = process_faults();
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          baseline = roundtrip_cycles(sender, receiver, outgoing, initialConsumer, history + 1, cycles);
+          const auto stop = std::chrono::steady_clock::now();
+          baselineAllocations[sample] = allocations.stop();
+          baselineNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+        }
+        const auto afterBaseline = process_faults();
+        baselineMinorFaults[sample] = afterBaseline._minor - baselineFaults._minor;
+        baselineMajorFaults[sample] = afterBaseline._major - baselineFaults._major;
+        ASSERT_TRUE(baseline._valid);
+        ASSERT_EQ(baseline._count, cycles);
+        EXPECT_EQ(baselineAllocations[sample], 0u);
+        baseline._last.reset();
+        receiver = {};
+        sender = {};
+
+        const auto producerStart = std::chrono::steady_clock::now();
+        sender = require_value(recorded::RecordedProducer::open(options));
+        producerOpenNs[sample] = std::chrono::duration<double, std::nano>(
+            std::chrono::steady_clock::now() - producerStart).count();
+        EXPECT_GT(require_value(sender.claim())._incarnation, publisher._incarnation);
+        const auto consumerStart = std::chrono::steady_clock::now();
+        receiver = require_value(recorded::RecordedConsumer::open(options));
+        consumerOpenNs[sample] = std::chrono::duration<double, std::nano>(
+            std::chrono::steady_clock::now() - consumerStart).count();
+        const auto replacementConsumer = require_value(receiver.claim());
+        EXPECT_GT(replacementConsumer._incarnation, initialConsumer._incarnation);
+        ASSERT_EQ(support::recorded_queue_credit(options), retained);
+
+        CycleResult replay;
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          replay = replay_cycles(receiver, outgoing, publisher, replacementConsumer, retained);
+          const auto stop = std::chrono::steady_clock::now();
+          replayAllocations[sample] = allocations.stop();
+          replayNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / retained;
+        }
+        observed_checksum = replay._checksum;
+        ASSERT_TRUE(replay._valid);
+        ASSERT_EQ(replay._count, retained);
+        EXPECT_EQ(replayAllocations[sample], 0u);
+        EXPECT_EQ(support::recorded_queue_credit(options), retained);
+        EXPECT_FALSE(require_value(receiver.try_receive()));
+        replay._last.reset();
+
+        // A separate replacement replay gathers native work counts without
+        // including diagnostic collection in the wall-time samples above.
+        receiver = {};
+        receiver = require_value(recorded::RecordedConsumer::open(options));
+        const auto currentConsumer = require_value(receiver.claim());
+        diagnostics::Sample replaySample;
+        CycleResult diagnosticReplay;
+        {
+          diagnostics::Capture capture(replaySample, diagnostics::Collection::Counts);
+          diagnosticReplay = replay_cycles(receiver, outgoing, publisher, currentConsumer, retained);
+        }
+        ASSERT_TRUE(diagnosticReplay._valid);
+        ASSERT_EQ(diagnosticReplay._count, retained);
+        expect_no_native_messaging_work(replaySample);
+        EXPECT_EQ(support::recorded_queue_credit(options), retained);
+
+        CycleResult recovered;
+        const auto recoveredFaults = process_faults();
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          recovered = roundtrip_cycles(sender, receiver, outgoing, currentConsumer, retained + 1, cycles);
+          const auto stop = std::chrono::steady_clock::now();
+          recoveredAllocations[sample] = allocations.stop();
+          recoveredNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+        }
+        const auto afterRecovered = process_faults();
+        recoveredMinorFaults[sample] = afterRecovered._minor - recoveredFaults._minor;
+        recoveredMajorFaults[sample] = afterRecovered._major - recoveredFaults._major;
+        observed_checksum = recovered._checksum;
+        ASSERT_TRUE(recovered._valid);
+        ASSERT_EQ(recovered._count, cycles);
+        EXPECT_EQ(recoveredAllocations[sample], 0u);
+
+        // A fresh producer mapping may first touch new output pages after
+        // recovery. Keep that block visible, then report a longer stream rather
+        // than labeling the first block as steady-state performance.
+        CycleResult warm;
+        const auto warmFaults = process_faults();
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          warm = roundtrip_cycles(sender, receiver, outgoing, currentConsumer, retained + cycles + 1, following_stream_cycles);
+          const auto stop = std::chrono::steady_clock::now();
+          warmAllocations[sample] = allocations.stop();
+          warmNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / following_stream_cycles;
+        }
+        const auto afterWarm = process_faults();
+        warmMinorFaults[sample] = afterWarm._minor - warmFaults._minor;
+        warmMajorFaults[sample] = afterWarm._major - warmFaults._major;
+        observed_checksum = warm._checksum;
+        ASSERT_TRUE(warm._valid);
+        ASSERT_EQ(warm._count, following_stream_cycles);
+        EXPECT_EQ(warmAllocations[sample], 0u);
+        diagnostics::Sample recoveredSample;
+        CycleResult diagnosticRecovered;
+        {
+          diagnostics::Capture capture(recoveredSample, diagnostics::Collection::Counts);
+          diagnosticRecovered = roundtrip_cycles(sender, receiver, outgoing, currentConsumer,
+              retained + cycles + following_stream_cycles + 1, cycles);
+        }
+        ASSERT_TRUE(diagnosticRecovered._valid);
+        ASSERT_EQ(diagnosticRecovered._count, cycles);
+        expect_no_native_messaging_work(recoveredSample);
+      }
+
+      std::cout << std::fixed << std::setprecision(3)
+                << "{\"study\":\"recorded_queue_replacement_cost\",\"history_before_baseline\":" << history
+                << ",\"retained_on_replacement\":" << retained << ",\"payload_bytes\":8,\"ring_capacity\":2,"
+                << "\"cycles_per_block\":" << cycles << ",\"following_stream_cycles\":" << following_stream_cycles
+                << ",\"baseline_id_send_lookup_receive_ns\":";
+      support::write_samples(baselineNs);
+      std::cout << ",\"producer_open_ns\":";
+      support::write_samples(producerOpenNs);
+      std::cout << ",\"consumer_open_ns\":";
+      support::write_samples(consumerOpenNs);
+      std::cout << ",\"replay_ns_per_record\":";
+      support::write_samples(replayNs);
+      std::cout << ",\"recovered_id_send_lookup_receive_ns\":";
+      support::write_samples(recoveredNs);
+      std::cout << ",\"following_stream_id_send_lookup_receive_ns\":";
+      support::write_samples(warmNs);
+      std::cout << ",\"baseline_verified_publications_per_second\":" << 1e9 / support::median(baselineNs)
+                << ",\"recovered_verified_publications_per_second\":" << 1e9 / support::median(recoveredNs)
+                << ",\"following_stream_verified_publications_per_second\":" << 1e9 / support::median(warmNs)
+                << ",\"replay_allocations\":";
+      support::write_samples(replayAllocations);
+      std::cout << ",\"baseline_allocations\":";
+      support::write_samples(baselineAllocations);
+      std::cout << ",\"recovered_allocations\":";
+      support::write_samples(recoveredAllocations);
+      std::cout << ",\"following_stream_allocations\":";
+      support::write_samples(warmAllocations);
+      std::cout << ",\"baseline_minor_faults\":";
+      support::write_samples(baselineMinorFaults);
+      std::cout << ",\"baseline_major_faults\":";
+      support::write_samples(baselineMajorFaults);
+      std::cout << ",\"recovered_minor_faults\":";
+      support::write_samples(recoveredMinorFaults);
+      std::cout << ",\"recovered_major_faults\":";
+      support::write_samples(recoveredMajorFaults);
+      std::cout << ",\"following_stream_minor_faults\":";
+      support::write_samples(warmMinorFaults);
+      std::cout << ",\"following_stream_major_faults\":";
+      support::write_samples(warmMajorFaults);
+      std::cout << ",\"diagnostics_enabled\":" << (diagnostics::instrumentation_enabled ? "true" : "false") << "}\n";
+    }
   }
 
   TEST(RecordedQueueAllocationCapture, CountsSuccessfulAllocationRequests)
@@ -259,16 +511,7 @@ namespace
     // existing native/gate counters, not a claim that every syscall is absent.
     for (const auto* sample : {&roundtripSample, &emptySample, &fullSample})
     {
-      EXPECT_TRUE(sample->_valid);
-      EXPECT_FALSE(sample->_overflow);
-      for (const auto counter : {diagnostics::Counter::NativeReadCalls, diagnostics::Counter::NativeMapCalls,
-                                 diagnostics::Counter::NativeUnmapCalls, diagnostics::Counter::FileStatCalls,
-                                 diagnostics::Counter::FileGrowCalls, diagnostics::Counter::GateAttempts,
-                                 diagnostics::Counter::GateAcquisitions})
-      {
-        EXPECT_EQ(sample->_counters[static_cast<std::size_t>(counter)], 0u)
-            << diagnostics::counter_names[static_cast<std::size_t>(counter)];
-      }
+      expect_no_native_messaging_work(*sample);
     }
 
     std::cout << std::fixed << std::setprecision(3)
