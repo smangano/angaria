@@ -2,7 +2,7 @@
 
 Framework **0.4.35**, step **4.33**, connects the producer-owned message log to private recorded/unacknowledged endpoints. This study measures one independent producer process communicating with one independent consumer process on the same machine, using the [new endpoint implementation](../../../docs/recorded-queue.md) and classic libnanomsg 1.3.0 IPC PUSH/PULL.
 
-The native ARM64 Mac results show lower observed message-latency medians for the new Angaria profile at these settings. **They do not show a consistent throughput advantage.** The primary 128-message cohort rates are strongly affected by delay before the producer's first send. The separately retained active intervals also favor nanomsg in all nine cells. Those findings remain visible alongside the latency result.
+**The throughput result depends on the host.** At these settings Angaria has lower observed message-latency medians on both hosts. On the native ARM64 Mac, nanomsg has higher median active throughput in all nine cells. On Linux x86_64, Angaria has higher median cohort and active throughput in seven of nine cells; two 1,024-byte cells favor nanomsg. Mac cohort rates are strongly affected by delay before the producer's first send. Both the primary and active intervals remain visible, and hosts are kept separate.
 
 ## macOS ARM64 measurements
 
@@ -84,6 +84,44 @@ Both profiles run in the same UDS-enabled execution context. No CPU affinity is 
 
 The initial Angaria binding is deliberately private: one outgoing Queue, one Source input and one exact Binary schema per producer/consumer pair. Integrated public Task lifecycle, multi-Queue/schema endpoint sharing, acknowledgment progress, public TOML admission and runtime replacement remain prerequisites described in the [implementation plan](../../../docs/recorded-unacknowledged-delivery-plan.md). The public API and its acknowledged default are unchanged. This series does not claim delivery fan-out, consumer execution-order replay or public-profile admission.
 
+## Linux x86_64 matching-cohort measurements
+
+The explicit Linux series matches the Mac workload dimensions: **128 new messages, H=0/16/128, 64/256/1,024-byte payloads, 8 Angaria credits, 131,072-byte socket buffers, zero offered interval and five ABBA/BAAB blocks**. All **180 attempts completed**, ten per profile per cell. This is GitHub-hosted Ubuntu 24.04 x86_64 on an **Intel Xeon 6975P-C**, using GCC **13.3.0**, Release optimization, and diagnostics/Cachegrind disabled. Reported monotonic-clock resolution is **1 ns**.
+
+| H | Payload | Angaria latency (µs) | nanomsg latency (µs) | Angaria cohort rate (thousand/s) | nanomsg cohort rate (thousand/s) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 64 B | 1.916 | 54.490 | 464.54 | 405.29 |
+| 0 | 256 B | 2.324 | 49.365 | 375.07 | 364.24 |
+| 0 | 1,024 B | 4.083 | 63.746 | 227.59 | 245.73 |
+| 16 | 64 B | 2.014 | 61.368 | 431.36 | 406.12 |
+| 16 | 256 B | 2.296 | 51.538 | 371.07 | 342.86 |
+| 16 | 1,024 B | 4.269 | 64.938 | 233.15 | 236.58 |
+| 128 | 64 B | 2.261 | 55.426 | 442.07 | 383.71 |
+| 128 | 256 B | 3.162 | 63.444 | 342.06 | 322.36 |
+| 128 | 1,024 B | 4.908 | 71.314 | 253.22 | 234.82 |
+
+![Linux matching 128-message primary latency and cohort rate](linux-x86_64/latency-throughput.png)
+
+The metric definitions and different recording/completion guarantees are unchanged. Producer and consumer start jitter medians across this series are approximately **92 µs** and **89 µs**, respectively. The declared-T0 delay is therefore still relevant, while substantially smaller than in the Mac series. These cross-host observations do not isolate a cause: CPU, OS, compiler, clock granularity and execution environment differ.
+
+| H | Payload | Angaria active rate (thousand/s) | nanomsg active rate (thousand/s) |
+| ---: | ---: | ---: | ---: |
+| 0 | 64 B | 759.74 | 608.08 |
+| 0 | 256 B | 623.38 | 497.87 |
+| 0 | 1,024 B | 291.04 | 302.08 |
+| 16 | 64 B | 710.67 | 587.41 |
+| 16 | 256 B | 561.13 | 464.21 |
+| 16 | 1,024 B | 284.33 | 293.05 |
+| 128 | 64 B | 650.66 | 549.27 |
+| 128 | 256 B | 471.18 | 441.60 |
+| 128 | 1,024 B | 328.91 | 290.15 |
+
+![Linux original latency and secondary active-window rate](linux-x86_64/active-window-latency-throughput.png)
+
+Angaria has higher median active rate in all six 64/256-byte cells and the H=128 1,024-byte cell. Nanomsg remains slightly ahead in the two other 1,024-byte cells. There is no universal throughput winner across the two hosts, and these finite cohorts establish neither sustained capacity nor production tail latency. Each profile/cell retains 1,280 deliveries, with no p99 estimate.
+
+The [Linux manifest](linux-x86_64/manifest.json), [original metadata](linux-x86_64/manifest.toml), [all reports](linux-x86_64/reports.jsonl.gz), [raw attempt archive](linux-x86_64/raw-attempts.tar.gz), [primary values](linux-x86_64/comparison.csv) and [active values](linux-x86_64/active-comparison.csv) preserve the observations and full run ranges. Source commit is [`2dfee18bd7e21fcb7be362c45152df8d5de39f7f`](https://github.com/smangano/angaria/commit/2dfee18bd7e21fcb7be362c45152df8d5de39f7f); timed runtime and IPC adapter code are unchanged from the Mac source commit. The Linux executable's SHA-256 is `193390502bf53b62f289a1e9afdb520d0f04f247d1e2657dd275f2dbff558ae7`, identical to the initial 16-message Linux control. The two Linux populations remain separate; changing workload settings did not rebuild a different timed executable.
+
 ## Initial Linux short-cohort control
 
 The first on-demand Linux x86_64 run used the IPC runner's default **16 messages per cohort**, with **H=0/32/128**, instead of the Mac series' explicit 128 messages and H=0/16/128. All **180 attempts completed** on GitHub-hosted Ubuntu 24.04 x86_64 with GCC **13.3.0**. This valid initial matrix is retained as a [separate short-cohort control](linux-x86_64-cohort16/manifest.json); it is not pooled with the Mac data or any subsequent explicit 128-message Linux series.
@@ -94,7 +132,7 @@ An analysis-only follow-up makes packed metadata derive its message-count label 
 
 ## Evidence and reproduction
 
-Measured source: [`8da7d23107f7da3603213a180f1b9b38afa1ca40`](https://github.com/smangano/angaria/commit/8da7d23107f7da3603213a180f1b9b38afa1ca40). The [Mac manifest](macos-arm64/manifest.json) records **283 frozen source/harness input hashes**, executable/Angaria/nanomsg static-library hashes, compiler/build flags and architecture. Source, executable, libraries and build inputs were verified unchanged before and after the run. The Python coordinator is x86_64; the timed C++ executable is native ARM64. Linux results, when collected, must remain a separately labeled host dataset rather than being pooled with this one.
+Mac measured source: [`8da7d23107f7da3603213a180f1b9b38afa1ca40`](https://github.com/smangano/angaria/commit/8da7d23107f7da3603213a180f1b9b38afa1ca40). The [Mac manifest](macos-arm64/manifest.json) records **283 frozen source/harness input hashes**, executable/Angaria/nanomsg static-library hashes, compiler/build flags and architecture. Source, executable, libraries and build inputs were verified unchanged before and after the run. The Python coordinator is x86_64; the timed C++ executable is native ARM64. Linux has its own source/binary/compiler metadata above; host datasets and the initial short-cohort control are not pooled.
 
 - [Original runner metadata](macos-arm64/manifest.toml), [build provenance](macos-arm64/provenance/), and original [stdout](macos-arm64/runner.stdout.txt)/[stderr](macos-arm64/runner.stderr.txt).
 - [All reports, losslessly compressed](macos-arm64/reports.jsonl.gz), [all raw attempt directories](macos-arm64/raw-attempts.tar.gz), [run table](macos-arm64/runs.csv), and original [metric summary](macos-arm64/summary.csv).
