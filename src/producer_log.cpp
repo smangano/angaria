@@ -185,12 +185,12 @@ namespace angaria::detail::recorded
       return end;
     }
 
-    void refresh(LogData& data)
+    void refresh(LogData& data, std::size_t maxRecords = std::numeric_limits<std::size_t>::max())
     {
       try
       {
         const auto cut = acquired_end(data);
-        while (data._end != cut)
+        while (data._end != cut && maxRecords != 0)
         {
           require(data._records.size() < data._header._publicationCapacity &&
                       contains_range(cut, data._end, publication_fixed_bytes),
@@ -220,6 +220,7 @@ namespace angaria::detail::recorded
                                             record._recordOrdinal, destination._queueSequence});
           queue._sequence = destination._queueSequence;
           data._end = reference._end;
+          --maxRecords;
         }
       }
       catch (...)
@@ -337,6 +338,13 @@ namespace angaria::detail::recorded
       require(!_inAppend, ErrorCode::InvalidState, "Producer log operation cannot reenter append");
       require(!_data._failed, ErrorCode::IoError, "Producer log requires reopening after validation failure");
     }
+
+    void check_new_publication(PublicationId publication) const
+    {
+      require(publication._producer == _actor && publication._sequence != 0 && publication._sequence <= _issued &&
+                  (_data._records.empty() || publication_key(_data._records.back()._publication) < publication_key(publication)),
+              ErrorCode::InvalidArgument, "Publication was not issued by this claim or is retired");
+    }
   };
 
   struct ProducerLogReader::State
@@ -447,6 +455,17 @@ namespace angaria::detail::recorded
     });
   }
 
+  OperationResult ProducerLog::check_new_publication(PublicationId publication) const
+  {
+    return protect<std::monostate>([&]
+    {
+      require(bool(_state), ErrorCode::InvalidState, "Producer log is empty or moved-from");
+      _state->check();
+      _state->check_new_publication(publication);
+      return std::monostate{};
+    });
+  }
+
   Result<ProducerAppendResult> ProducerLog::append(const ProducerAppendRequest& request)
   {
     bool committed{};
@@ -465,9 +484,7 @@ namespace angaria::detail::recorded
         return ProducerAppendResult{existing->_reference, existing->_ordinal, existing->_queueSequence, true};
       }
       auto& queue = queue_progress(data, request._queue, ErrorCode::InvalidArgument);
-      require(request._publication._producer == _state->_actor && request._publication._sequence <= _state->_issued &&
-                  (data._records.empty() || publication_key(data._records.back()._publication) < publication_key(request._publication)),
-              ErrorCode::InvalidArgument, "Publication was not issued by this claim or is retired");
+      _state->check_new_publication(request._publication);
       require(data._records.size() < data._header._publicationCapacity, ErrorCode::LogFull, "Producer record capacity is exhausted");
       MessageHeader header;
       header._schema = request._message._header._schema;
@@ -586,6 +603,16 @@ namespace angaria::detail::recorded
     });
   }
 
+  Result<std::uint64_t> ProducerLog::queue_sequence(QueueId queue) const
+  {
+    return protect<std::uint64_t>([&]
+    {
+      require(bool(_state), ErrorCode::InvalidState, "Producer log is empty or moved-from");
+      _state->check();
+      return queue_progress(_state->_data, queue, ErrorCode::InvalidArgument)._sequence;
+    });
+  }
+
   ProducerLogReader::ProducerLogReader() noexcept = default;
   ProducerLogReader::~ProducerLogReader() = default;
   ProducerLogReader::ProducerLogReader(ProducerLogReader&&) noexcept = default;
@@ -622,23 +649,57 @@ namespace angaria::detail::recorded
     });
   }
 
+  void ProducerLogReader::check_cursor(const ProducerReplayCursor& cursor) const
+  {
+    require(bool(_state), ErrorCode::InvalidState, "Producer log reader is empty or moved-from");
+    _state->check();
+    const auto& data = _state->_data;
+    require(cursor._session == data._header._session && cursor._producer == data._header._producer &&
+                cursor._device == data._identity._device && cursor._inode == data._identity._inode &&
+                cursor._index <= cursor._limit && cursor._limit <= data._records.size() &&
+                cursor._end == (cursor._limit == 0 ? producer_header_bytes : data._records[cursor._limit - 1]._reference._end),
+            ErrorCode::InvalidArgument, "Replay cursor does not describe this validated producer-log cut");
+  }
+
   Result<std::optional<PublicationRecordView>> ProducerLogReader::next(ProducerReplayCursor& cursor) const
   {
     return protect<std::optional<PublicationRecordView>>([&]() -> std::optional<PublicationRecordView>
     {
-      require(bool(_state), ErrorCode::InvalidState, "Producer log reader is empty or moved-from");
-      _state->check();
+      check_cursor(cursor);
       const auto& data = _state->_data;
-      require(cursor._session == data._header._session && cursor._producer == data._header._producer &&
-                  cursor._device == data._identity._device && cursor._inode == data._identity._inode &&
-                  cursor._index <= cursor._limit && cursor._limit <= data._records.size() &&
-                  cursor._end == (cursor._limit == 0 ? producer_header_bytes : data._records[cursor._limit - 1]._reference._end),
-              ErrorCode::InvalidArgument, "Replay cursor does not describe this validated producer-log cut");
       if (cursor._index == cursor._limit)
       {
         return std::nullopt;
       }
       auto record = decode_reference(data, data._records[cursor._index]._reference);
+      ++cursor._index;
+      return record;
+    });
+  }
+
+  Result<std::optional<PublicationRecordView>> ProducerLogReader::poll_next(ProducerReplayCursor& cursor)
+  {
+    return protect<std::optional<PublicationRecordView>>([&]() -> std::optional<PublicationRecordView>
+    {
+      check_cursor(cursor);
+      auto& data = _state->_data;
+      const bool extend = cursor._index == cursor._limit;
+      if (extend && cursor._limit == data._records.size())
+      {
+        // Recovery/capture deliberately validate a full prefix. Live delivery
+        // instead does bounded work, independent of the pending suffix length.
+        refresh(data, 1);
+      }
+      if (extend && cursor._limit == data._records.size())
+      {
+        return std::nullopt;
+      }
+      auto record = decode_reference(data, data._records[cursor._index]._reference);
+      if (extend)
+      {
+        ++cursor._limit;
+        cursor._end = record._reference._end;
+      }
       ++cursor._index;
       return record;
     });

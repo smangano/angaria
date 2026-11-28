@@ -2,6 +2,9 @@
 // traffic uses stdin/stdout; application messages use only the selected library.
 #include "ipc_comparison_support.h"
 #include "ipc_operation_diagnostics.h"
+#include "native_atomic.h"
+#include "recorded_queue.h"
+#include "runtime_state.h"
 #if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
 #include "recorded_spsc.h"
 #endif
@@ -36,6 +39,7 @@ namespace
   using namespace angaria;
   using namespace angaria::benchmarks;
   namespace ipc = angaria::benchmarks::ipc;
+  namespace recorded = angaria::detail::recorded;
   constexpr std::uint64_t log_limit = 64ULL * 1024 * 1024;
 
   std::array<int, 3> runtime_abi()
@@ -86,6 +90,11 @@ namespace
       return failure._error._path + ": " + failure._error._message +
           " (code " + std::to_string(static_cast<unsigned>(failure._error._code)) + ")";
     }
+    catch (const detail::RuntimeFailure& failure)
+    {
+      return failure._error._path + ": " + failure._error._message +
+          " (code " + std::to_string(static_cast<unsigned>(failure._error._code)) + ")";
+    }
     catch (const std::exception& failure)
     {
       return failure.what();
@@ -98,7 +107,22 @@ namespace
 
   std::uint64_t file_bytes(const ipc::Options& options)
   {
+    if (options._profile == ipc::Profile::RecordedConnection)
+    {
+      std::uint64_t total{};
+      for (const auto* name : {"recorded-producer.ang", "recorded-owner.ang", "recorded-queue.ang"})
+      {
+        total = ipc::checked_add(total, std::filesystem::file_size(options._directory / name));
+      }
+      return total;
+    }
     return options._profile != ipc::Profile::Nanomsg ?
+        std::filesystem::file_size(options._directory / "session.ang") : 0;
+  }
+
+  std::uint64_t catalog_bytes(const ipc::Options& options)
+  {
+    return options._profile == ipc::Profile::RecordedConnection ?
         std::filesystem::file_size(options._directory / "session.ang") : 0;
   }
 
@@ -111,6 +135,12 @@ namespace
     if (includeRole)
     {
       result += ",\"role\":" + ipc::json_string(ipc::role_name(options._role));
+    }
+    if (options._profile == ipc::Profile::RecordedConnection)
+    {
+      result += ",\"producer_path_scope\":\"ID issuance, try_send retries and ordinary lookup\""
+                ",\"lookup_observation_category\":\"send\""
+                ",\"file_byte_scope\":\"reserved producer log, owner and connection; catalog reported separately\"";
     }
     return result;
   }
@@ -221,6 +251,83 @@ namespace
     }
   };
 
+  void check_payload_schema(Registry& registry, SchemaId schema, std::uint64_t payloadBytes)
+  {
+    const auto fieldId = value(registry.find_field("Word"));
+    const auto field = value(registry.describe_field(fieldId));
+    const auto definition = value(registry.describe_message(schema));
+    require(field._base == EFieldBase::BASE_UINT64 && field._size == 8 &&
+                field._logical._kind == FieldLogicalKind::None,
+            "Session payload Field must accept an arbitrary unsigned 64-bit word");
+    require(definition._fields.size() == payloadBytes / 8 &&
+                std::all_of(definition._fields.begin(), definition._fields.end(),
+                    [fieldId](FieldId entry)
+                    {
+                      return entry == fieldId;
+                    }),
+            "Session payload schema does not match the requested word count");
+  }
+
+  recorded::RecordedQueueOptions recorded_options(const ipc::Options& options)
+  {
+    // The old public Session is used only to bootstrap/read real sealed
+    // Registry definitions. Measured endpoints own no Session/Task handles.
+    auto session = value(Session::attach(options._directory));
+    auto registry = session.registry();
+    recorded::RecordedQueueOptions result;
+    result._queue = value(registry.find_queue("Connection"));
+    result._source = value(registry.find_source_set("Input"));
+    result._consumer = value(registry.find_task("Consumer"));
+    result._schema = value(registry.find_message("ComparisonPayload", 1));
+    check_payload_schema(registry, result._schema, options._payloadBytes);
+    result._catalog = value(registry.snapshot());
+    result._producerPaths = {options._directory / "recorded-producer.ang", options._directory / "recorded-owner.ang"};
+    result._connectionPath = options._directory / "recorded-queue.ang";
+    result._log._header._session = session.identity();
+    result._log._header._producer = value(registry.find_task("Producer"));
+    result._log._header._catalogRevision = result._catalog._revision;
+    result._log._header._fileBytes = log_limit;
+    result._log._header._publicationCapacity = 1024;
+    result._log._header._liveAbiProfile = value(detail::mapped::qualify_native_profile())._liveAbiProfile;
+    result._log._queues = {result._queue};
+    result._capacity = options._ringSlots;
+    const auto queue = std::find_if(result._catalog._queues.begin(), result._catalog._queues.end(),
+        [&](const auto& entry)
+        {
+          return entry._id == result._queue;
+        });
+    require(queue != result._catalog._queues.end(), "Recorded Queue is absent from its sealed catalog");
+    result._topologyRevision = queue->_registration._revision;
+    auto state = std::make_shared<detail::SessionState>();
+    state->_directory = options._directory;
+    state->_controller = value(detail::mapped::SessionController::open_existing(options._directory));
+    detail::RuntimeAccess access(state);
+    result._schemaReference = detail::runtime_schema_context(access, result._schema)._schema._reference;
+    return result;
+  }
+
+  struct RecordedEndpoint
+  {
+    explicit RecordedEndpoint(const ipc::Options& options) : _options(recorded_options(options))
+    {
+      if (options._role == ipc::Role::Producer)
+      {
+        _producer.emplace(value(recorded::RecordedProducer::open(_options)));
+        _claim = value(_producer->claim());
+      }
+      else
+      {
+        _consumer.emplace(value(recorded::RecordedConsumer::open(_options)));
+        _claim = value(_consumer->claim());
+      }
+    }
+
+    recorded::RecordedQueueOptions _options;
+    TaskClaim _claim{};
+    std::optional<recorded::RecordedProducer> _producer;
+    std::optional<recorded::RecordedConsumer> _consumer;
+  };
+
   struct AngariaEndpoint
   {
     explicit AngariaEndpoint(const ipc::Options& options)
@@ -231,19 +338,7 @@ namespace
       _queue = value(registry.find_queue("Connection"));
       _sourceId = value(registry.find_source_set("Input"));
       _producerId = value(registry.find_task("Producer"));
-      const auto fieldId = value(registry.find_field("Word"));
-      const auto field = value(registry.describe_field(fieldId));
-      const auto definition = value(registry.describe_message(_schema));
-      require(field._base == EFieldBase::BASE_UINT64 && field._size == 8 &&
-                  field._logical._kind == FieldLogicalKind::None,
-              "Session payload Field must accept an arbitrary unsigned 64-bit word");
-      require(definition._fields.size() == options._payloadBytes / 8 &&
-                  std::all_of(definition._fields.begin(), definition._fields.end(),
-                      [fieldId](FieldId entry)
-                      {
-                        return entry == fieldId;
-                      }),
-              "Session payload schema does not match the requested word count");
+      check_payload_schema(registry, _schema, options._payloadBytes);
       _task.emplace(value(_session.attach_task(options._role == ipc::Role::Producer ? "Producer" : "Consumer")));
       // claim() authenticates through RuntimeAccess. Capture the immutable
       // expected identity before timing; verification below only compares it.
@@ -333,34 +428,66 @@ namespace
       definition._name = "ComparisonPayload";
       definition._fields.assign(options._payloadBytes / 8, fieldId);
       const auto schema = value(registry.register_message(definition));
-      auto producer = value(created._session.attach_task(producerId));
-      auto consumer = value(created._session.attach_task(consumerId));
-      auto writer = value(producer.open_writer(queueId));
-      auto source = value(consumer.open_source_set(sourceId));
       std::vector<std::byte> payload(options._payloadBytes);
       MessageHeader header;
       header._schema = schema;
       header._payloadBytes = payload.size();
       const auto deadline = ipc::deadline_ns(ipc::monotonic_ns(), std::max<std::uint64_t>(10'000, options._budgetMs));
-      for (std::uint64_t sequence = 1; sequence <= options._history; ++sequence)
+      if (options._profile == ipc::Profile::RecordedConnection)
       {
-        ipc::check_deadline(deadline);
-        ipc::fill_payload(payload, sequence, 0, 0);
-        const auto publication = value(producer.next_publication_id());
-        std::array<DestinationOutcome, 1> outcomes;
-        check_report(writer.send(publication, MessageView{header, payload}, outcomes), publication, queueId);
-        auto result = source.receive(std::chrono::milliseconds{ipc::remaining_ms(deadline)});
-        if (const auto* error = std::get_if<Error>(&result))
+        const auto connection = recorded_options(options);
+        value(recorded::create_recorded_queue(connection));
+        auto producer = value(recorded::RecordedProducer::open(connection));
+        auto consumer = value(recorded::RecordedConsumer::open(connection));
+        for (std::uint64_t sequence = 1; sequence <= options._history; ++sequence)
         {
-          throw BenchmarkFailure{*error};
+          ipc::check_deadline(deadline);
+          ipc::fill_payload(payload, sequence, 0, 0);
+          const auto publication = value(producer.next_publication_id());
+          const auto sent = producer.try_send(publication, MessageView{header, payload});
+          if (const auto* error = std::get_if<Error>(&sent))
+          {
+            throw BenchmarkFailure{*error};
+          }
+          const auto* accepted = std::get_if<recorded::ProducerAppendResult>(&sent);
+          require(accepted && !accepted->_duplicate && accepted->_queueSequence == sequence,
+                  "Recorded history was not accepted in Queue order");
+          const auto outcome = value(producer.lookup(publication));
+          require(outcome && outcome->_reference == accepted->_reference,
+                  "Recorded history lookup did not resolve its acceptance");
+          const auto received = value(consumer.try_receive());
+          require(received.has_value(), "Recorded history did not produce its expected delivery");
+          const auto envelope = ipc::validate_payload(received->_payload, sequence);
+          require(envelope._scheduledNs == 0 && envelope._logicalStartNs == 0,
+                  "Preload timestamps must be zero");
         }
-        const auto* delivery = std::get_if<Delivery>(&result);
-        require(delivery != nullptr, "Angaria history did not produce its expected delivery");
-        const auto envelope = ipc::validate_payload(delivery->_message._payload, sequence);
-        require(envelope._scheduledNs == 0 && envelope._logicalStartNs == 0, "Preload timestamps must be zero");
-        value(source.acknowledge(delivery->_token));
       }
-      value(source.close());
+      else
+      {
+        auto producer = value(created._session.attach_task(producerId));
+        auto consumer = value(created._session.attach_task(consumerId));
+        auto writer = value(producer.open_writer(queueId));
+        auto source = value(consumer.open_source_set(sourceId));
+        for (std::uint64_t sequence = 1; sequence <= options._history; ++sequence)
+        {
+          ipc::check_deadline(deadline);
+          ipc::fill_payload(payload, sequence, 0, 0);
+          const auto publication = value(producer.next_publication_id());
+          std::array<DestinationOutcome, 1> outcomes;
+          check_report(writer.send(publication, MessageView{header, payload}, outcomes), publication, queueId);
+          auto result = source.receive(std::chrono::milliseconds{ipc::remaining_ms(deadline)});
+          if (const auto* error = std::get_if<Error>(&result))
+          {
+            throw BenchmarkFailure{*error};
+          }
+          const auto* delivery = std::get_if<Delivery>(&result);
+          require(delivery != nullptr, "Angaria history did not produce its expected delivery");
+          const auto envelope = ipc::validate_payload(delivery->_message._payload, sequence);
+          require(envelope._scheduledNs == 0 && envelope._logicalStartNs == 0, "Preload timestamps must be zero");
+          value(source.acknowledge(delivery->_token));
+        }
+        value(source.close());
+      }
 #if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
       if (options._profile == ipc::Profile::RecordedSpsc)
       {
@@ -393,7 +520,8 @@ namespace
         ",\"clock_id\":\"CLOCK_MONOTONIC\",\"clock_resolution_ns\":" +
         std::to_string(ipc::clock_resolution_ns()) +
         ",\"history_count\":" + std::to_string(options._history) +
-        ",\"file_bytes\":" + std::to_string(file_bytes(options)));
+        ",\"file_bytes\":" + std::to_string(file_bytes(options)) +
+        ",\"catalog_bytes\":" + std::to_string(catalog_bytes(options)));
   }
 
   struct Sample
@@ -422,6 +550,17 @@ namespace
     std::uint64_t _hash{};
     std::uint64_t _publicationSequence{};
     std::uint64_t _publicationIncarnation{};
+    std::uint64_t _lookupStart{};
+    std::uint64_t _lookupEnd{};
+    std::uint64_t _acceptedOffset{};
+    std::uint64_t _acceptedEnd{};
+    std::uint64_t _acceptedOrdinal{};
+    std::uint64_t _acceptedQueueSequence{};
+    std::uint64_t _lookupOffset{};
+    std::uint64_t _lookupRecordEnd{};
+    std::uint64_t _lookupOrdinal{};
+    std::uint64_t _lookupQueueSequence{};
+    bool _lookupFound{};
     bool _accepted{};
   };
 
@@ -431,7 +570,11 @@ namespace
     explicit Worker(ipc::Options options)
         : _options(std::move(options)), _payload(_options._payloadBytes), _samples(_options._messages)
     {
-      if (_options._profile != ipc::Profile::Nanomsg)
+      if (_options._profile == ipc::Profile::RecordedConnection)
+      {
+        _recorded.emplace(_options);
+      }
+      else if (_options._profile != ipc::Profile::Nanomsg)
       {
         _angaria.emplace(_options);
 #if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
@@ -468,6 +611,7 @@ namespace
       event(_options, "DRAINED", "\"history_count\":" + std::to_string(_options._history));
       require(ipc::read_command()._cmd == "READY", "Expected READY after drained preload");
       _fileBefore = file_bytes(_options);
+      _catalogBefore = catalog_bytes(_options);
       _threadsStart = ipc::thread_count();
       event(_options, "READY");
       command = ipc::read_command();
@@ -483,6 +627,7 @@ namespace
       _cpuEnd = ipc::process_cpu_ns();
       check_extra_messages();
       _fileAfter = file_bytes(_options);
+      _catalogAfter = catalog_bytes(_options);
       _threadsEnd = ipc::thread_count();
       report();
       if (_angaria && _angaria->_source)
@@ -512,6 +657,27 @@ namespace
 
     void preload()
     {
+      if (_recorded)
+      {
+        // Consumer replacement intentionally replays from the beginning. Drain
+        // retained H before READY without decreasing the shared credit watermark.
+        if (_recorded->_consumer)
+        {
+          const auto deadline = ipc::deadline_ns(ipc::monotonic_ns(), _options._budgetMs);
+          for (std::uint64_t sequence = 1; sequence <= _options._history; ++sequence)
+          {
+            ipc::check_deadline(deadline);
+            const auto received = value(_recorded->_consumer->try_receive());
+            require(received.has_value(), "Replacement consumer did not replay retained history");
+            require(received->_header._queueSequence == sequence,
+                    "Replacement history Queue sequence differs from retained order");
+            const auto envelope = ipc::validate_payload(received->_payload, sequence);
+            require(envelope._scheduledNs == 0 && envelope._logicalStartNs == 0,
+                    "Preload timestamps must be zero");
+          }
+        }
+        return;
+      }
       if (!_socket)
       {
         return; // The setup process already verified and acknowledged all H.
@@ -599,6 +765,11 @@ namespace
       sample._logicalStart = ipc::monotonic_ns();
       ipc::fill_payload(_payload, sample._sequence, sample._scheduled, sample._logicalStart);
       sample._hash = ipc::payload_hash(_payload);
+      if (_recorded)
+      {
+        produce_recorded(sample, deadline);
+        return;
+      }
       if (_socket)
       {
         send_nanomsg(sample, deadline);
@@ -661,6 +832,77 @@ namespace
       ++_accepted;
     }
 
+    void produce_recorded(Sample& sample, std::uint64_t deadline)
+    {
+      sample._idStart = ipc::monotonic_ns();
+      const auto publication = value(ipc::observe_operation(_observations[0], _options._collection,
+          [&]
+          {
+            return _recorded->_producer->next_publication_id();
+          }));
+      sample._idEnd = ipc::monotonic_ns();
+      sample._publicationSequence = publication._sequence;
+      sample._publicationIncarnation = publication._producer._incarnation;
+      MessageHeader header;
+      header._schema = _recorded->_options._schema;
+      header._payloadBytes = _payload.size();
+      const MessageView outgoing{header, _payload};
+      sample._sendStart = ipc::monotonic_ns();
+      for (;;)
+      {
+        ipc::check_deadline(deadline);
+        const auto start = ipc::monotonic_ns();
+        const auto sent = ipc::observe_operation(_observations[1], _options._collection,
+            [&]
+            {
+              return _recorded->_producer->try_send(publication, outgoing);
+            });
+        const auto end = ipc::monotonic_ns();
+        sample._sendApi += end - start;
+        ++sample._sendAttempts;
+        if (const auto* error = std::get_if<Error>(&sent))
+        {
+          throw BenchmarkFailure{*error};
+        }
+        if (const auto* accepted = std::get_if<recorded::ProducerAppendResult>(&sent))
+        {
+          require(!accepted->_duplicate && accepted->_queueSequence == sample._sequence,
+                  "Recorded send did not create the expected new acceptance");
+          sample._sendEnd = end;
+          sample._successfulSendStart = start;
+          sample._accepted = true;
+          sample._acceptedOffset = accepted->_reference._offset;
+          sample._acceptedEnd = accepted->_reference._end;
+          sample._acceptedOrdinal = accepted->_recordOrdinal;
+          sample._acceptedQueueSequence = accepted->_queueSequence;
+          ++_accepted;
+          // Ordinary accepted-ID lookup is part of the complete producer path.
+          // Diagnostics group it with send; its own clocks remain explicit.
+          sample._lookupStart = ipc::monotonic_ns();
+          const auto outcome = value(ipc::observe_operation(_observations[1], _options._collection,
+              [&]
+              {
+                return _recorded->_producer->lookup(publication);
+              }));
+          sample._lookupEnd = ipc::monotonic_ns();
+          sample._lookupFound = outcome.has_value();
+          require(outcome && outcome->_reference == accepted->_reference &&
+                      outcome->_recordOrdinal == accepted->_recordOrdinal &&
+                      outcome->_queueSequence == accepted->_queueSequence,
+                  "Ordinary recorded lookup differs from the accepted send");
+          sample._lookupOffset = outcome->_reference._offset;
+          sample._lookupRecordEnd = outcome->_reference._end;
+          sample._lookupOrdinal = outcome->_recordOrdinal;
+          sample._lookupQueueSequence = outcome->_queueSequence;
+          return;
+        }
+        require(std::holds_alternative<recorded::QueueCreditFull>(sent), "Unexpected recorded send outcome");
+        ++sample._backpressure;
+        ++sample._creditWaits;
+        std::this_thread::yield();
+      }
+    }
+
     void consume(Sample& sample, std::uint64_t deadline)
     {
       std::optional<Delivery> delivery;
@@ -670,6 +912,44 @@ namespace
       {
         receive_nanomsg(sample, deadline);
         payload = _payload;
+      }
+      else if (_recorded)
+      {
+        sample._receiveStart = ipc::monotonic_ns();
+        for (;;)
+        {
+          ipc::check_deadline(deadline);
+          const auto start = ipc::monotonic_ns();
+          const auto received = value(ipc::observe_operation(_observations[2], _options._collection,
+              [&]
+              {
+                return _recorded->_consumer->try_receive();
+              }));
+          const auto end = ipc::monotonic_ns();
+          ++sample._receiveAttempts;
+          sample._receiveApi += end - start;
+          if (received)
+          {
+            message = *received;
+            sample._receive = end;
+            sample._successfulReceiveStart = start;
+            break;
+          }
+          ++sample._timeouts;
+          std::this_thread::yield();
+        }
+        const auto& header = message._header;
+        require(header._schema == _recorded->_options._schema && header._format == PayloadFormat::Binary &&
+                    header._payloadBytes == _payload.size() && header._flags == 0 &&
+                    header._queue == _recorded->_options._queue && header._queueSequence == sample._sequence &&
+                    header._consumer == _recorded->_claim &&
+                    header._publication._producer._session == _recorded->_options._log._header._session &&
+                    header._publication._producer._task == _recorded->_options._log._header._producer &&
+                    header._publication._sequence != 0 && header._publication._producer._incarnation != 0,
+                "Recorded received header/identity differs from the configured connection");
+        sample._publicationSequence = header._publication._sequence;
+        sample._publicationIncarnation = header._publication._producer._incarnation;
+        payload = message._payload;
       }
       else
       {
@@ -838,6 +1118,10 @@ namespace
             require(::nn_errno() == EAGAIN, "nanomsg final empty check failed");
           }
         }
+        else if (_recorded)
+        {
+          _unexpectedMessages = value(_recorded->_consumer->try_receive()) ? 1 : 0;
+        }
 #if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
         else if (_spsc)
         {
@@ -892,10 +1176,11 @@ namespace
              << ",\"thread_count_end\":" << (_threadsEnd ? std::to_string(*_threadsEnd) : "null")
              << ",\"peak_rss_bytes\":" << ipc::peak_rss_bytes()
              << ",\"file_bytes_before\":" << _fileBefore << ",\"file_bytes_after\":" << _fileAfter
+             << ",\"catalog_bytes_before\":" << _catalogBefore << ",\"catalog_bytes_after\":" << _catalogAfter
              << ",\"socket_send_buffer_bytes\":" << (_socket ? _socket->_sendBuffer : 0)
              << ",\"socket_receive_buffer_bytes\":" << (_socket ? _socket->_receiveBuffer : 0)
-             << ",\"log_limit_bytes\":" << (_angaria ? log_limit : 0)
-             << ",\"ring_slots\":" << (_angaria ? _options._ringSlots : 0) << ",\"diagnostics\":";
+             << ",\"log_limit_bytes\":" << (_angaria || _recorded ? log_limit : 0)
+             << ",\"ring_slots\":" << (_angaria || _recorded ? _options._ringSlots : 0) << ",\"diagnostics\":";
       ipc::write_diagnostics(output, _observations);
       output << ",\"rows\":[";
       for (std::size_t index = 0; index < _used; ++index)
@@ -921,6 +1206,19 @@ namespace
                  << ",\"credit_waits\":" << sample._creditWaits
                  << ",\"backpressure_count\":" << sample._backpressure
                  << ",\"accepted\":" << (sample._accepted ? "true" : "false");
+          if (_recorded)
+          {
+            output << ",\"lookup_start_ns\":" << sample._lookupStart << ",\"lookup_end_ns\":" << sample._lookupEnd
+                   << ",\"lookup_found\":" << (sample._lookupFound ? "true" : "false")
+                   << ",\"accepted_record_offset\":" << sample._acceptedOffset
+                   << ",\"accepted_record_end\":" << sample._acceptedEnd
+                   << ",\"accepted_record_ordinal\":" << sample._acceptedOrdinal
+                   << ",\"accepted_queue_sequence\":" << sample._acceptedQueueSequence
+                   << ",\"lookup_record_offset\":" << sample._lookupOffset
+                   << ",\"lookup_record_end\":" << sample._lookupRecordEnd
+                   << ",\"lookup_record_ordinal\":" << sample._lookupOrdinal
+                   << ",\"lookup_queue_sequence\":" << sample._lookupQueueSequence;
+          }
         }
         else
         {
@@ -942,6 +1240,7 @@ namespace
     std::vector<std::byte> _payload;
     std::vector<Sample> _samples;
     std::optional<AngariaEndpoint> _angaria;
+    std::optional<RecordedEndpoint> _recorded;
     std::optional<Socket> _socket;
 #if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
     std::optional<spsc::RecordedSpsc> _spsc;
@@ -964,6 +1263,8 @@ namespace
     double _clockPairMedian{};
     std::uint64_t _fileBefore{};
     std::uint64_t _fileAfter{};
+    std::uint64_t _catalogBefore{};
+    std::uint64_t _catalogAfter{};
     std::optional<std::uint64_t> _threadsStart;
     std::optional<std::uint64_t> _threadsEnd;
     std::string _status{"complete"};

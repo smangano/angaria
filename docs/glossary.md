@@ -4,7 +4,7 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 
 ## Proposed independent messaging protocol
 
-These terms belong to the [independent messaging protocol](independent-messaging-protocol.md). Steps 4.31–4.32 implement its private log codecs and storage primitives; the current public Session-gated runtime does not yet use that protocol.
+These terms belong to the [independent messaging protocol](independent-messaging-protocol.md). Steps 4.31–4.33 implement its private log codecs, storage and initial recorded point-to-point endpoints; the current public Session-gated runtime does not yet use that protocol.
 
 | Term | Meaning in the proposed protocol |
 | --- | --- |
@@ -14,6 +14,9 @@ These terms belong to the [independent messaging protocol](independent-messaging
 | **Producer owner file** | Native per-producer incarnation storage bound to the log file's identity. Its counter advances before new IDs are exposed, including after an owner accepted nothing. It is separate from immutable message records. |
 | **Publication capacity** | The configured maximum accepted publication-record count in the bounded stream. It bounds lookup storage and acknowledged destination receipt reservations. |
 | **Logical credit** | A monotonic per-Queue consumed-sequence watermark limiting producer admission independently of descriptor publication and application acknowledgment. |
+| **Descriptor stamp** | An atomic Queue sequence published after a ring slot's reference words. It identifies a delivery hint; the producer log's committed tail remains acceptance authority. |
+| **Connection generation** | A nonzero immutable identity for a fixed connection setup, checked at open and in matching descriptor hints. It is separate from producer/consumer Task incarnations. |
+| **QueueCreditFull** | A private nonblocking send result: the new ID remains unaccepted because the Queue's logical credit is full. The caller may retry the same ID after consumption; no Error allocation or processing acknowledgment is required. |
 | **Sealed catalog** | The checked Registry/schema/topology snapshot fixed before the first protocol's data operations. Owner replacement changes Task incarnation, not this catalog. |
 | **Source operation image** | A reserved consumer-owned description of one operation's absolute Source, selected Queue and receipt after-state. An atomic selector commits it; interrupted installation is replayed locally. |
 | **Receipt ledger** | Reserved consumer-owned rows retaining each accepted destination's latest issuance and acknowledgment metadata. It is separate from the immutable message log and optional execution-event trace. |

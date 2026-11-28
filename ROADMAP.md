@@ -89,6 +89,8 @@ The current-log experiment is evidence, not the final architecture: its producer
 
 Step **4.31**, framework **0.4.33**, implements workstream step 2's private [producer-log headers, references and Publication codecs](docs/producer-log-format.md), with independent byte fixtures and a focused allocation/codec-latency/throughput check. Step **4.32**, framework **0.4.34**, implements workstream step 3's [producer-owned mapped append, recovery and replay](docs/producer-log.md), including actual process-crash boundaries, exclusive ownership, accepted-ID retry and focused append/replay latency and throughput checks. It enables no public format-3 Session. Step 4 next binds the new log to recorded/unacknowledged SPSC delivery with logical credit.
 
+Step **4.33**, framework **0.4.35**, implements workstream step 4's private [recorded/unacknowledged point-to-point endpoints](docs/recorded-queue.md), with logical credit, atomic descriptor hints, bounded incremental discovery and retained Message copies. Functional/process tests, deterministic hot-path guards and a full matched comparison against nanomsg qualify this layer. Workstream step 5 next broadens restart, catch-up, stale-handle and independent-connection failure qualification before optional acknowledged progress and public admission.
+
 ## 1 Core architecture and policy contracts
 
 Completed through [PR #7](https://github.com/smangano/angaria/pull/7). The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divided this work into five reviewed step PRs targeting `milestone-1`.

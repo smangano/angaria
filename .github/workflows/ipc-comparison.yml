@@ -10,6 +10,11 @@ on:
         type: choice
         options: ['5', '1']
         default: '5'
+      angaria_profile:
+        description: Angaria path compared with nanomsg
+        type: choice
+        options: ['recorded-connection', 'angaria']
+        default: 'recorded-connection'
 
 permissions:
   contents: read
@@ -37,7 +42,7 @@ jobs:
           -DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g
           -DBUILD_TESTING=ON -DANGARIA_BUILD_IPC_COMPARISON=ON
           -DANGARIA_ENABLE_DIAGNOSTICS=OFF -DANGARIA_ENABLE_CACHEGRIND=OFF
-      - name: Build both comparison profiles
+      - name: Build comparison profiles
         run: cmake --build build/ipc --target angaria_ipc_comparison angaria_ipc_comparison_tests --parallel 3
       - name: Qualify the runner and adapters
         run: |
@@ -47,9 +52,14 @@ jobs:
         id: measurements
         env:
           ANGARIA_COMPARISON_BLOCKS: ${{ inputs.blocks || '5' }}
+          ANGARIA_COMPARISON_PROFILE: ${{ inputs.angaria_profile || 'recorded-connection' }}
         run: >-
           python3 -B benchmarks/run_ipc_comparison.py build/ipc/angaria_ipc_comparison
           --output build/ipc-results --blocks "$ANGARIA_COMPARISON_BLOCKS"
+          --messages 128
+          --histories 0,16,128 --payload-bytes 64,256,1024
+          --ring-slots 8 --interval-ns 0 --socket-buffer-bytes 131072
+          --angaria-profile "$ANGARIA_COMPARISON_PROFILE"
           --host-label "GitHub hosted Ubuntu 24.04 x86_64; ordinary IPC comparison"
       - name: Retain all comparison attempts
         if: always() && steps.measurements.outcome != 'skipped'

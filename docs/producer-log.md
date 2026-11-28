@@ -2,6 +2,8 @@
 
 Framework **0.4.34**, milestone step **4.32**, implements step 3 of the [independent messaging plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). These are private storage primitives, not a new public Session or send/receive mode. The current public runtime and the seventeen [primer programs](primer.md) continue to use their existing protocol. Ring delivery, logical Queue credit, consumer progress, application acknowledgments and public admission follow in later steps.
 
+Step **4.33**, framework **0.4.35**, adds private [recorded point-to-point endpoints](recorded-queue.md). It extends this storage API with cached `queue_sequence()` and explicitly live `poll_next(cursor)`. Live polling consumes one already validated record or validates at most one newly committed record after the cursor's cut is exhausted; independent cursor copies stay frozen. Ordinary `next()` and `capture()` retain their replay-cut behavior. Consumer progress with application acknowledgments and public admission remain later work.
+
 A **producer stream** is one logical Task's append-only message log. Its **committed tail** is the atomic byte offset immediately after its last accepted record. The physical file is reserved in advance; its length says nothing about how many messages have been accepted. Publication records and the data header use the [format-3 codecs](producer-log-format.md).
 
 ## Ownership and opening
