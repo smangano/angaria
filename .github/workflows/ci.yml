@@ -25,6 +25,14 @@ jobs:
         run: cmake --build build --parallel 3
       - name: Test including endpoint restart walkthrough
         run: ctest --test-dir build --output-on-failure
+      - name: Retain tests and focused codec performance
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: codec-tests-linux-x86_64
+          path: build/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Record bounded diagnostic measurements
         id: measurements
         run: python3 benchmarks/run_diagnostics.py build/angaria_transport_diagnostics --suite ci --repetitions 3 --output build/diagnostic-results --host-label "GitHub hosted Linux x86_64"

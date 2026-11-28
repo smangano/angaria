@@ -113,6 +113,10 @@ The isolated [focused performance test](../test/test_producer_log_performance.cp
 
 The control uses the existing format-2 owning Publication codec on the same logical message. Its layout and owning return contract differ, so this is a codec-cost comparison, not a transport/nanomsg speedup or an estimate of recording/acknowledgment cost. Samples are not per-message p50/p99 latency. Timings report observed direction without a noisy hosted wall-time failure threshold; deterministic allocation/borrow guards fail CI. Retain actual results and host/build context in the step report before integration. Full nanomsg comparisons resume when the new messaging path is runnable.
 
+Both profiles use the same allocation-hooked test executable. Capture is disabled during timing, but the allocating control still passes through the replacement hooks. The control is not the current receive path, which has separate metadata loading and mapped payload access. Ordinary CI retains `LastTest.log` in `codec-tests-*` artifacts, including the three `CODEC_PERFORMANCE` records; hosted library builds enable existing diagnostics and their observations are not pooled with the local diagnostics-OFF study.
+
+The [retained local study and plots](../benchmarks/results/milestone-4-producer-log-codecs/README.md) contain ten complete invocations. Median encode/decode block means are approximately 49/50/57 ns at 64/256/1,024 bytes versus 94/99/133 ns for the owning control, with zero versus three allocations per cycle. These are codec measurements under the explicit ownership differences above, not delivered-message latency/throughput or a nanomsg comparison.
+
 Run the focused test with:
 
 ```sh
