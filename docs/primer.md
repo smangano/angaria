@@ -16,9 +16,9 @@ Step **4.34**, framework **0.4.36**, adds [restart and connection-independence t
 
 Step **4.35**, framework **0.4.37**, adds [acknowledged progress](recorded-acknowledged-progress.md) to the private replacement. Receiving gives the consumer a delivery token. Repeating that receive keeps the same token until the application acknowledges or releases it. Acknowledgment records completion; release makes the message available again with a new token. If a consumer stops before acknowledging, its replacement can receive the message again. The private progress file keeps these decisions separate from the message log and from transport credit. The public examples below continue to use the implemented public API; their eventual replacement is a later step.
 
-## A few ideas before the code
-
 Step **4.36**, framework **0.4.38**, measures both private delivery modes in [longer, warmed performance comparisons](end-to-end-qualification.md). The report distinguishes receiving a message from acknowledging its processing, and shows how a slow consumer affects latency and throughput. These benchmarks qualify the replacement machinery; the public lessons below continue to use the current implemented API until public admission.
+
+## A few ideas before the code
 
 A **process** is a running program. A **thread** is one path of execution inside a process. Two terminal windows can launch two independent processes, even when both run the same executable.
 

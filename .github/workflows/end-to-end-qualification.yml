@@ -37,7 +37,7 @@ jobs:
       - name: Qualify helpers, reconstruction, and existing comparison
         run: >-
           ctest --test-dir build/e2e --output-on-failure
-          -R '^(ipc_comparison_deadlines|end_to_end_validation|ipc_comparison_smoke)$'
+          -R '^(ipc_comparison_deadlines|end_to_end_validation|end_to_end_coordinator|ipc_comparison_smoke)$'
       - name: Record both delivery modes and nanomsg on the same host
         run: >-
           python3 -B benchmarks/run_end_to_end.py collect build/e2e/angaria_ipc_comparison

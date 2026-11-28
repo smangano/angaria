@@ -2,6 +2,8 @@
 
 Framework **0.4.38**, milestone step **4.36**, qualifies workstream step 7 of the [recorded messaging plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). The benchmark compares the new recorded/unacknowledged and recorded/acknowledged connections with classic **libnanomsg 1.3.0 IPC PUSH/PULL**, on the same host and ordinary Release build. It changes no messaging algorithm or public API.
 
+The [retained results and plots](../benchmarks/results/milestone-4-end-to-end/README.md) contain 514 successful full-matrix attempts on Mac ARM64 and Linux x86_64, plus native ARM correctness smoke. Findings vary by payload, stream length, credit and host; the report includes overlapping ranges, scheduling debt, pause maxima and the different buffering/CPU costs.
+
 The new bindings remain private: one Process producer, one Process consumer, one outgoing Queue, one Source input and one exact Binary schema. Shared producer-log ownership, multiple exact schemas, Thread/parent lifecycles, public configuration and public runtime admission remain step 8. The current public acknowledged default and the public-API primer remain unchanged. These limits describe this qualification binding, rather than permanent framework limits.
 
 ## What is compared

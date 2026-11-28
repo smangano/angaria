@@ -1,0 +1,82 @@
+Start testing: Nov 28 08:43 UTC
+----------------------------------------------------------
+6/25 Testing: end_to_end_validation
+6/25 Test: end_to_end_validation
+Command: "/usr/bin/python3.12" "-B" "/home/runner/work/angaria/angaria/test/test_end_to_end_validation.py"
+Directory: /home/runner/work/angaria/angaria/build/e2e
+"end_to_end_validation" start time: Nov 28 08:43 UTC
+Output:
+----------------------------------------------------------
+.....................
+----------------------------------------------------------------------
+Ran 21 tests in 0.040s
+
+OK
+<end of output>
+Test time =   0.19 sec
+----------------------------------------------------------
+Test Passed.
+"end_to_end_validation" end time: Nov 28 08:43 UTC
+"end_to_end_validation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/25 Testing: ipc_comparison_deadlines
+8/25 Test: ipc_comparison_deadlines
+Command: "/home/runner/work/angaria/angaria/build/e2e/angaria_ipc_comparison_tests"
+Directory: /home/runner/work/angaria/angaria/build/e2e
+"ipc_comparison_deadlines" start time: Nov 28 08:43 UTC
+Output:
+----------------------------------------------------------
+Running main() from ./googletest/src/gtest_main.cc
+[==========] Running 8 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 3 tests from IpcComparisonQualification
+[ RUN      ] IpcComparisonQualification.ExtendedStreamsRequireExplicitConcurrentQualification
+[       OK ] IpcComparisonQualification.ExtendedStreamsRequireExplicitConcurrentQualification (0 ms)
+[ RUN      ] IpcComparisonQualification.ConsumerWorkAndPauseHaveExplicitMeasuredBounds
+[       OK ] IpcComparisonQualification.ConsumerWorkAndPauseHaveExplicitMeasuredBounds (0 ms)
+[ RUN      ] IpcComparisonQualification.ResourceWindowsSubtractEveryCounterAndRejectRegression
+[       OK ] IpcComparisonQualification.ResourceWindowsSubtractEveryCounterAndRejectRegression (0 ms)
+[----------] 3 tests from IpcComparisonQualification (0 ms total)
+
+[----------] 5 tests from IpcComparisonDeadlines
+[ RUN      ] IpcComparisonDeadlines.ExpirationGuardsHaveTheirOwnExceptionType
+[       OK ] IpcComparisonDeadlines.ExpirationGuardsHaveTheirOwnExceptionType (0 ms)
+[ RUN      ] IpcComparisonDeadlines.InvalidScheduleAfterExpirationRetainsItsFailureCause
+[       OK ] IpcComparisonDeadlines.InvalidScheduleAfterExpirationRetainsItsFailureCause (0 ms)
+[ RUN      ] IpcComparisonDeadlines.InvalidClockRangeAfterExpirationRetainsItsFailureCause
+[       OK ] IpcComparisonDeadlines.InvalidClockRangeAfterExpirationRetainsItsFailureCause (0 ms)
+[ RUN      ] IpcComparisonDeadlines.CorruptPayloadAfterExpirationRetainsItsFailureCause
+[       OK ] IpcComparisonDeadlines.CorruptPayloadAfterExpirationRetainsItsFailureCause (0 ms)
+[ RUN      ] IpcComparisonDeadlines.PublicationErrorAfterExpirationRetainsItsFailureCause
+[       OK ] IpcComparisonDeadlines.PublicationErrorAfterExpirationRetainsItsFailureCause (0 ms)
+[----------] 5 tests from IpcComparisonDeadlines (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 8 tests from 2 test suites ran. (0 ms total)
+[  PASSED  ] 8 tests.
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"ipc_comparison_deadlines" end time: Nov 28 08:43 UTC
+"ipc_comparison_deadlines" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/25 Testing: ipc_comparison_smoke
+9/25 Test: ipc_comparison_smoke
+Command: "/usr/bin/python3.12" "/home/runner/work/angaria/angaria/test/ipc_comparison.py" "/home/runner/work/angaria/angaria/build/e2e/angaria_ipc_comparison"
+Directory: /home/runner/work/angaria/angaria/build/e2e
+"ipc_comparison_smoke" start time: Nov 28 08:43 UTC
+Output:
+----------------------------------------------------------
+IPC comparison: twenty-four real cohorts, recorded lookup/credit/acknowledgment/order, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed
+<end of output>
+Test time =   4.13 sec
+----------------------------------------------------------
+Test Passed.
+"ipc_comparison_smoke" end time: Nov 28 08:43 UTC
+"ipc_comparison_smoke" time elapsed: 00:00:04
+----------------------------------------------------------
+
+End testing: Nov 28 08:43 UTC

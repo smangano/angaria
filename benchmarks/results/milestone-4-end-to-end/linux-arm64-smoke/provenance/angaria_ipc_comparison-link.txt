@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/angaria_ipc_comparison.dir/link.d CMakeFiles/angaria_ipc_comparison.dir/benchmarks/ipc_comparison.cpp.o -o angaria_ipc_comparison  _deps/angaria_nanomsg-build/libnanomsg.a libangaria_recorded_spsc.a -lanl -lrt -lpthread libangaria.a

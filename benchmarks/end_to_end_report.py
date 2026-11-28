@@ -202,7 +202,7 @@ def plot_group(output, manifest, cases, rows, panels, filename, title):
         return None
     columns = 2
     height = math.ceil(len(panels) / columns)
-    many_cases = len(cases) > 6
+    many_cases = len(cases) > 3
     figure, axes = plt.subplots(height, columns, figsize=(max(12, len(cases) * 1.25 + 6),
                                                          3.5 * height + (3.8 if many_cases else 2.4)),
                                 squeeze=False)
@@ -239,11 +239,15 @@ def plot_group(output, manifest, cases, rows, panels, filename, title):
         if logarithmic and has_positive:
             values = [row["minimum"] / scale for row in rows if row["metric"] == metric and
                       row["case"] in {case_name(case) for case in cases}]
-            ax.set_yscale("symlog", linthresh=.001) if min(values) <= 0 else ax.set_yscale("log")
-        elif not logarithmic:
+            if min(values) <= 0:
+                ax.set_yscale("symlog", linthresh=.001)
+                ax.set_ylim(bottom=0)
+            else:
+                ax.set_yscale("log")
+        else:
             ax.set_ylim(bottom=0)
         ax.grid(axis="y", which="both", alpha=.18)
-        ax.margins(x=.12)
+        ax.set_xlim(-.5, len(cases) - .5)
     for ax in list(axes.flat)[len(panels):]:
         ax.set_visible(False)
     handles, labels = [], []
