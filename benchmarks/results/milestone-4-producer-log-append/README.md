@@ -74,6 +74,8 @@ Admission, live ring transport, consumer scheduling, notifications and applicati
 
 The measured source is [`7b5206e37eb8eeeb04efaa39f4e839b66bced72f`](https://github.com/smangano/angaria/commit/7b5206e37eb8eeeb04efaa39f4e839b66bced72f). The [manifest](manifest.json) contains SHA-256 hashes for all **272 tracked implementation inputs**, the executable and static library, compiler details, build flags, architecture and every retained evidence file. Source, executable, library and build configuration were verified unchanged before and after collection.
 
+A subsequent PR-review fix adds a live-reader corruption regression in `test/test_producer_log.cpp`. It changes no production source, focused performance test or build settings. The manifest and original results continue to describe the pinned source above.
+
 The native executable is **macOS ARM64**, built with Apple Clang **21.0.0**, C++20, Release `-O3 -DNDEBUG`, and `-Wall -Wextra -Werror -g`. The Python coordinator reports x86_64; timing occurs inside the native ARM64 C++ executable. The optional CPU-model query was denied and its original error is retained in the manifest. No CPU affinity was requested.
 
 [Raw evidence](raw/) retains every invocation's original stdout, stderr, GoogleTest XML, parsed JSON lines and validation result. [Build provenance](provenance/) retains the CMake cache, target flags and link command. [Attempt values](attempts.csv) and the [summary](summary.csv) can be reconstructed from those files:

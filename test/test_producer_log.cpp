@@ -820,3 +820,65 @@ TEST_F(ProducerLogTest, ACorruptCommittedBoundaryOrRecordFailsColdRecovery)
   expect_error(recorded::ProducerLogReader::open(_paths._log, _options), ErrorCode::IoError);
   expect_error(recorded::ProducerLog::open_writer(_paths, _options), ErrorCode::IoError);
 }
+
+TEST_F(ProducerLogTest, IncrementalReplayFailureRemainsClosedAfterTheSuffixIsRepaired)
+{
+  create();
+  auto producer = writer();
+  const auto first = require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  auto replay = reader();
+  auto oldCut = require_value(replay.capture());
+  ASSERT_EQ(oldCut.record_count(), 1u);
+  EXPECT_EQ(require_value(replay.view(first._reference))._recordOrdinal, 1u);
+
+  // Both records are accepted after this reader's last capture. The next
+  // capture must install the valid second record before finding damage in the
+  // third, so failure leaves partially advanced local index/Queue progress.
+  const auto second = require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  const auto third = require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  producer = recorded::ProducerLog{};
+  const auto original = file_bytes(_paths._log);
+  auto file = require_value(mapped::NativeFile::open_existing(_paths._log, mapped::FileAccess::ReadWrite));
+  std::array<std::byte, 1> savedMagic{};
+  require_value(file.read_exact(third._reference._offset, savedMagic));
+  const std::array damagedMagic{std::byte{0xff}};
+  // Deliberate, serialized fixture corruption: no writer or reader operation
+  // runs during the byte edits, and the live atomic tail is never modified.
+  require_value(file.write_exact(third._reference._offset, damagedMagic));
+  expect_error(replay.capture(), ErrorCode::IoError);
+  require_value(file.write_exact(third._reference._offset, savedMagic));
+  EXPECT_EQ(file_bytes(_paths._log), original);
+
+  // Repair must not silently reactivate a failed handle or expose any part of
+  // its local index. The old cut is deliberately unconsumed; returning its
+  // previously valid record would violate the permanent failure guarantee.
+  expect_error(replay.capture(), ErrorCode::IoError);
+  expect_error(replay.next(oldCut), ErrorCode::IoError);
+  for (const auto& accepted : {first, second, third})
+  {
+    expect_error(replay.view(accepted._reference), ErrorCode::IoError);
+    expect_error(replay.copy_record(accepted._reference, payload.size()), ErrorCode::IoError);
+  }
+  expect_error(replay.committed_end(), ErrorCode::IoError);
+
+  // Only reopening establishes a newly validated reader. All three accepted
+  // records remain intact, including the suffix that was partly indexed.
+  auto reopened = reader();
+  auto repairedCut = require_value(reopened.capture());
+  EXPECT_EQ(repairedCut.record_count(), 3u);
+  EXPECT_EQ(repairedCut.committed_end(), third._reference._end);
+  for (const auto& accepted : {first, second, third})
+  {
+    const auto record = require_value(reopened.next(repairedCut));
+    ASSERT_TRUE(record);
+    EXPECT_EQ(record->_reference, accepted._reference);
+    EXPECT_EQ(record->_recordOrdinal, accepted._recordOrdinal);
+    EXPECT_EQ(require_value(record->destination_at(0))._queueSequence, accepted._queueSequence);
+    EXPECT_TRUE(std::equal(record->_payload.begin(), record->_payload.end(), payload.begin(), payload.end()));
+  }
+  EXPECT_FALSE(require_value(reopened.next(repairedCut)));
+  EXPECT_EQ(file_bytes(_paths._log), original);
+}
