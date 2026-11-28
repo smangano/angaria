@@ -25,12 +25,19 @@ sys.dont_write_bytecode = True
 import run_ipc_comparison as ipc
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILES = ("recorded-connection", "nanomsg")
+def profiles(metadata):
+    selected = metadata.get("angaria_profile", "recorded-connection")
+    ipc.check(selected in ipc.RECORDED_PROFILES, "Unknown recorded comparison profile")
+    return selected, "nanomsg"
+
+
 LABELS = {"recorded-connection": "Angaria: recorded, unacknowledged; ID + send + lookup",
+          "recorded-acknowledged-connection": "Angaria: recorded, acknowledged; ID + send + lookup + receive + ack",
           "nanomsg": "libnanomsg IPC: unrecorded, unacknowledged"}
-COLORS = {"recorded-connection": "#168469", "nanomsg": "#cc702d"}
+COLORS = {"recorded-connection": "#168469", "recorded-acknowledged-connection": "#356eab", "nanomsg": "#cc702d"}
 METRICS = (("logical_start_to_delivery_ns", "Logical start → delivery (µs)", 1000),
            ("bounded_cohort_verified_per_second", "Verified publications / second", 1))
+ACK_LATENCY = ("logical_start_to_acknowledgment_ns", "Logical start → consumer ACK return (µs)", 1000)
 
 
 def write_json(path, value):
@@ -173,7 +180,7 @@ def collect(options):
     output.mkdir(parents=True)
     files, build = build_snapshot(binary, output)
     argv = [sys.executable, "-B", str(ROOT / "benchmarks/run_ipc_comparison.py"), str(binary),
-            "--angaria-profile", "recorded-connection", "--output", str(output / "attempts"),
+            "--angaria-profile", options.angaria_profile, "--output", str(output / "attempts"),
             "--blocks", str(options.blocks), "--messages", str(options.messages), "--histories", options.histories,
             "--payload-bytes", options.payload_bytes, "--ring-slots", str(options.ring_slots),
             "--budget-ms", str(options.budget_ms), "--timeout", str(options.timeout),
@@ -196,6 +203,7 @@ def collect(options):
     shutil.rmtree(output / "attempts")
     if not options.no_plots:
         render(output)
+        render(output, active=True)
 
 
 def reconstruct(output):
@@ -209,7 +217,8 @@ def reconstruct(output):
         reports = [json.loads(line) for line in stream if line.strip()]
     messages = cohort_size(reports)
     metadata = manifest["runner_metadata"]
-    ipc.check(metadata.get("status") == "complete" and metadata.get("angaria_profile") == PROFILES[0],
+    selected_profiles = profiles(metadata)
+    ipc.check(metadata.get("status") == "complete" and metadata.get("angaria_profile", "recorded-connection") == selected_profiles[0],
               "Runner did not complete the requested recorded comparison")
     ipc.check(metadata.get("git_tracked_dirty") is False, "Runner did not measure a frozen tracked source tree")
     cases = manifest["cases"]
@@ -217,8 +226,8 @@ def reconstruct(output):
     ipc.check(len(reports) == metadata["planned_runs"] == len(cases) * metadata["blocks"] * 4,
               "Incomplete matched matrix; retained attempts cannot be silently excluded")
     expected = [(case, block, position, profile) for case in cases for block in range(1, metadata["blocks"] + 1)
-                for position, profile in enumerate((PROFILES[0], PROFILES[1], PROFILES[1], PROFILES[0]) if block % 2 else
-                                                    (PROFILES[1], PROFILES[0], PROFILES[0], PROFILES[1]), 1)]
+                for position, profile in enumerate((selected_profiles[0], selected_profiles[1], selected_profiles[1], selected_profiles[0]) if block % 2 else
+                                                    (selected_profiles[1], selected_profiles[0], selected_profiles[0], selected_profiles[1]), 1)]
     with tarfile.open(output / "raw-attempts.tar.gz", "r:gz") as archive:
         for index, (report, (case, block, position, profile)) in enumerate(zip(reports, expected), 1):
             ipc.check(report["attempt"] == index and report["profile"] == profile and report["block"] == block and
@@ -236,17 +245,27 @@ def reconstruct(output):
                 ipc.check(originals == [worker], "Aggregated worker rows differ from original stdout")
             ipc.validate_cached_summary(report)
             ipc.check(report["accepted"] == report["delivered"] == report["messages"] and
-                      report["acknowledged"] == report["pending"] == 0, "Different delivery/completion guarantees")
+                      report["pending"] == 0 and
+                      report["acknowledged"] == (report["messages"] if profile in ipc.ACKNOWLEDGED_PROFILES else 0),
+                      "Different delivery/completion guarantees")
     return manifest, reports
 
 
-def summaries(reports):
+def selected_metrics(active=False, acknowledged=False):
+    throughput = ("first_send_to_last_verified_per_second", "Active verified publications / second", 1) if active else METRICS[1]
+    return (METRICS[0], ACK_LATENCY, throughput) if acknowledged else (METRICS[0], throughput)
+
+
+def summaries(reports, active=False):
     cohort_size(reports)
     result = []
     cells = sorted({(row["profile"], row["history"], row["payload_bytes"]) for row in reports})
     for profile, history, payload in cells:
         group = [row for row in reports if (row["profile"], row["history"], row["payload_bytes"]) == (profile, history, payload)]
-        for metric, _, _ in METRICS:
+        acknowledged = any(row["profile"] == "recorded-acknowledged-connection" for row in reports)
+        for metric, _, _ in selected_metrics(active, acknowledged):
+            if metric == ACK_LATENCY[0] and profile not in ipc.ACKNOWLEDGED_PROFILES:
+                continue  # There is no application-processing ACK on PUSH/PULL.
             values = [ipc.rank(row["metrics"][metric], 1, 2) if metric in row["metrics"] else row["rates"][metric] for row in group]
             result.append(dict(profile=profile, history=history, payload_bytes=payload, metric=metric,
                                runs=len(values), median=statistics.median(values), minimum=min(values), maximum=max(values),
@@ -254,7 +273,7 @@ def summaries(reports):
     return result
 
 
-def plot(output, manifest, reports, rows):
+def plot(output, manifest, reports, rows, active=False):
     messages = cohort_size(reports)
     import matplotlib
     matplotlib.use("Agg")
@@ -262,11 +281,15 @@ def plot(output, manifest, reports, rows):
     matplotlib.rcParams["svg.hashsalt"] = "angaria-recorded-connection"
     payloads = sorted({row["payload_bytes"] for row in reports})
     histories = sorted({row["history"] for row in reports})
-    figure, axes = plt.subplots(2, len(payloads), figsize=(5.1 * len(payloads), 8.0), squeeze=False)
+    acknowledged = profiles(manifest["runner_metadata"])[0] in ipc.ACKNOWLEDGED_PROFILES
+    metrics = selected_metrics(active, acknowledged)
+    figure, axes = plt.subplots(len(metrics), len(payloads), figsize=(5.1 * len(payloads), 4.0 * len(metrics)), squeeze=False)
     for column, payload in enumerate(payloads):
-        for row_index, (metric, ylabel, scale) in enumerate(METRICS):
+        for row_index, (metric, ylabel, scale) in enumerate(metrics):
             ax = axes[row_index, column]
-            for profile_index, profile in enumerate(PROFILES):
+            for profile_index, profile in enumerate(profiles(manifest["runner_metadata"])):
+                if metric == ACK_LATENCY[0] and profile not in ipc.ACKNOWLEDGED_PROFILES:
+                    continue
                 centers, lows, highs, xs = [], [], [], []
                 for history_index, history in enumerate(histories):
                     summary = next(row for row in rows if (row["profile"], row["history"], row["payload_bytes"], row["metric"]) ==
@@ -287,18 +310,23 @@ def plot(output, manifest, reports, rows):
             ax.set_yscale("log"); ax.grid(axis="y", alpha=.2)
             if row_index == 0:
                 ax.set_title(str(payload) + "-byte payload")
+            if metric == ACK_LATENCY[0]:
+                ax.text(.02, .03, "nanomsg: no processing acknowledgment", transform=ax.transAxes,
+                        fontsize=8, color=COLORS["nanomsg"])
     handles, labels = axes[0, 0].get_legend_handles_labels()
     figure.legend(handles, labels, loc="upper center", bbox_to_anchor=(.5, .94), frameon=False, fontsize=10)
     figure.suptitle("Private recorded point-to-point vs classic nanomsg — " + manifest["runner_metadata"].get("host_label", ""), fontsize=13)
     figure.subplots_adjust(top=.80, bottom=.20, hspace=.48, wspace=.38)
     figure.text(.5, .035,
                 "Dots: every attempt; line: median; whiskers: full run range. Latency points are per-run nearest-rank p50.\n"
-                "Finite fresh " + str(messages) + "-message cohorts; throughput waits for verified delivery and Angaria's ordinary producer lookup.\n"
+                "Finite fresh " + str(messages) + "-message cohorts; throughput waits for verified delivery, producer lookup" +
+                (" and explicit Angaria acknowledgment.\n" if profiles(manifest["runner_metadata"])[0] in ipc.ACKNOWLEDGED_PROFILES else ".\n") +
+                ("ACK latency includes payload verification and the consumer's explicit ACK API return.\n" if acknowledged else "") +
                 "Different recording guarantees; no sustained-capacity or per-message p99 claim. No timing outliers are removed.\n"
-                "Angaria uses nonblocking spin/yield; nanomsg uses nonblocking socket calls with poll. Startup and setup are outside data intervals.",
+                "Angaria uses spin/yield; nanomsg uses socket polling. Setup is excluded; the primary rate includes T0-to-first-send delay.",
                 ha="center", fontsize=9, linespacing=1.6)
     for suffix in ("png", "svg"):
-        path = output / ("latency-throughput." + suffix)
+        path = output / (("active-window-latency-throughput." if active else "latency-throughput.") + suffix)
         figure.savefig(path, dpi=170, metadata={"Software": "Angaria recorded connection study"} if suffix == "png" else
                        {"Date": None, "Creator": "Angaria recorded connection study"})
         if suffix == "svg":
@@ -306,14 +334,14 @@ def plot(output, manifest, reports, rows):
     plt.close(figure)
 
 
-def render(output, validate_only=False):
+def render(output, validate_only=False, active=False):
     manifest, reports = reconstruct(output)
-    rows = summaries(reports)
+    rows = summaries(reports, active)
     if not validate_only:
-        with (output / "comparison.csv").open("w", newline="") as stream:
+        with (output / ("active-comparison.csv" if active else "comparison.csv")).open("w", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
             writer.writeheader(); writer.writerows(rows)
-        plot(output, manifest, reports, rows)
+        plot(output, manifest, reports, rows, active)
     print("Verified " + str(len(reports)) + " matched attempts; all raw worker reports and cached summaries agree.")
 
 
@@ -323,6 +351,7 @@ def main():
     collection = commands.add_parser("collect")
     collection.add_argument("binary", type=Path)
     collection.add_argument("--source-commit", required=True)
+    collection.add_argument("--angaria-profile", choices=ipc.RECORDED_PROFILES, default="recorded-connection")
     collection.add_argument("--output", type=Path, required=True)
     collection.add_argument("--host-label", default=platform.system() + "; native executable architecture retained in manifest")
     collection.add_argument("--blocks", type=int, default=5)
@@ -341,6 +370,7 @@ def main():
     rendering = commands.add_parser("render")
     rendering.add_argument("output", type=Path)
     rendering.add_argument("--validate-only", action="store_true")
+    rendering.add_argument("--active", action="store_true", help="plot active completion rate; keep the declared-T0 figure separate")
     options = parser.parse_args()
     if options.command == "collect":
         collect(options)
@@ -350,7 +380,7 @@ def main():
         pack(options.raw.resolve(), options.output.resolve(), options.source_commit)
         render(options.output.resolve())
     else:
-        render(options.output.resolve(), options.validate_only)
+        render(options.output.resolve(), options.validate_only, options.active)
 
 
 if __name__ == "__main__":

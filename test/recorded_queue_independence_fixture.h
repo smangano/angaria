@@ -13,14 +13,16 @@ namespace angaria::test_support
 {
   inline detail::recorded::RecordedQueueOptions recorded_independence_options(
       const std::filesystem::path& directory, SessionId session, unsigned connection,
-      std::uint64_t publications = 128)
+      std::uint64_t publications = 128, bool acknowledged = false)
   {
     auto first = recorded_queue_options(directory, 2, publications);
+    first._acknowledged = acknowledged;
     first._log._header._session = session;
     first._producerPaths = producer_log_paths(directory, "producer-a");
     first._connectionPath = directory / "queue-a.connection";
 
     auto second = recorded_queue_options(directory, 2, publications);
+    second._acknowledged = acknowledged;
     second._log._header._session = session;
     second._producerPaths = producer_log_paths(directory, "producer-b");
     second._connectionPath = directory / "queue-b.connection";

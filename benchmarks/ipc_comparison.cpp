@@ -107,12 +107,16 @@ namespace
 
   std::uint64_t file_bytes(const ipc::Options& options)
   {
-    if (options._profile == ipc::Profile::RecordedConnection)
+    if (ipc::is_recorded(options._profile))
     {
       std::uint64_t total{};
       for (const auto* name : {"recorded-producer.ang", "recorded-owner.ang", "recorded-queue.ang"})
       {
         total = ipc::checked_add(total, std::filesystem::file_size(options._directory / name));
+      }
+      if (ipc::is_acknowledged(options._profile))
+      {
+        total = ipc::checked_add(total, std::filesystem::file_size(options._directory / "recorded-queue.ang.progress"));
       }
       return total;
     }
@@ -122,7 +126,7 @@ namespace
 
   std::uint64_t catalog_bytes(const ipc::Options& options)
   {
-    return options._profile == ipc::Profile::RecordedConnection ?
+    return ipc::is_recorded(options._profile) ?
         std::filesystem::file_size(options._directory / "session.ang") : 0;
   }
 
@@ -136,11 +140,13 @@ namespace
     {
       result += ",\"role\":" + ipc::json_string(ipc::role_name(options._role));
     }
-    if (options._profile == ipc::Profile::RecordedConnection)
+    if (ipc::is_recorded(options._profile))
     {
       result += ",\"producer_path_scope\":\"ID issuance, try_send retries and ordinary lookup\""
                 ",\"lookup_observation_category\":\"send\""
-                ",\"file_byte_scope\":\"reserved producer log, owner and connection; catalog reported separately\"";
+                ",\"file_byte_scope\":" + ipc::json_string(ipc::is_acknowledged(options._profile) ?
+                    "reserved producer log, owner, connection and progress; catalog reported separately" :
+                    "reserved producer log, owner and connection; catalog reported separately");
     }
     return result;
   }
@@ -283,6 +289,7 @@ namespace
     result._catalog = value(registry.snapshot());
     result._producerPaths = {options._directory / "recorded-producer.ang", options._directory / "recorded-owner.ang"};
     result._connectionPath = options._directory / "recorded-queue.ang";
+    result._acknowledged = ipc::is_acknowledged(options._profile);
     result._log._header._session = session.identity();
     result._log._header._producer = value(registry.find_task("Producer"));
     result._log._header._catalogRevision = result._catalog._revision;
@@ -315,6 +322,11 @@ namespace
         _producer.emplace(value(recorded::RecordedProducer::open(_options)));
         _claim = value(_producer->claim());
       }
+      else if (_options._acknowledged)
+      {
+        _acknowledgedConsumer.emplace(value(recorded::RecordedAcknowledgedConsumer::open(_options)));
+        _claim = value(_acknowledgedConsumer->claim());
+      }
       else
       {
         _consumer.emplace(value(recorded::RecordedConsumer::open(_options)));
@@ -322,10 +334,21 @@ namespace
       }
     }
 
+    std::optional<MessageView> receive(std::optional<Delivery>& delivery)
+    {
+      if (_acknowledgedConsumer)
+      {
+        delivery = value(_acknowledgedConsumer->try_receive());
+        return delivery ? std::optional{delivery->_message} : std::nullopt;
+      }
+      return value(_consumer->try_receive());
+    }
+
     recorded::RecordedQueueOptions _options;
     TaskClaim _claim{};
     std::optional<recorded::RecordedProducer> _producer;
     std::optional<recorded::RecordedConsumer> _consumer;
+    std::optional<recorded::RecordedAcknowledgedConsumer> _acknowledgedConsumer;
   };
 
   struct AngariaEndpoint
@@ -433,12 +456,14 @@ namespace
       header._schema = schema;
       header._payloadBytes = payload.size();
       const auto deadline = ipc::deadline_ns(ipc::monotonic_ns(), std::max<std::uint64_t>(10'000, options._budgetMs));
-      if (options._profile == ipc::Profile::RecordedConnection)
+      if (ipc::is_recorded(options._profile))
       {
         const auto connection = recorded_options(options);
         value(recorded::create_recorded_queue(connection));
         auto producer = value(recorded::RecordedProducer::open(connection));
-        auto consumer = value(recorded::RecordedConsumer::open(connection));
+        auto consumerOptions = options;
+        consumerOptions._role = ipc::Role::Consumer;
+        RecordedEndpoint consumer{consumerOptions};
         for (std::uint64_t sequence = 1; sequence <= options._history; ++sequence)
         {
           ipc::check_deadline(deadline);
@@ -455,11 +480,16 @@ namespace
           const auto outcome = value(producer.lookup(publication));
           require(outcome && outcome->_reference == accepted->_reference,
                   "Recorded history lookup did not resolve its acceptance");
-          const auto received = value(consumer.try_receive());
+          std::optional<Delivery> delivery;
+          const auto received = consumer.receive(delivery);
           require(received.has_value(), "Recorded history did not produce its expected delivery");
           const auto envelope = ipc::validate_payload(received->_payload, sequence);
           require(envelope._scheduledNs == 0 && envelope._logicalStartNs == 0,
                   "Preload timestamps must be zero");
+          if (delivery)
+          {
+            value(consumer._acknowledgedConsumer->acknowledge(delivery->_token));
+          }
         }
       }
       else
@@ -570,7 +600,7 @@ namespace
     explicit Worker(ipc::Options options)
         : _options(std::move(options)), _payload(_options._payloadBytes), _samples(_options._messages)
     {
-      if (_options._profile == ipc::Profile::RecordedConnection)
+      if (ipc::is_recorded(_options._profile))
       {
         _recorded.emplace(_options);
       }
@@ -659,6 +689,16 @@ namespace
     {
       if (_recorded)
       {
+        if (_recorded->_acknowledgedConsumer)
+        {
+          // Setup acknowledged every retained publication. Replacement skips
+          // that terminal prefix; it must not replay it as fresh work.
+          const auto progress = value(_recorded->_acknowledgedConsumer->progress());
+          require(progress._source._acknowledged == _options._history && progress._source._pinSequence == 0,
+                  "Recorded acknowledged history did not retain its terminal prefix");
+          require(!value(_recorded->_acknowledgedConsumer->try_receive()),
+                  "Recorded acknowledged replacement redelivered terminal history");
+        }
         // Consumer replacement intentionally replays from the beginning. Drain
         // retained H before READY without decreasing the shared credit watermark.
         if (_recorded->_consumer)
@@ -920,11 +960,11 @@ namespace
         {
           ipc::check_deadline(deadline);
           const auto start = ipc::monotonic_ns();
-          const auto received = value(ipc::observe_operation(_observations[2], _options._collection,
+          const auto received = ipc::observe_operation(_observations[2], _options._collection,
               [&]
               {
-                return _recorded->_consumer->try_receive();
-              }));
+                return _recorded->receive(delivery);
+              });
           const auto end = ipc::monotonic_ns();
           ++sample._receiveAttempts;
           sample._receiveApi += end - start;
@@ -949,6 +989,14 @@ namespace
                 "Recorded received header/identity differs from the configured connection");
         sample._publicationSequence = header._publication._sequence;
         sample._publicationIncarnation = header._publication._producer._incarnation;
+        if (delivery)
+        {
+          require(delivery->_token._consumer == _recorded->_claim &&
+                      delivery->_token._sourceSet == _recorded->_options._source &&
+                      delivery->_token._queue == _recorded->_options._queue &&
+                      delivery->_token._sequence == sample._sequence && delivery->_token._issuance != 0,
+                  "Recorded acknowledged delivery token differs from its bound connection");
+        }
         payload = message._payload;
       }
       else
@@ -1030,7 +1078,8 @@ namespace
         auto acknowledged = ipc::observe_operation(_observations[3], _options._collection,
             [&]
             {
-              return _angaria->_source->acknowledge(delivery->_token);
+              return _recorded ? _recorded->_acknowledgedConsumer->acknowledge(delivery->_token) :
+                  _angaria->_source->acknowledge(delivery->_token);
             });
         sample._ackEnd = ipc::monotonic_ns();
         value(std::move(acknowledged));
@@ -1120,7 +1169,8 @@ namespace
         }
         else if (_recorded)
         {
-          _unexpectedMessages = value(_recorded->_consumer->try_receive()) ? 1 : 0;
+          std::optional<Delivery> delivery;
+          _unexpectedMessages = _recorded->receive(delivery) ? 1 : 0;
         }
 #if defined(ANGARIA_BUILD_STALL_STUDY) && ANGARIA_BUILD_STALL_STUDY
         else if (_spsc)

@@ -11,7 +11,9 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <type_traits>
 #include <variant>
 
 #include <unistd.h>
@@ -110,9 +112,10 @@ namespace
     support::report(checksum);
   }
 
+  template <typename Consumer>
   void run_consumer(const recorded::RecordedQueueOptions& options, unsigned connection)
   {
-    auto consumer = require_value(recorded::RecordedConsumer::open(options));
+    auto consumer = require_value(Consumer::open(options));
     support::report('O');
     support::report(require_value(consumer.claim())._incarnation);
     support::wait_for_parent();
@@ -129,7 +132,17 @@ namespace
           yield_before(deadline);
           continue;
         }
-        const auto& message = *received;
+        const auto& message = [&]() -> const MessageView&
+        {
+          if constexpr (std::is_same_v<Consumer, recorded::RecordedAcknowledgedConsumer>)
+          {
+            return received->_message;
+          }
+          else
+          {
+            return *received;
+          }
+        }();
         require(message._header._publication._producer._session == options._log._header._session &&
                     message._header._publication._producer._task == options._log._header._producer &&
                     message._header._publication._sequence == sequence && message._header._queue == options._queue &&
@@ -138,6 +151,23 @@ namespace
         const auto fields = require_value(codec.decode(message._payload));
         require(std::get<std::uint64_t>(fields.at(0)) == support::independence_payload_value(connection, sequence),
                 "Independent consumer received corrupt or unrelated bytes");
+        if constexpr (std::is_same_v<Consumer, recorded::RecordedAcknowledgedConsumer>)
+        {
+          // Exercise every processing operation while the independent parent
+          // holds administrative or unrelated-stream ownership. Repeated pins
+          // stay exact; release is followed by a new issuance of the same ID.
+          const auto publication = message._header._publication;
+          const auto repeated = require_value(consumer.try_receive());
+          require(repeated && repeated->_token == received->_token &&
+                      repeated->_message._header == message._header,
+                  "Repeated independent pin changed its token or dequeue observation");
+          require_value(consumer.release(received->_token));
+          const auto redelivered = require_value(consumer.try_receive());
+          require(redelivered && redelivered->_message._header._publication == publication &&
+                      redelivered->_token._sequence == sequence && redelivered->_token != received->_token,
+                  "Independent release did not produce a distinct issuance of the same publication");
+          require_value(consumer.acknowledge(redelivered->_token));
+        }
         checksum += sequence;
         break;
       }
@@ -159,7 +189,12 @@ int main(int argc, char** argv)
     }
     ::alarm(15);
     const std::filesystem::path directory{argv[1]};
-    const std::string mode{argv[2]};
+    std::string mode{argv[2]};
+    const bool acknowledged = mode.ends_with("-acknowledged");
+    if (acknowledged)
+    {
+      mode.resize(mode.size() - std::string_view{"-acknowledged"}.size());
+    }
     const auto connection = static_cast<unsigned>(std::stoul(argv[3]));
     const auto publications = std::stoull(argv[4]);
     auto controller = require_value(mapped::SessionController::open_existing(directory));
@@ -174,7 +209,7 @@ int main(int argc, char** argv)
       require_value(guard.check_owner());
       return 0;
     }
-    const auto options = support::recorded_independence_options(directory, controller->session_id(), connection, publications);
+    const auto options = support::recorded_independence_options(directory, controller->session_id(), connection, publications, acknowledged);
     if (mode == "produce")
     {
       run_producer(options, connection);
@@ -182,7 +217,14 @@ int main(int argc, char** argv)
     }
     if (mode == "consume")
     {
-      run_consumer(options, connection);
+      if (acknowledged)
+      {
+        run_consumer<recorded::RecordedAcknowledgedConsumer>(options, connection);
+      }
+      else
+      {
+        run_consumer<recorded::RecordedConsumer>(options, connection);
+      }
       return 0;
     }
     if (mode == "probe-producer")
@@ -218,9 +260,17 @@ int main(int argc, char** argv)
       return 0;
     }
     recorded::RecordedConsumer consumer;
+    recorded::RecordedAcknowledgedConsumer acknowledgedConsumer;
     if (mode == "logfull")
     {
-      consumer = require_value(recorded::RecordedConsumer::open(options));
+      if (acknowledged)
+      {
+        acknowledgedConsumer = require_value(recorded::RecordedAcknowledgedConsumer::open(options));
+      }
+      else
+      {
+        consumer = require_value(recorded::RecordedConsumer::open(options));
+      }
     }
     const auto count = mode == "full" ? options._capacity : publications;
     for (std::uint64_t sequence = 0; sequence != count; ++sequence)
@@ -228,7 +278,16 @@ int main(int argc, char** argv)
       require_recorded_send(producer.try_send(require_value(producer.next_publication_id()), outgoing));
       if (mode == "logfull")
       {
-        require(bool(require_value(consumer.try_receive())), "Expected credited accepted message before log exhaustion");
+        if (acknowledged)
+        {
+          const auto delivery = require_value(acknowledgedConsumer.try_receive());
+          require(bool(delivery), "Expected acknowledged delivery before log exhaustion");
+          require_value(acknowledgedConsumer.acknowledge(delivery->_token));
+        }
+        else
+        {
+          require(bool(require_value(consumer.try_receive())), "Expected credited accepted message before log exhaustion");
+        }
       }
     }
     const auto waiting = require_value(producer.next_publication_id());

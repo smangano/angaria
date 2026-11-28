@@ -73,7 +73,7 @@ def run_cohort(executable, output, arguments, messages, history, payload, interv
         require((report["messages"], report["history"], report["payload_bytes"], report["interval_ns"]) ==
                 (messages, history, payload, interval), "Requested dimensions changed")
         require((report["accepted"], report["delivered"], report["pending"]) == (messages, messages, 0), "Matched counts changed")
-        require(report["acknowledged"] == (messages if report["profile"] == "angaria" else 0), "Profile acknowledgment boundary changed")
+        require(report["acknowledged"] == (messages if report["profile"] in ipc.ACKNOWLEDGED_PROFILES else 0), "Profile acknowledgment boundary changed")
         producer, consumer = (report["worker_reports"][role] for role in ipc.ROLES)
         pids = {producer["pid"], consumer["pid"], report["setup"]["pid"]}
         require(len(pids) == 3 and os.getpid() not in pids, "Roles did not run in independent processes")
@@ -113,7 +113,8 @@ def run_cohort(executable, output, arguments, messages, history, payload, interv
 def recorded_lookup_checks(reports):
     """The real new-profile rows must prove lookup and include its full cost."""
     original = reports[0]
-    require(original["profile"] == "recorded-connection", "Wrong lookup-qualification profile")
+    profile = original["profile"]
+    require(profile in ipc.RECORDED_PROFILES, "Wrong lookup-qualification profile")
     producer, consumer = (original["worker_reports"][role] for role in ipc.ROLES)
     case = {key: original[key] for key in ipc.DIMENSIONS}
     t0 = original["control_timing"]["t0_ns"]
@@ -122,30 +123,43 @@ def recorded_lookup_checks(reports):
                 worker["file_bytes_before"] == worker["file_bytes_after"] > 0,
                 "New runtime changed its sealed catalog or reserved file lengths")
     require(all(row["lookup_found"] is True for row in producer["rows"]) and
-            original["acknowledged"] == 0 and "lookup_api_ns" in original["metrics"],
-            "New profile omitted its ordinary lookup or gained acknowledgments")
+            original["acknowledged"] == (case["messages"] if profile in ipc.ACKNOWLEDGED_PROFILES else 0) and "lookup_api_ns" in original["metrics"],
+            "New profile omitted its ordinary lookup or changed its acknowledgment boundary")
     for field, wrong in (("lookup_found", False), ("lookup_record_offset", 0),
                          ("lookup_record_end", 0), ("lookup_record_ordinal", 0),
                          ("lookup_queue_sequence", 0), ("lookup_start_ns", 0),
                          ("lookup_end_ns", producer["data_end_ns"] + 1)):
         pair = copy.deepcopy((producer, consumer))
         pair[0]["rows"][0][field] = wrong
-        rejected(lambda: ipc.validate_rows(*pair, "recorded-connection", case, t0))
+        rejected(lambda: ipc.validate_rows(*pair, profile, case, t0))
     missing = copy.deepcopy((producer, consumer))
     del missing[0]["rows"][0]["lookup_found"]
-    rejected(lambda: ipc.validate_rows(*missing, "recorded-connection", case, t0))
+    rejected(lambda: ipc.validate_rows(*missing, profile, case, t0))
 
     # Independent timing control: if the final lookup finishes after consumer
     # verification, complete publication throughput must wait for that lookup.
     pair = copy.deepcopy((producer, consumer))
-    delayed = max(pair[0]["data_end_ns"], max(row["verified_ns"] for row in pair[1]["rows"])) + 100
+    delayed = max(pair[0]["data_end_ns"], pair[1]["data_end_ns"]) + 100
     pair[0]["rows"][-1]["lookup_end_ns"] = delayed
     pair[0]["data_end_ns"] = delayed + 1
     pair[0]["resource_end_ns"] = max(pair[0]["resource_end_ns"], delayed + 1)
-    derived = ipc.derive_result(*pair, "recorded-connection", case, t0)
+    derived = ipc.derive_result(*pair, profile, case, t0)
     require(derived["cohort_verified_ns"] == delayed - t0 and
             derived["rates"]["bounded_cohort_verified_per_second"] == case["messages"] * 1e9 / (delayed - t0),
             "Complete throughput excluded required producer outcome lookup")
+
+    if profile in ipc.ACKNOWLEDGED_PROFILES:
+        # Symmetric positive control: finishing payload verification and the
+        # producer lookup is insufficient when the final acknowledgment lags.
+        pair = copy.deepcopy((producer, consumer))
+        delayed = max(pair[0]["data_end_ns"], pair[1]["data_end_ns"]) + 100
+        pair[1]["rows"][-1]["ack_end_ns"] = delayed
+        pair[1]["data_end_ns"] = delayed + 1
+        pair[1]["resource_end_ns"] = max(pair[1]["resource_end_ns"], delayed + 1)
+        derived = ipc.derive_result(*pair, profile, case, t0)
+        require(derived["cohort_verified_ns"] == delayed - t0 and
+                derived["rates"]["bounded_cohort_verified_per_second"] == case["messages"] * 1e9 / (delayed - t0),
+                "Complete recorded acknowledged throughput excluded final acknowledgment")
 
 
 def tamper_checks(reports):
@@ -161,8 +175,8 @@ def tamper_checks(reports):
         damaged(1, "sequence", case["history"] + case["messages"] + 1)
         damaged(0, "scheduled_ns", producer["rows"][0]["scheduled_ns"] + 1)
         damaged(1, "receive_ns", consumer["rows"][0]["logical_start_ns"] - 1)
-        damaged(1, "ack_start_ns", consumer["rows"][0]["verified_ns"] - 1 if profile == "angaria" else 1)
-        if profile == "angaria":
+        damaged(1, "ack_start_ns", consumer["rows"][0]["verified_ns"] - 1 if profile in ipc.ACKNOWLEDGED_PROFILES else 1)
+        if profile in ipc.ACKNOWLEDGED_PROFILES:
             damaged(1, "ack_end_ns", consumer["data_end_ns"] + 1)
         for key, value in (("framework_version", "wrong"), ("nanomsg_version", "1.2.3"), ("pid", 0),
                            ("nanomsg_runtime_abi_current", producer["nanomsg_header_abi_current"] + 1),
@@ -177,7 +191,7 @@ def tamper_checks(reports):
         pair[1]["rows"][-1]["ack_end_ns"] = 0
         pair[1]["verified"] -= 1
         pair[1]["completed"] -= 1
-        if profile == "angaria":
+        if profile in ipc.ACKNOWLEDGED_PROFILES:
             pair[1]["acknowledged"] -= 1
         prefix = ipc.validate_rows(*pair, profile, case, t0)
         require(prefix["status"] == "budget_exceeded" and prefix["delivered"] == case["messages"] - 1 and prefix["pending"] == 1,
@@ -209,7 +223,7 @@ def summary_checks(reports, directory):
         corrupted = copy.deepcopy(original)
         corrupted["rates"]["bounded_cohort_verified_per_second"] *= 2
         rejected(lambda: ipc.validate_cached_summary(corrupted))
-        if original["profile"] == "angaria":
+        if original["profile"] in ipc.ACKNOWLEDGED_PROFILES:
             corrupted = copy.deepcopy(original)
             corrupted["rates"]["bounded_cohort_acknowledged_per_second"] *= 2
             rejected(lambda: ipc.validate_cached_summary(corrupted))
@@ -222,7 +236,7 @@ def summary_checks(reports, directory):
         # how early that first message arrived. The stalled suffix counts.
         consumer.update(status="budget_exceeded", data_end_ns=t0 + 10_000_000_000,
                         rows=consumer["rows"][:1], verified=1, completed=1,
-                        acknowledged=1 if profile == "angaria" else 0)
+                        acknowledged=1 if profile in ipc.ACKNOWLEDGED_PROFILES else 0)
         derived = ipc.derive_result(producer, consumer, profile, case, t0)
         require(derived["cohort_stop_ns"] == 10_000_000_000 and
                 derived["rates"]["bounded_cohort_verified_per_second"] == 0.1,
@@ -230,7 +244,7 @@ def summary_checks(reports, directory):
         require("verified_prefix_per_second" in derived["rates"] and
                 "first_send_to_last_verified_per_second" not in derived["rates"],
                 "Incomplete prefix was presented as complete throughput")
-        if profile == "angaria":
+        if profile in ipc.ACKNOWLEDGED_PROFILES:
             require(derived["rates"]["bounded_cohort_acknowledged_per_second"] == 0.1,
                     "Acknowledged rate dropped the stalled suffix")
         retained.append(dict(case, profile=profile, **derived))
@@ -241,7 +255,7 @@ def summary_checks(reports, directory):
         derived = ipc.derive_result(producer, consumer, profile, case, t0)
         require(derived["rates"]["bounded_cohort_verified_per_second"] == 0 and
                 "verified_prefix_per_second" not in derived["rates"], "Zero delivery disappeared or invented a prefix")
-        if profile == "angaria":
+        if profile in ipc.ACKNOWLEDGED_PROFILES:
             require(derived["rates"]["bounded_cohort_acknowledged_per_second"] == 0,
                     "Zero acknowledgments disappeared")
         retained.append(dict(case, profile=profile, **derived))
@@ -296,6 +310,14 @@ def main():
         run_cohort(executable, output / "recorded-large", ["--angaria-profile", "recorded-connection",
                    "--blocks", "1", "--messages", "3", "--histories", "2", "--payload-bytes", "1024",
                    "--interval-ns", "1000000"], 3, 2, 1024, 1000000, "recorded-connection")
+        acknowledged = run_cohort(executable, output / "recorded-acknowledged", ["--angaria-profile", "recorded-acknowledged-connection",
+                             "--blocks", "1", "--messages", "8", "--histories", "2", "--payload-bytes", "64",
+                             "--ring-slots", "1"], 8, 2, 64, 0, "recorded-acknowledged-connection")
+        recorded_lookup_checks(acknowledged)
+        tamper_checks(acknowledged)
+        run_cohort(executable, output / "recorded-acknowledged-large", ["--angaria-profile", "recorded-acknowledged-connection",
+                   "--blocks", "1", "--messages", "3", "--histories", "2", "--payload-bytes", "1024",
+                   "--interval-ns", "1000000"], 3, 2, 1024, 1000000, "recorded-acknowledged-connection")
         tamper_checks(reports)
         summary_checks(reports, output / "incomplete-summary")
         cleanup_check(output / "timeout")
@@ -314,7 +336,7 @@ def main():
         print("Retained qualification evidence: " + str(output), file=sys.stderr)
         raise
     shutil.rmtree(output)
-    print("IPC comparison: sixteen real cohorts, recorded lookup/credit/order, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed")
+    print("IPC comparison: twenty-four real cohorts, recorded lookup/credit/acknowledgment/order, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed")
 
 
 if __name__ == "__main__":

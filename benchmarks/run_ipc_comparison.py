@@ -28,7 +28,9 @@ from run_native import ROOT, check, metadata, sha256
 
 
 PROFILES = ("angaria", "nanomsg")
-IDENTITY_PROFILES = ("angaria", "recorded-spsc", "recorded-connection")
+RECORDED_PROFILES = ("recorded-connection", "recorded-acknowledged-connection")
+ACKNOWLEDGED_PROFILES = ("angaria", "recorded-acknowledged-connection")
+IDENTITY_PROFILES = ("angaria", "recorded-spsc", *RECORDED_PROFILES)
 ROLES = ("producer", "consumer")
 DIMENSIONS = ("messages", "history", "payload_bytes", "interval_ns", "socket_buffer_bytes", "budget_ms")
 MAX_STDOUT = 4 * 1024 * 1024
@@ -253,11 +255,14 @@ def common_report(report, role, profile, case, version):
     for key in ("thread_count_start", "thread_count_end"):
         if report.get(key) is not None:
             integer(report[key], key, 1)
-    if profile == "recorded-connection":
+    if profile in RECORDED_PROFILES:
         check(report.get("producer_path_scope") == "ID issuance, try_send retries and ordinary lookup",
               "Recorded producer path omitted ordinary outcome lookup")
         check(report.get("lookup_observation_category") == "send", "Missing lookup diagnostic attribution")
-        check(report.get("file_byte_scope") == "reserved producer log, owner and connection; catalog reported separately",
+        expected_scope = ("reserved producer log, owner, connection and progress; catalog reported separately"
+                          if profile in ACKNOWLEDGED_PROFILES else
+                          "reserved producer log, owner and connection; catalog reported separately")
+        check(report.get("file_byte_scope") == expected_scope,
               "Recorded resource accounting conflates transport and catalog")
         check(integer(report.get("file_bytes_before"), "reserved bytes", 1) ==
               integer(report.get("file_bytes_after"), "reserved bytes after", 1),
@@ -313,7 +318,7 @@ def validate_rows(producer, consumer, profile, case, t0):
             sample("successful_send_api_ns", success_end - success_start)
             sample("send_backpressure_wall_ns", end - start)
             sample("scheduled_acceptance_ns", end - scheduled)
-            if profile == "recorded-connection":
+            if profile in RECORDED_PROFILES:
                 lookup_start, lookup_end = (integer(row.get(key), key) for key in ("lookup_start_ns", "lookup_end_ns"))
                 check(end <= lookup_start <= lookup_end <= producer["data_end_ns"],
                       "Ordinary lookup escapes the accepted producer path")
@@ -371,10 +376,12 @@ def validate_rows(producer, consumer, profile, case, t0):
         sample("verification_ns", verified - arrived)
         sample("logical_start_to_delivery_ns", arrived - row["logical_start_ns"])
         sample("scheduled_to_delivery_ns", arrived - row["scheduled_ns"])
-        if profile == "angaria" and ack_end:
+        if profile in ACKNOWLEDGED_PROFILES and ack_end:
             check(verified <= ack_start <= ack_end <= consumer["data_end_ns"],
                   "Acknowledgment escapes the verified consumer data phase")
             sample("acknowledge_api_ns", ack_end - ack_start)
+            if profile in RECORDED_PROFILES:
+                sample("logical_start_to_acknowledgment_ns", ack_end - row["logical_start_ns"])
         else:
             check(ack_start == ack_end == 0, "Unacknowledged profile reports an acknowledgment")
         if profile in IDENTITY_PROFILES:
@@ -389,7 +396,7 @@ def validate_rows(producer, consumer, profile, case, t0):
     check(consumer.get("verified") == len(received), "Consumer verification count disagrees with rows")
     acknowledgments = sum(bool(row["ack_end_ns"]) for row in received.values())
     check(consumer.get("acknowledged") == acknowledgments, "Acknowledgment count disagrees with rows")
-    check(consumer.get("completed") == (acknowledgments if profile == "angaria" else len(received)),
+    check(consumer.get("completed") == (acknowledgments if profile in ACKNOWLEDGED_PROFILES else len(received)),
           "Consumer completed count disagrees with its profile boundary")
     check(producer.get("completed") == producer.get("acknowledged") == producer.get("verified") == consumer.get("accepted") == 0,
           "Producer/consumer counters include the other role's work")
@@ -401,7 +408,7 @@ def validate_rows(producer, consumer, profile, case, t0):
               "Worker phase clock boundaries changed")
         check(integer(report.get("cpu_end_ns"), "process CPU end") >= integer(report.get("cpu_start_ns"), "process CPU start"),
               "Process CPU time decreased")
-    complete_counts = len(accepted) == len(received) == count and (profile != "angaria" or acknowledgments == count)
+    complete_counts = len(accepted) == len(received) == count and (profile not in ACKNOWLEDGED_PROFILES or acknowledgments == count)
     complete = complete_counts and all(report["status"] == "complete" for report in (producer, consumer))
     if all(report["status"] == "complete" for report in (producer, consumer)):
         check(complete_counts, "Successful workers did not complete the requested cohort")
@@ -427,15 +434,19 @@ def derive_result(producer, consumer, profile, case, t0):
         check(stopped > 0, "Nonpositive incomplete-attempt stop interval")
         result["cohort_stop_ns"] = stopped
         result["rates"]["bounded_cohort_verified_per_second"] = result["delivered"] * 1e9 / stopped
-        if profile == "angaria":
+        if profile in ACKNOWLEDGED_PROFILES:
             result["rates"]["bounded_cohort_acknowledged_per_second"] = result["acknowledged"] * 1e9 / stopped
     if rows:
         check(bool(accepted_rows), "Verified work has no accepted producer interval")
         last_verified = max(row["verified_ns"] for row in rows)
-        if complete and profile == "recorded-connection":
+        if complete and profile in RECORDED_PROFILES:
             # A fast consumer cannot hide the producer's required outcome
             # lookup from the complete publication-throughput denominator.
             last_verified = max(last_verified, max(row["lookup_end_ns"] for row in accepted_rows))
+            if profile in ACKNOWLEDGED_PROFILES:
+                # The ACK profile completes only after the explicit consumer
+                # progress commit as well as the ordinary producer lookup.
+                last_verified = max(last_verified, max(row["ack_end_ns"] for row in rows))
         first_send = min(row["send_start_ns"] for row in accepted_rows)
         cohort_ns, active_ns = last_verified - t0, last_verified - first_send
         check(cohort_ns > 0 and active_ns > 0, "Nonpositive common cohort interval")
@@ -447,8 +458,10 @@ def derive_result(producer, consumer, profile, case, t0):
             result["verified_prefix_ns"], result["active_verified_prefix_ns"] = cohort_ns, active_ns
             result["rates"]["verified_prefix_per_second"] = result["delivered"] * 1e9 / cohort_ns
             result["rates"]["first_send_to_last_verified_prefix_per_second"] = result["delivered"] * 1e9 / active_ns
-        if profile == "angaria" and result["acknowledged"]:
+        if profile in ACKNOWLEDGED_PROFILES and result["acknowledged"]:
             ack_ns = max(row["ack_end_ns"] for row in rows) - t0
+            if complete and profile in RECORDED_PROFILES:
+                ack_ns = max(ack_ns, max(row["lookup_end_ns"] for row in accepted_rows) - t0)
             check(ack_ns > 0, "Nonpositive acknowledged prefix interval")
             name = "bounded_cohort_acknowledged_per_second" if complete else "acknowledged_prefix_per_second"
             result["rates"][name] = result["acknowledged"] * 1e9 / ack_ns
@@ -640,7 +653,7 @@ def parse_arguments():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--output", type=Path, required=True, help="new result directory")
     parser.add_argument("--blocks", type=int, default=5, help="ABBA/BAAB blocks; two runs per profile per block")
-    parser.add_argument("--angaria-profile", choices=("angaria", "recorded-connection"), default="angaria",
+    parser.add_argument("--angaria-profile", choices=("angaria", *RECORDED_PROFILES), default="angaria",
                         help="Angaria side of the matched pair; the default retains the current acknowledged runtime")
     parser.add_argument("--ring-slots", type=int, default=8, help="fixed Angaria Queue credit capacity for this series")
     parser.add_argument("--messages", type=int, default=16)
@@ -675,7 +688,7 @@ def parse_arguments():
         cases = [dict(messages=options.messages, history=history, payload_bytes=payload,
                       interval_ns=options.interval_ns, socket_buffer_bytes=options.socket_buffer_bytes,
                       budget_ms=options.budget_ms) for history in histories for payload in payloads]
-        if options.angaria_profile == "recorded-connection" or options.ring_slots != 8:
+        if options.angaria_profile in RECORDED_PROFILES or options.ring_slots != 8:
             for case in cases:
                 case["ring_slots"] = options.ring_slots
     except (ValueError, OSError, RuntimeError) as error:
@@ -704,7 +717,7 @@ def comparison_metadata(executable, options):
     sources["benchmarks/run_ipc_comparison.py"] = sha256(Path(__file__))
     if (ROOT / "test/ipc_comparison.py").is_file():
         sources["test/ipc_comparison.py"] = sha256(ROOT / "test/ipc_comparison.py")
-    if getattr(options, "angaria_profile", "angaria") == "recorded-connection":
+    if getattr(options, "angaria_profile", "angaria") in RECORDED_PROFILES:
         for directory in ("src", "include/angaria", "benchmarks"):
             for path in sorted((ROOT / directory).rglob("*")):
                 if path.is_file() and path.suffix in (".h", ".cpp") and " 2." not in path.name:
@@ -729,12 +742,16 @@ def main():
                         summary_method="Median/min/max of separate-run nearest-rank p50; qualified pooled tails only within identical complete fresh-cohort cells",
                         p99_min_samples=10000, p999_min_samples=1000000,
                         semantic_profiles=["Angaria acknowledged retained delivery" if options.angaria_profile == "angaria" else
+                                           "Private producer-log recorded/acknowledged delivery with ordinary accepted-ID lookup"
+                                           if options.angaria_profile in ACKNOWLEDGED_PROFILES else
                                            "Private producer-log recorded/unacknowledged delivery with ordinary accepted-ID lookup",
                                            "classic libnanomsg IPC unrecorded/unacknowledged observed delivery"])
         manifest["angaria_profile"] = options.angaria_profile
-        if options.angaria_profile == "recorded-connection":
+        if options.angaria_profile in RECORDED_PROFILES:
             manifest.update(ring_slots=options.ring_slots,
-                            throughput_scope="Bounded cohort through both consumer verification and producer ordinary lookup; not sustained capacity",
+                            throughput_scope=("Bounded cohort through consumer verification, explicit acknowledgment and producer ordinary lookup; not sustained capacity"
+                                              if options.angaria_profile in ACKNOWLEDGED_PROFILES else
+                                              "Bounded cohort through both consumer verification and producer ordinary lookup; not sustained capacity"),
                             prepared_scope="Real sealed Registry/schema definitions checked at open; ID, schema-validating send, ordinary lookup and receive timed")
         write_artifacts(output, reports, manifest, sources, settings, cases)
         version = (ROOT / "VERSION").read_text().strip()

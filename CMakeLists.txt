@@ -39,6 +39,7 @@ add_library(angaria STATIC
   src/producer_log_format.cpp
   src/producer_log.cpp
   src/recorded_queue.cpp
+  src/recorded_progress.cpp
   src/publication_runtime.cpp
   src/mapped_payload.cpp
   src/delivery_state.cpp
@@ -258,6 +259,15 @@ if(BUILD_TESTING)
   add_test(NAME recorded_queue_performance COMMAND angaria_recorded_queue_performance)
   set_tests_properties(recorded_queue_performance PROPERTIES TIMEOUT 30)
 
+  add_executable(angaria_recorded_acknowledged_performance test/test_recorded_acknowledged_performance.cpp)
+  target_include_directories(angaria_recorded_acknowledged_performance PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_recorded_acknowledged_performance PRIVATE angaria GTest::gtest_main)
+  if(ANGARIA_ENABLE_DIAGNOSTICS)
+    target_compile_definitions(angaria_recorded_acknowledged_performance PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+  endif()
+  add_test(NAME recorded_acknowledged_performance COMMAND angaria_recorded_acknowledged_performance)
+  set_tests_properties(recorded_acknowledged_performance PROPERTIES TIMEOUT 30)
+
   if(ANGARIA_BUILD_IPC_COMPARISON)
     add_executable(angaria_ipc_comparison_tests test/test_ipc_comparison_deadlines.cpp)
     target_include_directories(angaria_ipc_comparison_tests PRIVATE
@@ -373,6 +383,10 @@ if(BUILD_TESTING)
   target_include_directories(angaria_recorded_queue_independence_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_recorded_queue_independence_worker PRIVATE angaria)
 
+  add_executable(angaria_recorded_acknowledged_queue_worker test/recorded_acknowledged_queue_worker.cpp)
+  target_include_directories(angaria_recorded_acknowledged_queue_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_recorded_acknowledged_queue_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_performance_diagnostics.cpp
@@ -388,6 +402,8 @@ if(BUILD_TESTING)
     test/test_recorded_queue.cpp
     test/test_recorded_queue_restart.cpp
     test/test_recorded_queue_independence.cpp
+    test/test_recorded_acknowledged_queue.cpp
+    test/test_recorded_progress.cpp
     test/test_recorded_queue_format.cpp
     test/test_publication_api.cpp
     test/test_publication_runtime.cpp
@@ -474,6 +490,7 @@ if(BUILD_TESTING)
     ANGARIA_PRODUCER_LOG_WORKER="$<TARGET_FILE:angaria_producer_log_worker>"
     ANGARIA_RECORDED_QUEUE_WORKER="$<TARGET_FILE:angaria_recorded_queue_worker>"
     ANGARIA_RECORDED_QUEUE_INDEPENDENCE_WORKER="$<TARGET_FILE:angaria_recorded_queue_independence_worker>"
+    ANGARIA_RECORDED_ACKNOWLEDGED_QUEUE_WORKER="$<TARGET_FILE:angaria_recorded_acknowledged_queue_worker>"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
@@ -482,6 +499,7 @@ if(BUILD_TESTING)
   add_dependencies(angaria_tests angaria_producer_log_worker)
   add_dependencies(angaria_tests angaria_recorded_queue_worker)
   add_dependencies(angaria_tests angaria_recorded_queue_independence_worker)
+  add_dependencies(angaria_tests angaria_recorded_acknowledged_queue_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 10)

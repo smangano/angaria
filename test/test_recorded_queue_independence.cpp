@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #ifndef ANGARIA_RECORDED_QUEUE_INDEPENDENCE_WORKER
@@ -30,7 +31,7 @@ namespace
   using support::require_value;
   using support::expect_error;
 
-  class RecordedQueueIndependenceTest : public testing::Test
+  class RecordedQueueIndependenceTest : public testing::TestWithParam<bool>
   {
   protected:
     void SetUp() override
@@ -53,13 +54,14 @@ namespace
     void create(unsigned connection, std::uint64_t publications = 128)
     {
       require_value(recorded::create_recorded_queue(support::recorded_independence_options(
-          _path, _session, connection, publications)));
+          _path, _session, connection, publications, GetParam())));
     }
 
     std::vector<std::string> arguments(const char* mode, unsigned connection = 1,
                                        std::uint64_t publications = 128) const
     {
-      return {ANGARIA_RECORDED_QUEUE_INDEPENDENCE_WORKER, _path.string(), mode,
+      return {ANGARIA_RECORDED_QUEUE_INDEPENDENCE_WORKER, _path.string(),
+              std::string{mode} + (GetParam() ? "-acknowledged" : ""),
               std::to_string(connection), std::to_string(publications)};
     }
 
@@ -93,7 +95,7 @@ namespace
   };
 }
 
-TEST_F(RecordedQueueIndependenceTest, EstablishedExecPeersFinishWhileTheActualSessionGateRemainsHeld)
+TEST_P(RecordedQueueIndependenceTest, EstablishedExecPeersFinishWhileTheActualSessionGateRemainsHeld)
 {
   create(1);
   support::NativeProcess producer{arguments("produce")};
@@ -118,7 +120,7 @@ TEST_F(RecordedQueueIndependenceTest, EstablishedExecPeersFinishWhileTheActualSe
   require_value(guard.check_owner());
 }
 
-TEST_F(RecordedQueueIndependenceTest, ACommittedPausedProducerAndItsBusyReplacementDoNotGateAnotherConnection)
+TEST_P(RecordedQueueIndependenceTest, ACommittedPausedProducerAndItsBusyReplacementDoNotGateAnotherConnection)
 {
   create(0);
   create(1);
@@ -143,7 +145,7 @@ TEST_F(RecordedQueueIndependenceTest, ACommittedPausedProducerAndItsBusyReplacem
   paused.wait_success();
 }
 
-TEST_F(RecordedQueueIndependenceTest, AnOfflineFullConnectionDoesNotPreventAnotherConnectionFromWrappingItsRing)
+TEST_P(RecordedQueueIndependenceTest, AnOfflineFullConnectionDoesNotPreventAnotherConnectionFromWrappingItsRing)
 {
   create(0);
   create(1);
@@ -164,7 +166,7 @@ TEST_F(RecordedQueueIndependenceTest, AnOfflineFullConnectionDoesNotPreventAnoth
   full.wait_success();
 }
 
-TEST_F(RecordedQueueIndependenceTest, ExhaustedRecordingCapacityDoesNotBecomeASessionWideStop)
+TEST_P(RecordedQueueIndependenceTest, ExhaustedRecordingCapacityDoesNotBecomeASessionWideStop)
 {
   create(0, 2);
   create(1);
@@ -185,11 +187,11 @@ TEST_F(RecordedQueueIndependenceTest, ExhaustedRecordingCapacityDoesNotBecomeASe
   full.wait_success();
 }
 
-TEST_F(RecordedQueueIndependenceTest, KillingPausedRecoveryLeavesOtherTrafficAndLaterReplacementIndependent)
+TEST_P(RecordedQueueIndependenceTest, KillingPausedRecoveryLeavesOtherTrafficAndLaterReplacementIndependent)
 {
   create(0);
   create(1);
-  const auto options = support::recorded_independence_options(_path, _session, 0);
+  const auto options = support::recorded_independence_options(_path, _session, 0, 128, GetParam());
   const auto codec = support::recorded_queue_codec(options);
   const auto bytes = support::recorded_queue_payload(codec, 42);
   const auto outgoing = support::recorded_queue_message(options, bytes);
@@ -230,17 +232,56 @@ TEST_F(RecordedQueueIndependenceTest, KillingPausedRecoveryLeavesOtherTrafficAnd
   ASSERT_TRUE(known);
   EXPECT_EQ(known->_reference, original._reference);
   EXPECT_EQ(known->_queueSequence, 1u);
-  auto receiver = require_value(recorded::RecordedConsumer::open(options));
-  const auto replayed = require_value(receiver.try_receive());
-  ASSERT_TRUE(replayed);
-  EXPECT_EQ(replayed->_header._publication, acceptedId);
-  EXPECT_EQ(std::get<std::uint64_t>(require_value(codec.decode(replayed->_payload)).at(0)), 42u);
-  const auto next = support::require_recorded_send(replacement.try_send(
-      require_value(replacement.next_publication_id()), outgoing));
-  EXPECT_EQ(next._queueSequence, 2u);
-  ASSERT_TRUE(require_value(receiver.try_receive()));
-  EXPECT_FALSE(require_value(receiver.try_receive()));
+  const auto exercise_recovered_connection = [&]<typename Consumer>(Consumer& receiver)
+  {
+    const auto replayed = require_value(receiver.try_receive());
+    ASSERT_TRUE(replayed);
+    const auto& message = [&]() -> const MessageView&
+    {
+      if constexpr (std::is_same_v<Consumer, recorded::RecordedAcknowledgedConsumer>)
+      {
+        return replayed->_message;
+      }
+      else
+      {
+        return *replayed;
+      }
+    }();
+    EXPECT_EQ(message._header._publication, acceptedId);
+    EXPECT_EQ(std::get<std::uint64_t>(require_value(codec.decode(message._payload)).at(0)), 42u);
+    if constexpr (std::is_same_v<Consumer, recorded::RecordedAcknowledgedConsumer>)
+    {
+      require_value(receiver.acknowledge(replayed->_token));
+    }
+    const auto next = support::require_recorded_send(replacement.try_send(
+        require_value(replacement.next_publication_id()), outgoing));
+    EXPECT_EQ(next._queueSequence, 2u);
+    const auto received = require_value(receiver.try_receive());
+    ASSERT_TRUE(received);
+    if constexpr (std::is_same_v<Consumer, recorded::RecordedAcknowledgedConsumer>)
+    {
+      require_value(receiver.acknowledge(received->_token));
+    }
+    EXPECT_FALSE(require_value(receiver.try_receive()));
+  };
+  if (GetParam())
+  {
+    auto receiver = require_value(recorded::RecordedAcknowledgedConsumer::open(options));
+    exercise_recovered_connection(receiver);
+  }
+  else
+  {
+    auto receiver = require_value(recorded::RecordedConsumer::open(options));
+    exercise_recovered_connection(receiver);
+  }
   expect_error(_controller->try_acquire_mutation(), ErrorCode::OwnershipBusy);
   administrator.proceed();
   administrator.wait_success();
 }
+
+
+INSTANTIATE_TEST_SUITE_P(BothProcessingModes, RecordedQueueIndependenceTest,
+    testing::Bool(), [](const testing::TestParamInfo<bool>& value)
+    {
+      return value.param ? "Acknowledged" : "Unacknowledged";
+    });
