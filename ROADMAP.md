@@ -95,6 +95,8 @@ Step **4.34**, framework **0.4.36**, qualifies workstream step 5's [restart, cat
 
 Step **4.35**, framework **0.4.37**, implements workstream step 6's private [optional acknowledged progress](docs/recorded-acknowledged-progress.md). Consumer-owned selected operation images recover issuance, pins, acknowledgment, release and close without a Session transaction. Accepted message recording remains producer-owned, and transport credit is distinct from certified processing progress. Reserved receipts retain exact latest timestamps and tokens through replacement and full-log operation. Both processing modes undergo independent-connection qualification and matched nanomsg measurements with their different delivery guarantees labeled. End-to-end qualification and public admission follow in workstream steps 7 and 8.
 
+Step **4.36**, framework **0.4.38**, adds [end-to-end qualification](docs/end-to-end-qualification.md) for both private delivery modes against nanomsg on each measured host. Live warmup, longer finite streams, balanced execution order, offered load, retained history, credit pressure, consumer delays and legacy controls expose latency, completed throughput and CPU cost. Binary samples and control transcripts independently reconstruct every published run; ordinary CI checks correctness without timing thresholds. Public runtime admission remains workstream step 8.
+
 ## 1 Core architecture and policy contracts
 
 Completed through [PR #7](https://github.com/smangano/angaria/pull/7). The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divided this work into five reviewed step PRs targeting `milestone-1`.

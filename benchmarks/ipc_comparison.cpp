@@ -42,6 +42,26 @@ namespace
   namespace recorded = angaria::detail::recorded;
   constexpr std::uint64_t log_limit = 64ULL * 1024 * 1024;
 
+  std::uint64_t log_reservation(const ipc::Options& options)
+  {
+    if (!options._qualification || !ipc::is_recorded(options._profile))
+    {
+      return log_limit;
+    }
+    // One exact destination and one payload per accepted Publication. Reserve
+    // all retained + warm + measured records before either worker is timed.
+    const auto unaligned = ipc::checked_add(recorded::publication_fixed_bytes + recorded::destination_bytes,
+                                            options._payloadBytes);
+    const auto recordBytes = ipc::checked_multiply(
+        ipc::checked_add(unaligned, recorded::publication_alignment - 1) / recorded::publication_alignment,
+        recorded::publication_alignment);
+    const auto required = ipc::checked_add(recorded::producer_header_bytes,
+        ipc::checked_multiply(ipc::checked_add(options._history, options._messages), recordBytes));
+    const auto reserved = std::max(log_limit, required);
+    require(reserved <= 512ULL * 1024 * 1024, "Qualification producer-log reservation exceeds 512 MiB");
+    return reserved;
+  }
+
   std::array<int, 3> runtime_abi()
   {
     const std::array<std::string_view, 3> names{
@@ -293,8 +313,9 @@ namespace
     result._log._header._session = session.identity();
     result._log._header._producer = value(registry.find_task("Producer"));
     result._log._header._catalogRevision = result._catalog._revision;
-    result._log._header._fileBytes = log_limit;
-    result._log._header._publicationCapacity = 1024;
+    result._log._header._fileBytes = log_reservation(options);
+    result._log._header._publicationCapacity = options._qualification ?
+        std::max<std::uint64_t>(1024, ipc::checked_add(options._history, options._messages)) : 1024;
     result._log._header._liveAbiProfile = value(detail::mapped::qualify_native_profile())._liveAbiProfile;
     result._log._queues = {result._queue};
     result._capacity = options._ringSlots;
@@ -655,6 +676,12 @@ namespace
       // Keep process CPU accounting open until both roles have reached DONE.
       _resourceEnd = ipc::monotonic_ns();
       _cpuEnd = ipc::process_cpu_ns();
+      if (_measuredResourcesStarted)
+      {
+        _measuredResourcesInclusive = ipc::process_resources();
+        _measuredResourceEnd = ipc::monotonic_ns();
+        _resourceEnd = _measuredResourceEnd;
+      }
       check_extra_messages();
       _fileAfter = file_bytes(_options);
       _catalogAfter = catalog_bytes(_options);
@@ -1065,6 +1092,17 @@ namespace
         sample._publicationIncarnation = header._publication._producer._incarnation;
         payload = message._payload;
       }
+      if (_options._processingDelayNs != 0)
+      {
+        // Application work occurs after receive returns, before checking bytes
+        // or acknowledging processing. All profiles pay the same declared work.
+        const auto processingEnd = ipc::checked_add(ipc::monotonic_ns(), _options._processingDelayNs);
+        if (processingEnd >= deadline)
+        {
+          throw ipc::DeadlineExceeded{};
+        }
+        (void)ipc::spin_until(processingEnd, deadline);
+      }
       const auto envelope = ipc::validate_payload(payload, sample._sequence);
       sample._scheduled = envelope._scheduledNs;
       sample._logicalStart = envelope._logicalStartNs;
@@ -1101,6 +1139,14 @@ namespace
         const auto count = _options._scenario == "empty" && _options._role == ipc::Role::Producer ? 0 : _options._messages;
         for (std::uint64_t index = 0; index < count; ++index)
         {
+          if (_options._qualification && index == _options._warmupMessages)
+          {
+            // Each role begins at its own first measured item. These windows
+            // exclude T0 lead and the same live endpoint's warmup operations.
+            _measuredWindowStart = ipc::monotonic_ns();
+            _measuredResourcesStart = ipc::process_resources();
+            _measuredResourcesStarted = true;
+          }
           auto& sample = _samples[_used++];
           sample._sequence = _options._history + index + 1;
           require(index == 0 || _options._intervalNs <=
@@ -1109,11 +1155,23 @@ namespace
           sample._scheduled = t0 + index * _options._intervalNs;
           if (_options._role == ipc::Role::Producer)
           {
-            (void)ipc::wait_until(sample._scheduled, deadline);
+            (void)(_options._pacingSpin ? ipc::spin_until(sample._scheduled, deadline) :
+                                         ipc::wait_until(sample._scheduled, deadline));
             produce(sample, deadline);
           }
           else
           {
+            if (_options._pauseAt != 0 && index == _options._warmupMessages + _options._pauseAt)
+            {
+              _pauseStart = ipc::monotonic_ns();
+              const auto pauseEnd = ipc::checked_add(_pauseStart, _options._pauseNs);
+              if (pauseEnd >= deadline)
+              {
+                throw ipc::DeadlineExceeded{};
+              }
+              (void)ipc::wait_until(pauseEnd, deadline);
+              _pauseEnd = ipc::monotonic_ns();
+            }
             consume(sample, deadline);
           }
         }
@@ -1138,6 +1196,12 @@ namespace
       }
       _activeCpuEnd = ipc::process_cpu_ns();
       _dataEnd = ipc::monotonic_ns();
+      if (_measuredResourcesStarted)
+      {
+        _measuredResourcesEnd = ipc::process_resources();
+        _measuredWindowEnd = ipc::monotonic_ns();
+        _dataEnd = _measuredWindowEnd;
+      }
       if (_status == "complete" && _dataEnd >= deadline)
       {
         _status = "budget_exceeded";
@@ -1196,6 +1260,158 @@ namespace
       }
     }
 
+    void validate_qualification_sample(const Sample& sample, std::size_t index) const
+    {
+      // The compact sidecar retains the cross-process evidence. Before reducing
+      // a completed rich row, also establish every role-local API boundary and
+      // the accepted-ID lookup equality that is not repeated in the sidecar.
+      require(sample._sequence == _options._history + index + 1 && sample._scheduled != 0 &&
+                  sample._logicalStart >= sample._scheduled,
+              "Qualification sample has invalid sequence or send admission clocks");
+      require(_socket ? sample._publicationSequence == 0 && sample._publicationIncarnation == 0 :
+                          sample._publicationSequence != 0 && sample._publicationIncarnation != 0,
+              "Qualification sample has invalid Publication identity");
+      if (_options._role == ipc::Role::Producer)
+      {
+        require(sample._accepted && sample._sendAttempts != 0 &&
+                    sample._sendStart >= sample._logicalStart &&
+                    sample._successfulSendStart >= sample._sendStart &&
+                    sample._sendEnd >= sample._successfulSendStart &&
+                    sample._sendApi <= sample._sendEnd - sample._sendStart,
+                "Qualification producer sample did not complete its send");
+        if (!_socket)
+        {
+          require(sample._idStart >= sample._logicalStart && sample._idEnd >= sample._idStart &&
+                      sample._sendStart >= sample._idEnd,
+                  "Qualification producer has invalid ID issuance clocks");
+        }
+        if (_recorded)
+        {
+          require(sample._lookupFound && sample._lookupStart >= sample._sendEnd &&
+                      sample._lookupEnd >= sample._lookupStart &&
+                      sample._acceptedOffset == sample._lookupOffset &&
+                      sample._acceptedEnd > sample._acceptedOffset &&
+                      sample._acceptedEnd == sample._lookupRecordEnd &&
+                      sample._acceptedOrdinal == sample._sequence &&
+                      sample._acceptedOrdinal == sample._lookupOrdinal &&
+                      sample._acceptedQueueSequence == sample._sequence &&
+                      sample._acceptedQueueSequence == sample._lookupQueueSequence,
+                  "Qualification producer lookup differs from its accepted record");
+        }
+      }
+      else
+      {
+        require(sample._receiveAttempts != 0 && sample._receiveStart != 0 &&
+                    sample._successfulReceiveStart >= sample._receiveStart &&
+                    sample._receive >= sample._successfulReceiveStart &&
+                    sample._verified >= sample._receive && sample._receive >= sample._logicalStart &&
+                    sample._receiveApi <= sample._receive - sample._receiveStart,
+                "Qualification consumer sample did not complete byte verification");
+        require(ipc::is_acknowledged(_options._profile) ?
+                    sample._ackStart >= sample._verified && sample._ackEnd >= sample._ackStart :
+                    sample._ackStart == 0 && sample._ackEnd == 0,
+                "Qualification consumer sample has invalid acknowledgment clocks");
+      }
+    }
+
+    void write_qualification_samples() const
+    {
+      const auto producer = _options._role == ipc::Role::Producer;
+      const auto filename = producer ? "producer.samples.bin" : "consumer.samples.bin";
+      std::ofstream stream{_options._directory / filename, std::ios::binary | std::ios::trunc};
+      require(stream.good(), "Cannot create qualification sample sidecar");
+      // Format 1: eight ASCII magic bytes, LE u64 row count, then 8/9 LE u64
+      // words per producer/consumer row. No native struct layout is persisted.
+      std::array<std::byte, 16> header{};
+      constexpr std::string_view magic{"ANGAE2E1"};
+      for (std::size_t index = 0; index < magic.size(); ++index)
+      {
+        header[index] = static_cast<std::byte>(magic[index]);
+      }
+      detail::write_unsigned_le<std::uint64_t>(header, 8, _used);
+      stream.write(reinterpret_cast<const char*>(header.data()), static_cast<std::streamsize>(header.size()));
+      for (std::size_t index = 0; index < _used; ++index)
+      {
+        const auto& sample = _samples[index];
+        if (_status == "complete")
+        {
+          validate_qualification_sample(sample, index);
+        }
+        std::array<std::byte, 72> row{};
+        const std::array<std::uint64_t, 9> words = producer ?
+            std::array<std::uint64_t, 9>{sample._sequence, sample._scheduled, sample._logicalStart,
+                sample._sendEnd, sample._lookupEnd, sample._hash,
+                sample._publicationSequence, sample._publicationIncarnation, 0} :
+            std::array<std::uint64_t, 9>{sample._sequence, sample._scheduled, sample._logicalStart,
+                sample._receive, sample._verified, sample._ackEnd, sample._hash,
+                sample._publicationSequence, sample._publicationIncarnation};
+        const std::size_t wordCount = producer ? 8 : 9;
+        for (std::size_t word = 0; word < wordCount; ++word)
+        {
+          detail::write_unsigned_le(row, word * sizeof(std::uint64_t), words[word]);
+        }
+        stream.write(reinterpret_cast<const char*>(row.data()),
+                     static_cast<std::streamsize>(wordCount * sizeof(std::uint64_t)));
+      }
+      stream.close();
+      require(stream.good(), "Writing qualification sample sidecar failed");
+    }
+
+    void write_qualification_fields(std::ostream& output) const
+    {
+      const auto active = _measuredResourcesStarted ?
+          ipc::resource_difference(_measuredResourcesEnd, _measuredResourcesStart) : ipc::ProcessResources{};
+      const auto inclusive = _measuredResourcesStarted ?
+          ipc::resource_difference(_measuredResourcesInclusive, _measuredResourcesStart) : ipc::ProcessResources{};
+      output << ",\"qualification\":true,\"warmup_messages\":" << _options._warmupMessages
+             << ",\"measured_messages\":" << _options._messages - _options._warmupMessages
+             << ",\"processing_delay_ns\":" << _options._processingDelayNs
+             << ",\"pause_at\":" << _options._pauseAt << ",\"pause_ns\":" << _options._pauseNs
+             << ",\"pacing_spin\":" << (_options._pacingSpin ? "true" : "false")
+             << ",\"measured_window_start_ns\":" << _measuredWindowStart
+             << ",\"measured_window_end_ns\":" << _measuredWindowEnd
+             << ",\"measured_resource_end_ns\":" << _measuredResourceEnd
+             << ",\"measured_cpu_user_ns\":" << active._userNs
+             << ",\"measured_cpu_system_ns\":" << active._systemNs
+             << ",\"measured_minor_faults\":" << active._minorFaults
+             << ",\"measured_major_faults\":" << active._majorFaults
+             << ",\"inclusive_cpu_user_ns\":" << inclusive._userNs
+             << ",\"inclusive_cpu_system_ns\":" << inclusive._systemNs
+             << ",\"inclusive_minor_faults\":" << inclusive._minorFaults
+             << ",\"inclusive_major_faults\":" << inclusive._majorFaults
+             << ",\"measured_resource_scope\":\"RUSAGE_SELF all threads; own first measured operation through own data-loop end; excludes T0 lead and own warmup\""
+             << ",\"inclusive_resource_scope\":\"Same per-role measured start through FINISH after both roles reach DONE; includes library tail and control wait\""
+             << ",\"pause_start_ns\":" << _pauseStart << ",\"pause_end_ns\":" << _pauseEnd
+             << ",\"sample_file\":" << ipc::json_string(_options._role == ipc::Role::Producer ?
+                                                           "producer.samples.bin" : "consumer.samples.bin")
+             << ",\"sample_stride\":" << (_options._role == ipc::Role::Producer ? 64 : 72)
+             << ",\"sample_count\":" << _used << ",\"sample_format\":1";
+      for (const auto measured : {false, true})
+      {
+        std::uint64_t sendAttempts{};
+        std::uint64_t receiveAttempts{};
+        std::uint64_t backpressure{};
+        std::uint64_t creditWaits{};
+        std::uint64_t timeouts{};
+        const auto first = measured ? std::min<std::size_t>(_options._warmupMessages, _used) : 0;
+        for (std::size_t index = first; index < _used; ++index)
+        {
+          const auto& sample = _samples[index];
+          sendAttempts = ipc::checked_add(sendAttempts, sample._sendAttempts);
+          receiveAttempts = ipc::checked_add(receiveAttempts, sample._receiveAttempts);
+          backpressure = ipc::checked_add(backpressure, sample._backpressure);
+          creditWaits = ipc::checked_add(creditWaits, sample._creditWaits);
+          timeouts = ipc::checked_add(timeouts, sample._timeouts);
+        }
+        const auto prefix = measured ? ",\"measured_" : ",\"total_";
+        output << prefix << "send_attempts\":" << sendAttempts
+               << prefix << "receive_attempts\":" << receiveAttempts
+               << prefix << "backpressure_count\":" << backpressure
+               << prefix << "credit_waits\":" << creditWaits
+               << prefix << "receive_timeouts\":" << timeouts;
+      }
+    }
+
     void report() const
     {
       std::ostringstream output;
@@ -1229,9 +1445,18 @@ namespace
              << ",\"catalog_bytes_before\":" << _catalogBefore << ",\"catalog_bytes_after\":" << _catalogAfter
              << ",\"socket_send_buffer_bytes\":" << (_socket ? _socket->_sendBuffer : 0)
              << ",\"socket_receive_buffer_bytes\":" << (_socket ? _socket->_receiveBuffer : 0)
-             << ",\"log_limit_bytes\":" << (_angaria || _recorded ? log_limit : 0)
+             << ",\"log_limit_bytes\":" << (_angaria || _recorded ? log_reservation(_options) : 0)
              << ",\"ring_slots\":" << (_angaria || _recorded ? _options._ringSlots : 0) << ",\"diagnostics\":";
       ipc::write_diagnostics(output, _observations);
+      if (_options._qualification)
+      {
+        // Timing and resource snapshots have ended before any sidecar I/O.
+        write_qualification_samples();
+        write_qualification_fields(output);
+        output << '}';
+        ipc::write_record(output.str());
+        return;
+      }
       output << ",\"rows\":[";
       for (std::size_t index = 0; index < _used; ++index)
       {
@@ -1309,6 +1534,15 @@ namespace
     std::uint64_t _cpuEnd{};
     std::uint64_t _activeCpuEnd{};
     std::uint64_t _resourceEnd{};
+    bool _measuredResourcesStarted{};
+    ipc::ProcessResources _measuredResourcesStart;
+    ipc::ProcessResources _measuredResourcesEnd;
+    ipc::ProcessResources _measuredResourcesInclusive;
+    std::uint64_t _measuredWindowStart{};
+    std::uint64_t _measuredWindowEnd{};
+    std::uint64_t _measuredResourceEnd{};
+    std::uint64_t _pauseStart{};
+    std::uint64_t _pauseEnd{};
     std::uint64_t _clockPairMin{};
     double _clockPairMedian{};
     std::uint64_t _fileBefore{};

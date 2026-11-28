@@ -1,0 +1,117 @@
+name: End-to-end performance qualification (on demand)
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualification:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-end-to-end'
+    name: Linux x86_64 end-to-end qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check native architecture
+        run: test "$(uname -m)" = x86_64
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ libboost-dev libgtest-dev python3
+      - name: Configure ordinary qualification profiles
+        run: >-
+          cmake -S . -B build/e2e -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g -DBUILD_TESTING=ON
+          -DANGARIA_BUILD_BENCHMARKS=ON -DANGARIA_BUILD_IPC_COMPARISON=ON
+          -DANGARIA_BUILD_STALL_STUDY=ON -DANGARIA_ENABLE_DIAGNOSTICS=OFF
+          -DANGARIA_ENABLE_CACHEGRIND=OFF
+      - name: Build comparison and focused helper tests
+        run: cmake --build build/e2e --target angaria_ipc_comparison angaria_ipc_comparison_tests --parallel 3
+      - name: Qualify helpers, reconstruction, and existing comparison
+        run: >-
+          ctest --test-dir build/e2e --output-on-failure
+          -R '^(ipc_comparison_deadlines|end_to_end_validation|ipc_comparison_smoke)$'
+      - name: Record both delivery modes and nanomsg on the same host
+        run: >-
+          python3 -B benchmarks/run_end_to_end.py collect build/e2e/angaria_ipc_comparison
+          --output build/e2e-results --source-commit "$(git rev-parse HEAD)"
+          --host-label "GitHub hosted Ubuntu 24.04 x86_64; ordinary end-to-end qualification"
+          --no-plots
+      - name: Retain every qualification attempt
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: end-to-end-qualification-linux-x86_64
+          path: build/e2e-results/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain focused qualification logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: end-to-end-qualification-test-logs-linux-x86_64
+          path: build/e2e/Testing/Temporary/
+          if-no-files-found: warn
+          retention-days: 14
+
+  native-smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-end-to-end'
+    name: ${{ matrix.profile }} end-to-end correctness
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: Linux ARM64
+            runner: ubuntu-24.04-arm
+            architecture: aarch64
+            artifact: linux-arm64
+          - profile: macOS ARM64
+            runner: macos-15
+            architecture: arm64
+            artifact: macos-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check native architecture
+        env:
+          ANGARIA_EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: test "$(uname -m)" = "$ANGARIA_EXPECTED_ARCH"
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ libboost-dev python3
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install boost
+      - name: Configure and build ordinary qualification profiles
+        run: |
+          cmake -S . -B build/e2e -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-g -DCMAKE_C_FLAGS=-g -DBUILD_TESTING=OFF -DANGARIA_BUILD_BENCHMARKS=ON -DANGARIA_BUILD_IPC_COMPARISON=ON -DANGARIA_BUILD_STALL_STUDY=ON -DANGARIA_ENABLE_DIAGNOSTICS=OFF -DANGARIA_ENABLE_CACHEGRIND=OFF
+          cmake --build build/e2e --target angaria_ipc_comparison --parallel 3
+      - name: Qualify all profiles and raw evidence without speed thresholds
+        env:
+          ANGARIA_QUALIFICATION_HOST: ${{ matrix.profile }}
+        run: >-
+          python3 -B benchmarks/run_end_to_end.py collect build/e2e/angaria_ipc_comparison
+          --output build/e2e-results --source-commit "$(git rev-parse HEAD)"
+          --host-label "GitHub hosted $ANGARIA_QUALIFICATION_HOST; correctness smoke"
+          --smoke --no-plots
+      - name: Retain every native smoke attempt
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: end-to-end-qualification-${{ matrix.artifact }}
+          path: build/e2e-results/
+          if-no-files-found: warn
+          retention-days: 14

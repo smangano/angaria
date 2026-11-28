@@ -18,6 +18,8 @@ Step **4.35**, framework **0.4.37**, adds [acknowledged progress](recorded-ackno
 
 ## A few ideas before the code
 
+Step **4.36**, framework **0.4.38**, measures both private delivery modes in [longer, warmed performance comparisons](end-to-end-qualification.md). The report distinguishes receiving a message from acknowledging its processing, and shows how a slow consumer affects latency and throughput. These benchmarks qualify the replacement machinery; the public lessons below continue to use the current implemented API until public admission.
+
 A **process** is a running program. A **thread** is one path of execution inside a process. Two terminal windows can launch two independent processes, even when both run the same executable.
 
 Angaria gives communication roles their own names and identities:

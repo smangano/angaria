@@ -269,6 +269,10 @@ if(BUILD_TESTING)
   set_tests_properties(recorded_acknowledged_performance PROPERTIES TIMEOUT 30)
 
   if(ANGARIA_BUILD_IPC_COMPARISON)
+    add_test(NAME end_to_end_validation
+      COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_end_to_end_validation.py")
+    add_test(NAME end_to_end_coordinator
+      COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_end_to_end_coordinator.py")
     add_executable(angaria_ipc_comparison_tests test/test_ipc_comparison_deadlines.cpp)
     target_include_directories(angaria_ipc_comparison_tests PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks" "${CMAKE_CURRENT_SOURCE_DIR}/src")
