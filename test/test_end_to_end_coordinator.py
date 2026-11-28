@@ -5,6 +5,7 @@ The archive fixtures are deliberately hostile private benchmark artifacts.
 They do not create transport files or exercise the public Angaria API.
 """
 from collections import Counter
+import gzip
 import io
 from pathlib import Path
 import sys
@@ -34,10 +35,8 @@ class EndToEndCoordinator(unittest.TestCase):
                 member.type = entry.get("type", tarfile.REGTYPE)
                 member.linkname = entry.get("linkname", "")
                 data = entry.get("data", b"")
-                member.size = entry.get("size", len(data))
-                # The oversize fixture needs only its declared header: the
-                # extractor must reject it before requesting any body bytes.
-                target.addfile(member, io.BytesIO(data) if "size" not in entry else None)
+                member.size = len(data)
+                target.addfile(member, io.BytesIO(data))
 
     def test_flat_regular_evidence_extracts_without_changing_bytes(self):
         self.write_archive([dict(name="evidence.json", data=b'{"complete":true}\n'),
@@ -72,8 +71,15 @@ class EndToEndCoordinator(unittest.TestCase):
                 self.assertFalse((self.output/"evidence.json").exists())
 
     def test_declared_oversize_is_rejected_before_body_extraction(self):
-        self.write_archive([dict(name="producer.samples.bin", size=100*1024*1024+1)])
-        with self.assertRaises(RuntimeError):
+        member = tarfile.TarInfo("producer.samples.bin")
+        member.size = 100*1024*1024+1
+        # Write a deliberately incomplete archive directly: newer Python
+        # versions require addfile() to receive a real nonempty member body.
+        # The extractor must reject this declared size before reading a body.
+        with gzip.open(self.archive, "wb") as target:
+            target.write(member.tobuf(format=tarfile.USTAR_FORMAT))
+            target.write(b"\0" * (2 * tarfile.BLOCKSIZE))
+        with self.assertRaisesRegex(RuntimeError, "Raw attempt exceeds extraction bound"):
             coordinator.extract(self.archive, self.output)
         self.assertFalse((self.output/"producer.samples.bin").exists())
         self.assertLess(self.archive.stat().st_size, 4096)

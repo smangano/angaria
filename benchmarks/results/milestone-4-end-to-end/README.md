@@ -98,7 +98,7 @@ The 16-message H=0/128 controls compare current recorded modes with the existing
 
 Validation passed: strict local Release build; 987-test local run plus the subsequently registered coordinator suite; 21 binary-validator cases, 8 coordinator/archive cases and 8 C++ helper cases; all 22 frozen local smoke attempts; independent manual decoding of representative actual archives. [Hosted qualification](https://github.com/smangano/angaria/actions/runs/46127015975) passed the full Linux matrix plus [Linux ARM64 smoke](linux-arm64-smoke/) and [macOS ARM64 smoke](hosted-macos-arm64-smoke/), each with 22 retained and locally reconstructed attempts. Ordinary native CI exercises restart, recovery, replay and connection independence on Linux x86_64, Linux ARM64 and macOS ARM64. No speed threshold determines CI success.
 
-The measurement source above remains fixed. Later changes in this PR only register the standard-library evidence tests in ordinary CI, improve plot spacing, and add the retained results/documentation; benchmark algorithms and all published numeric summaries are unchanged.
+The measurement source above remains fixed. Later changes in this PR only register the standard-library evidence tests in ordinary CI, make the malformed-archive fixture portable across Python versions, improve plot spacing, and add the retained results/documentation; benchmark algorithms and all published numeric summaries are unchanged.
 
 From this repository, verify every raw attempt and redraw the figures:
 
