@@ -11,6 +11,19 @@ namespace angaria::detail::mapped
   // Qualifies compiler/OS/CPU prerequisites, not a particular filesystem.
   Result<LiveCompatibility> qualify_native_profile();
 
+  // Load-only binding for a shared read-only mapping. The caller retains its
+  // mapping and obeys native atomic access exclusively for this live word.
+  class AtomicReadWord
+  {
+  public:
+    static Result<AtomicReadWord> bind(std::span<const std::byte> bytes, std::size_t offset);
+    std::uint64_t load_acquire() const noexcept;
+
+  private:
+    explicit AtomicReadWord(const std::uint64_t* address) noexcept;
+    const std::uint64_t* _address;
+  };
+
   // A borrowed, naturally aligned eight-byte word in coherent mapped storage.
   // The caller retains the mapping and uses atomic access exclusively for this
   // word. These native compiler operations implement the qualified ABI contract,

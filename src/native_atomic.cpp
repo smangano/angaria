@@ -35,6 +35,37 @@ namespace angaria::detail::mapped
                                             sizeof(void*) == 8 && sizeof(off_t) == 8 &&
                                             std::numeric_limits<off_t>::is_signed &&
                                             alignof(std::uint64_t) <= 8;
+
+    template <typename Byte>
+    Result<Byte*> bind_address(std::span<Byte> bytes, std::size_t offset)
+    {
+      const auto supported = qualify_native_profile();
+      if (const auto* error = std::get_if<Error>(&supported))
+      {
+        return *error;
+      }
+      if (!contains_range(bytes.size(), offset, sizeof(std::uint64_t)))
+      {
+        return Error{ErrorCode::InvalidArgument, "Atomic word is outside the supplied range", "native_atomic.word"};
+      }
+      auto* const address = bytes.data() + offset;
+      if (reinterpret_cast<std::uintptr_t>(address) % 8 != 0)
+      {
+        return Error{ErrorCode::InvalidArgument, "Atomic word requires eight-byte alignment", "native_atomic.word"};
+      }
+      return address;
+    }
+
+    std::uint64_t acquire_word(const std::uint64_t* address) noexcept
+    {
+#if defined(__GNUC__) || defined(__clang__)
+      if constexpr (native_atomics)
+      {
+        return __atomic_load_n(address, __ATOMIC_ACQUIRE);
+      }
+#endif
+      std::terminate();
+    }
   } // namespace
 
   Result<LiveCompatibility> qualify_native_profile()
@@ -54,32 +85,36 @@ namespace angaria::detail::mapped
 
   Result<AtomicWord> AtomicWord::bind(std::span<std::byte> bytes, std::size_t offset)
   {
-    const auto supported = qualify_native_profile();
-    if (const auto* error = std::get_if<Error>(&supported))
+    const auto address = bind_address(bytes, offset);
+    if (const auto* error = std::get_if<Error>(&address))
     {
       return *error;
     }
-    if (!contains_range(bytes.size(), offset, sizeof(std::uint64_t)))
-    {
-      return Error{ErrorCode::InvalidArgument, "Atomic word is outside the supplied range", "native_atomic.word"};
-    }
-    auto* const address = bytes.data() + offset;
-    if (reinterpret_cast<std::uintptr_t>(address) % 8 != 0)
-    {
-      return Error{ErrorCode::InvalidArgument, "Atomic word requires eight-byte alignment", "native_atomic.word"};
-    }
-    return AtomicWord{reinterpret_cast<std::uint64_t*>(address)};
+    return AtomicWord{reinterpret_cast<std::uint64_t*>(std::get<std::byte*>(address))};
   }
 
   std::uint64_t AtomicWord::load_acquire() const noexcept
   {
-#if defined(__GNUC__) || defined(__clang__)
-    if constexpr (native_atomics)
+    return acquire_word(_address);
+  }
+
+  AtomicReadWord::AtomicReadWord(const std::uint64_t* address) noexcept : _address(address)
+  {
+  }
+
+  Result<AtomicReadWord> AtomicReadWord::bind(std::span<const std::byte> bytes, std::size_t offset)
+  {
+    const auto address = bind_address(bytes, offset);
+    if (const auto* error = std::get_if<Error>(&address))
     {
-      return __atomic_load_n(_address, __ATOMIC_ACQUIRE);
+      return *error;
     }
-#endif
-    std::terminate();
+    return AtomicReadWord{reinterpret_cast<const std::uint64_t*>(std::get<const std::byte*>(address))};
+  }
+
+  std::uint64_t AtomicReadWord::load_acquire() const noexcept
+  {
+    return acquire_word(_address);
   }
 
   void AtomicWord::store_release(std::uint64_t value) noexcept

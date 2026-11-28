@@ -1,5 +1,6 @@
 #include "session_controller.h"
 
+#include "coordination_descriptor.h"
 #include "native_atomic.h"
 #include "native_file_state.h"
 #include "performance_diagnostics.h"
@@ -20,7 +21,6 @@
 #include <variant>
 
 #include <fcntl.h>
-#include <pthread.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -30,154 +30,6 @@ namespace angaria::detail::mapped
 {
   namespace
   {
-    struct CoordinationDescriptor;
-
-    // Only these descriptors can hold the kernel locks. The child closes its
-    // inherited copies without LOCK_UN, which would unlock the parent's shared
-    // open file description. The handlers perform no allocation or C++ cleanup.
-    struct DescriptorRegistry
-    {
-      DescriptorRegistry();
-
-      const std::uint64_t _ownerPid{static_cast<std::uint64_t>(::getpid())};
-      std::mutex _mutex;
-      CoordinationDescriptor* _head{};
-      int _registrationError{};
-    };
-
-    DescriptorRegistry* descriptorRegistry{};
-
-    struct CoordinationDescriptor
-    {
-      ~CoordinationDescriptor();
-      int _fd{-1};
-      DescriptorRegistry* _registry{};
-      CoordinationDescriptor* _next{};
-      bool _linked{};
-      FileIdentity _identity{};
-    };
-
-    void before_fork()
-    {
-      descriptorRegistry->_mutex.lock();
-    }
-
-    void after_fork_parent()
-    {
-      descriptorRegistry->_mutex.unlock();
-    }
-
-    void after_fork_child()
-    {
-      for (auto descriptor = descriptorRegistry->_head; descriptor != nullptr;
-           descriptor = descriptor->_next)
-      {
-        ::close(descriptor->_fd);
-        descriptor->_fd = -1;
-        descriptor->_linked = false;
-      }
-      descriptorRegistry->_head = nullptr;
-      descriptorRegistry->_mutex.unlock();
-    }
-
-    DescriptorRegistry::DescriptorRegistry()
-    {
-      descriptorRegistry = this;
-      _registrationError = ::pthread_atfork(before_fork, after_fork_parent, after_fork_child);
-    }
-
-    DescriptorRegistry& descriptors()
-    {
-      // Fork handlers cannot be unregistered. Keep their registry alive through
-      // static destruction, including owners populated after initialization.
-      static auto* const registry = new DescriptorRegistry;
-      return *registry;
-    }
-
-    CoordinationDescriptor::~CoordinationDescriptor()
-    {
-      if (_registry == nullptr)
-      {
-        return;
-      }
-      if (_registry->_ownerPid != static_cast<std::uint64_t>(::getpid()))
-      {
-        // Registered descriptors were already closed by the child handler.
-        // No inherited process-local mutex may be acquired here.
-        return;
-      }
-      std::lock_guard guard(_registry->_mutex);
-      if (_linked)
-      {
-        auto link = &_registry->_head;
-        while (*link != nullptr && *link != this)
-        {
-          link = &(*link)->_next;
-        }
-        if (*link == this)
-        {
-          *link = _next;
-        }
-      }
-      if (_fd != -1)
-      {
-        ::close(_fd);
-      }
-    }
-
-    Result<std::unique_ptr<CoordinationDescriptor>> open_coordination(
-        int directory, const std::filesystem::path& name, const std::filesystem::path& diagnostic,
-        bool isDirectory, bool create = false)
-    {
-      auto& registry = descriptors();
-      if (registry._ownerPid != static_cast<std::uint64_t>(::getpid()))
-      {
-        return storage_error(ErrorCode::WrongOwner, diagnostic, "Coordination resources require exec after fork");
-      }
-      if (registry._registrationError != 0)
-      {
-        return native_io_error(diagnostic, "register coordination fork handlers", registry._registrationError);
-      }
-      auto descriptor = std::make_unique<CoordinationDescriptor>();
-      descriptor->_registry = &registry;
-      // Fork must not occur between open and descriptor registration.
-      std::lock_guard guard(registry._mutex);
-      int flags = O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK;
-      flags |= isDirectory ? O_RDONLY | O_DIRECTORY : O_RDWR;
-      if (create)
-      {
-        flags |= O_CREAT | O_EXCL;
-      }
-      do
-      {
-        descriptor->_fd = ::openat(directory, name.c_str(), flags, 0600);
-      } while (descriptor->_fd == -1 && errno == EINTR);
-      if (descriptor->_fd == -1)
-      {
-        if (create && errno == EEXIST)
-        {
-          return storage_error(ErrorCode::Conflict, diagnostic, "Coordination file already exists");
-        }
-        return native_io_error(diagnostic, "open coordination resource", errno);
-      }
-      struct stat info{};
-      ANGARIA_DIAGNOSTIC_COUNT(FileStatCalls, 1);
-      if (::fstat(descriptor->_fd, &info) == -1)
-      {
-        return native_io_error(diagnostic, "stat coordination resource", errno);
-      }
-      if ((isDirectory && !S_ISDIR(info.st_mode)) ||
-          (!isDirectory && (!S_ISREG(info.st_mode) || info.st_nlink != 1)))
-      {
-        return storage_error(ErrorCode::IoError, diagnostic, "Invalid coordination file type or link count");
-      }
-      descriptor->_identity = stat_identity(info);
-      descriptor->_next = registry._head;
-      registry._head = descriptor.get();
-      descriptor->_linked = true;
-      return descriptor;
-    }
-
     OperationResult check_named_identity(int directory, const char* name, FileIdentity identity,
                                          const std::filesystem::path& path, bool isDirectory,
                                          bool singleLink = true)
@@ -213,21 +65,6 @@ namespace angaria::detail::mapped
     std::string claim_name(TaskId task)
     {
       return "task-" + std::to_string(static_cast<std::uint16_t>(task)) + ".lock";
-    }
-
-    bool lock_busy(int error)
-    {
-      return error == EWOULDBLOCK || error == EAGAIN;
-    }
-
-    int lock_file(int fd, int operation)
-    {
-      int result;
-      do
-      {
-        result = ::flock(fd, operation);
-      } while (result == -1 && errno == EINTR);
-      return result;
     }
 
     // Announce blocking local requests until they own the mutex. Try callers
@@ -310,7 +147,7 @@ namespace angaria::detail::mapped
 #if defined(ANGARIA_ENABLE_DIAGNOSTICS) && ANGARIA_ENABLE_DIAGNOSTICS
         _diagnosticHold.finish();
 #endif
-        if (lock_file(_controller->_state->_mutationFd->_fd, LOCK_UN) == -1)
+        if (lock_coordination(_controller->_state->_mutationFd->_fd, LOCK_UN) == -1)
         {
           // Continuing with unknown gate ownership would permit unsafe reuse.
           std::terminate();
@@ -711,7 +548,7 @@ namespace angaria::detail::mapped
       // Keep this scope around the actual native acquisition only. In
       // particular, post-lock identity checks belong to gate-held work.
       ANGARIA_DIAGNOSTIC_SCOPE(NativeGateWait);
-      nativeResult = lock_file(_state->_mutationFd->_fd, LOCK_EX | (nonblocking ? LOCK_NB : 0));
+      nativeResult = lock_coordination(_state->_mutationFd->_fd, LOCK_EX | (nonblocking ? LOCK_NB : 0));
       if (nativeResult == -1)
       {
         nativeError = errno;
@@ -719,7 +556,7 @@ namespace angaria::detail::mapped
     }
     if (nativeResult == -1)
     {
-      if (lock_busy(nativeError))
+      if (coordination_busy(nativeError))
       {
         ANGARIA_DIAGNOSTIC_COUNT(GateBusy, 1);
         return storage_error(ErrorCode::OwnershipBusy, _state->_directory / "mutation.lock", "Mutation gate is busy");
@@ -830,9 +667,9 @@ namespace angaria::detail::mapped
     {
       return std::get<Error>(std::move(result));
     }
-    if (lock_file(state->_descriptor->_fd, LOCK_EX | LOCK_NB) == -1)
+    if (lock_coordination(state->_descriptor->_fd, LOCK_EX | LOCK_NB) == -1)
     {
-      if (lock_busy(errno))
+      if (coordination_busy(errno))
       {
         return storage_error(ErrorCode::OwnershipBusy, path, "Task claim is busy");
       }
@@ -882,9 +719,9 @@ namespace angaria::detail::mapped
     {
       return std::get<Error>(std::move(result));
     }
-    if (lock_file(owner->_fd, LOCK_EX | LOCK_NB) == -1)
+    if (lock_coordination(owner->_fd, LOCK_EX | LOCK_NB) == -1)
     {
-      if (lock_busy(errno))
+      if (coordination_busy(errno))
       {
         return true;
       }
