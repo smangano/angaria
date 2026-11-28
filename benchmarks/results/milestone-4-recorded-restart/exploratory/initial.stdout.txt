@@ -1,0 +1,22 @@
+Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+[==========] Running 3 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 2 tests from RecordedQueuePerformance
+[ RUN      ] RecordedQueuePerformance.ReplacementReplayAndEstablishedMessagingStayBoundedAcrossRetainedHistory
+{"study":"recorded_queue_replacement_cost","history_before_baseline":0,"retained_on_replacement":64,"payload_bytes":8,"ring_capacity":2,"cycles_per_block":64,"baseline_id_send_lookup_receive_ns":[486.328,432.297,427.734,587.891,394.531],"producer_open_ns":[110667.000,94917.000,87208.000,93833.000,87291.000],"consumer_open_ns":[65291.000,68416.000,59708.000,62959.000,63333.000],"replay_ns_per_record":[108.734,106.109,97.656,106.781,102.219],"recovered_id_send_lookup_receive_ns":[7470.047,1103.516,1067.062,1050.125,1001.312],"baseline_verified_publications_per_second":2313225.142,"recovered_verified_publications_per_second":937152.229,"replay_allocations":[0,0,0,0,0],"baseline_allocations":[0,0,0,0,0],"recovered_allocations":[0,0,0,0,0],"diagnostics_enabled":false}
+{"study":"recorded_queue_replacement_cost","history_before_baseline":128,"retained_on_replacement":192,"payload_bytes":8,"ring_capacity":2,"cycles_per_block":64,"baseline_id_send_lookup_receive_ns":[814.453,793.625,1037.766,792.312,709.641],"producer_open_ns":[100500.000,102708.000,94458.000,98042.000,93083.000],"consumer_open_ns":[69583.000,69167.000,72083.000,67625.000,67583.000],"replay_ns_per_record":[92.234,100.911,98.307,98.089,98.521],"recovered_id_send_lookup_receive_ns":[814.453,817.719,1087.891,875.000,829.422],"baseline_verified_publications_per_second":1260040.951,"recovered_verified_publications_per_second":1205659.062,"replay_allocations":[0,0,0,0,0],"baseline_allocations":[0,0,0,0,0],"recovered_allocations":[0,0,0,0,0],"diagnostics_enabled":false}
+{"study":"recorded_queue_replacement_cost","history_before_baseline":4096,"retained_on_replacement":4160,"payload_bytes":8,"ring_capacity":2,"cycles_per_block":64,"baseline_id_send_lookup_receive_ns":[496.750,470.062,470.062,466.797,463.547],"producer_open_ns":[311292.000,322500.000,336583.000,310250.000,315709.000],"consumer_open_ns":[256917.000,256584.000,265959.000,270333.000,263709.000],"replay_ns_per_record":[98.357,93.630,96.945,97.596,94.842],"recovered_id_send_lookup_receive_ns":[496.094,490.875,479.156,494.781,502.609],"baseline_verified_publications_per_second":2127376.679,"recovered_verified_publications_per_second":2021095.181,"replay_allocations":[0,0,0,0,0],"baseline_allocations":[0,0,0,0,0],"recovered_allocations":[0,0,0,0,0],"diagnostics_enabled":false}
+[       OK ] RecordedQueuePerformance.ReplacementReplayAndEstablishedMessagingStayBoundedAcrossRetainedHistory (59 ms)
+[ RUN      ] RecordedQueuePerformance.EstablishedDeliveryEmptyPollingAndFullCreditStayAllocationFree
+{"study":"recorded_queue_same_process_cost","payload_bytes":8,"ring_capacity":2,"cycles_per_block":64,"starting_history_records":[0,64,128,192,256],"id_send_lookup_receive_ns_per_roundtrip":[438.812,884.766,800.781,770.828,483.734],"verified_roundtrips_per_second":1297306.063,"empty_receive_ns_per_call":[33.859,33.203,31.906,32.547,32.562],"full_credit_ns_per_attempt":[34.500,33.844,35.156,33.859,33.859],"roundtrip_allocations":[0,0,0,0,0],"empty_allocations":[0,0,0,0,0],"full_allocations":[0,0,0,0,0],"diagnostics_enabled":false}
+[       OK ] RecordedQueuePerformance.EstablishedDeliveryEmptyPollingAndFullCreditStayAllocationFree (1 ms)
+[----------] 2 tests from RecordedQueuePerformance (60 ms total)
+
+[----------] 1 test from RecordedQueueAllocationCapture
+[ RUN      ] RecordedQueueAllocationCapture.CountsSuccessfulAllocationRequests
+[       OK ] RecordedQueueAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)
+[----------] 1 test from RecordedQueueAllocationCapture (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 2 test suites ran. (60 ms total)
+[  PASSED  ] 3 tests.

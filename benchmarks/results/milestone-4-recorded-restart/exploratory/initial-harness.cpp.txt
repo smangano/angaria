@@ -1,0 +1,465 @@
+// Isolated private endpoint cost study. Every roundtrip issues a publication,
+// accepts it, looks up its recorded outcome and receives the actual mapped
+// message. This same-process measurement does not replace the independent
+// process benchmark against nanomsg. Allocations and filesystem/gate work are
+// deterministic CI guards; noisy clock samples have no pass/fail threshold.
+#include "allocation_capture.h"
+#include "performance_diagnostics.h"
+#include "performance_samples.h"
+#include "recorded_queue_fixture.h"
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <optional>
+#include <span>
+#include <variant>
+
+namespace
+{
+  using namespace angaria;
+  namespace recorded = angaria::detail::recorded;
+  namespace diagnostics = angaria::detail::diagnostics;
+  namespace support = angaria::test_support;
+  using support::AllocationCapture;
+  using support::require_value;
+
+  constexpr std::size_t sample_count = 5;
+  constexpr std::size_t cycles = 64;
+  volatile std::uint64_t observed_checksum{};
+
+  struct CycleResult
+  {
+    bool _valid{true};
+    std::size_t _count{};
+    std::uint64_t _checksum{};
+    std::optional<MessageView> _last;
+  };
+
+  // No test assertion, output formatting, payload encoding or owning copy is
+  // hidden in the measured loop. Result variants are checked before use, and
+  // every acceptance/lookup/delivery identity and payload is verified.
+  CycleResult roundtrip_cycles(recorded::RecordedProducer& sender, recorded::RecordedConsumer& receiver,
+                                 const MessageView& outgoing, TaskClaim consumer,
+                                 std::uint64_t firstSequence, std::size_t count)
+  {
+    CycleResult result;
+    for (std::size_t index = 0; index != count; ++index)
+    {
+      const auto issued = sender.next_publication_id();
+      const auto* publication = std::get_if<PublicationId>(&issued);
+      if (!publication)
+      {
+        result._valid = false;
+        break;
+      }
+      const auto sent = sender.try_send(*publication, outgoing);
+      const auto* accepted = std::get_if<recorded::ProducerAppendResult>(&sent);
+      if (!accepted || accepted->_duplicate || accepted->_queueSequence != firstSequence + index)
+      {
+        result._valid = false;
+        break;
+      }
+      const auto lookup = sender.lookup(*publication);
+      const auto* known = std::get_if<std::optional<recorded::ProducerAppendResult>>(&lookup);
+      if (!known || !*known || (*known)->_reference != accepted->_reference ||
+          (*known)->_queueSequence != accepted->_queueSequence || (*known)->_recordOrdinal != accepted->_recordOrdinal)
+      {
+        result._valid = false;
+        break;
+      }
+      const auto received = receiver.try_receive();
+      const auto* message = std::get_if<std::optional<MessageView>>(&received);
+      if (!message || !*message)
+      {
+        result._valid = false;
+        break;
+      }
+      const auto& view = **message;
+      if (view._header._publication != *publication || view._header._schema != outgoing._header._schema ||
+          view._header._format != outgoing._header._format || view._header._flags != outgoing._header._flags ||
+          view._header._payloadBytes != outgoing._payload.size() || view._header._queue != QueueId{4} ||
+          view._header._queueSequence != accepted->_queueSequence || view._header._consumer != consumer ||
+          !view._header._enqueuedAt || !view._header._dequeuedAt ||
+          !std::equal(view._payload.begin(), view._payload.end(), outgoing._payload.begin(), outgoing._payload.end()))
+      {
+        result._valid = false;
+        break;
+      }
+      result._checksum += publication->_sequence + accepted->_queueSequence + accepted->_recordOrdinal;
+      result._last = view;
+      ++result._count;
+    }
+    return result;
+  }
+
+  CycleResult replay_cycles(recorded::RecordedConsumer& receiver, const MessageView& outgoing,
+                            TaskClaim publisher, TaskClaim consumer, std::size_t count)
+  {
+    CycleResult result;
+    for (std::size_t index = 0; index != count; ++index)
+    {
+      const auto received = receiver.try_receive();
+      const auto* message = std::get_if<std::optional<MessageView>>(&received);
+      if (!message || !*message)
+      {
+        result._valid = false;
+        break;
+      }
+      const auto& view = **message;
+      if (view._header._publication != PublicationId{publisher, index + 1} ||
+          view._header._queueSequence != index + 1 || view._header._consumer != consumer ||
+          view._header._schema != outgoing._header._schema || view._header._flags != outgoing._header._flags ||
+          view._header._format != outgoing._header._format || view._header._payloadBytes != outgoing._payload.size() ||
+          view._header._queue != QueueId{4} || !view._header._enqueuedAt || !view._header._dequeuedAt ||
+          !std::equal(view._payload.begin(), view._payload.end(), outgoing._payload.begin(), outgoing._payload.end()))
+      {
+        result._valid = false;
+        break;
+      }
+      result._checksum += view._header._publication._sequence;
+      result._last = view;
+      ++result._count;
+    }
+    return result;
+  }
+
+  void expect_no_native_messaging_work(const diagnostics::Sample& sample)
+  {
+    EXPECT_TRUE(sample._valid);
+    EXPECT_FALSE(sample._overflow);
+    for (const auto counter : {diagnostics::Counter::NativeReadCalls, diagnostics::Counter::NativeMapCalls,
+                               diagnostics::Counter::NativeUnmapCalls, diagnostics::Counter::FileStatCalls,
+                               diagnostics::Counter::FileGrowCalls, diagnostics::Counter::GateAttempts,
+                               diagnostics::Counter::GateAcquisitions})
+    {
+      EXPECT_EQ(sample._counters[static_cast<std::size_t>(counter)], 0u)
+          << diagnostics::counter_names[static_cast<std::size_t>(counter)];
+    }
+  }
+
+  TEST(RecordedQueuePerformance, ReplacementReplayAndEstablishedMessagingStayBoundedAcrossRetainedHistory)
+  {
+    // Attachment validates the retained prefix. Replacement replay then walks
+    // it once; established messaging must not revisit or reopen old files.
+    for (const std::size_t history : {0u, 128u, 4096u})
+    {
+      std::array<double, sample_count> baselineNs{}, producerOpenNs{}, consumerOpenNs{}, replayNs{}, recoveredNs{};
+      std::array<std::uint64_t, sample_count> baselineAllocations{}, replayAllocations{}, recoveredAllocations{};
+      const auto retained = history + cycles;
+      for (std::size_t sample = 0; sample != sample_count; ++sample)
+      {
+        support::ProducerLogDirectory directory;
+        const auto options = support::recorded_queue_options(directory.path(), 2, history + 4 * cycles, 8 * 1024 * 1024);
+        const auto codec = support::recorded_queue_codec(options);
+        const auto bytes = support::recorded_queue_payload(codec, 42);
+        const auto outgoing = support::recorded_queue_message(options, bytes);
+        require_value(recorded::create_recorded_queue(options));
+        auto sender = require_value(recorded::RecordedProducer::open(options));
+        auto receiver = require_value(recorded::RecordedConsumer::open(options));
+        const auto publisher = require_value(sender.claim());
+        const auto initialConsumer = require_value(receiver.claim());
+        const auto populated = roundtrip_cycles(sender, receiver, outgoing, initialConsumer, 1, history);
+        ASSERT_TRUE(populated._valid);
+        ASSERT_EQ(populated._count, history);
+
+        CycleResult baseline;
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          baseline = roundtrip_cycles(sender, receiver, outgoing, initialConsumer, history + 1, cycles);
+          const auto stop = std::chrono::steady_clock::now();
+          baselineAllocations[sample] = allocations.stop();
+          baselineNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+        }
+        ASSERT_TRUE(baseline._valid);
+        ASSERT_EQ(baseline._count, cycles);
+        EXPECT_EQ(baselineAllocations[sample], 0u);
+        baseline._last.reset();
+        receiver = {};
+        sender = {};
+
+        const auto producerStart = std::chrono::steady_clock::now();
+        sender = require_value(recorded::RecordedProducer::open(options));
+        producerOpenNs[sample] = std::chrono::duration<double, std::nano>(
+            std::chrono::steady_clock::now() - producerStart).count();
+        EXPECT_GT(require_value(sender.claim())._incarnation, publisher._incarnation);
+        const auto consumerStart = std::chrono::steady_clock::now();
+        receiver = require_value(recorded::RecordedConsumer::open(options));
+        consumerOpenNs[sample] = std::chrono::duration<double, std::nano>(
+            std::chrono::steady_clock::now() - consumerStart).count();
+        const auto replacementConsumer = require_value(receiver.claim());
+        EXPECT_GT(replacementConsumer._incarnation, initialConsumer._incarnation);
+        ASSERT_EQ(support::recorded_queue_credit(options), retained);
+
+        CycleResult replay;
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          replay = replay_cycles(receiver, outgoing, publisher, replacementConsumer, retained);
+          const auto stop = std::chrono::steady_clock::now();
+          replayAllocations[sample] = allocations.stop();
+          replayNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / retained;
+        }
+        observed_checksum = replay._checksum;
+        ASSERT_TRUE(replay._valid);
+        ASSERT_EQ(replay._count, retained);
+        EXPECT_EQ(replayAllocations[sample], 0u);
+        EXPECT_EQ(support::recorded_queue_credit(options), retained);
+        EXPECT_FALSE(require_value(receiver.try_receive()));
+        replay._last.reset();
+
+        // A separate replacement replay gathers native work counts without
+        // including diagnostic collection in the wall-time samples above.
+        receiver = {};
+        receiver = require_value(recorded::RecordedConsumer::open(options));
+        const auto currentConsumer = require_value(receiver.claim());
+        diagnostics::Sample replaySample;
+        CycleResult diagnosticReplay;
+        {
+          diagnostics::Capture capture(replaySample, diagnostics::Collection::Counts);
+          diagnosticReplay = replay_cycles(receiver, outgoing, publisher, currentConsumer, retained);
+        }
+        ASSERT_TRUE(diagnosticReplay._valid);
+        ASSERT_EQ(diagnosticReplay._count, retained);
+        expect_no_native_messaging_work(replaySample);
+        EXPECT_EQ(support::recorded_queue_credit(options), retained);
+
+        CycleResult recovered;
+        {
+          AllocationCapture allocations;
+          const auto start = std::chrono::steady_clock::now();
+          recovered = roundtrip_cycles(sender, receiver, outgoing, currentConsumer, retained + 1, cycles);
+          const auto stop = std::chrono::steady_clock::now();
+          recoveredAllocations[sample] = allocations.stop();
+          recoveredNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+        }
+        observed_checksum = recovered._checksum;
+        ASSERT_TRUE(recovered._valid);
+        ASSERT_EQ(recovered._count, cycles);
+        EXPECT_EQ(recoveredAllocations[sample], 0u);
+        diagnostics::Sample recoveredSample;
+        CycleResult diagnosticRecovered;
+        {
+          diagnostics::Capture capture(recoveredSample, diagnostics::Collection::Counts);
+          diagnosticRecovered = roundtrip_cycles(sender, receiver, outgoing, currentConsumer, retained + cycles + 1, cycles);
+        }
+        ASSERT_TRUE(diagnosticRecovered._valid);
+        ASSERT_EQ(diagnosticRecovered._count, cycles);
+        expect_no_native_messaging_work(recoveredSample);
+      }
+
+      std::cout << std::fixed << std::setprecision(3)
+                << "{\"study\":\"recorded_queue_replacement_cost\",\"history_before_baseline\":" << history
+                << ",\"retained_on_replacement\":" << retained << ",\"payload_bytes\":8,\"ring_capacity\":2,"
+                << "\"cycles_per_block\":" << cycles << ",\"baseline_id_send_lookup_receive_ns\":";
+      support::write_samples(baselineNs);
+      std::cout << ",\"producer_open_ns\":";
+      support::write_samples(producerOpenNs);
+      std::cout << ",\"consumer_open_ns\":";
+      support::write_samples(consumerOpenNs);
+      std::cout << ",\"replay_ns_per_record\":";
+      support::write_samples(replayNs);
+      std::cout << ",\"recovered_id_send_lookup_receive_ns\":";
+      support::write_samples(recoveredNs);
+      std::cout << ",\"baseline_verified_publications_per_second\":" << 1e9 / support::median(baselineNs)
+                << ",\"recovered_verified_publications_per_second\":" << 1e9 / support::median(recoveredNs)
+                << ",\"replay_allocations\":";
+      support::write_samples(replayAllocations);
+      std::cout << ",\"baseline_allocations\":";
+      support::write_samples(baselineAllocations);
+      std::cout << ",\"recovered_allocations\":";
+      support::write_samples(recoveredAllocations);
+      std::cout << ",\"diagnostics_enabled\":" << (diagnostics::instrumentation_enabled ? "true" : "false") << "}\n";
+    }
+  }
+
+  TEST(RecordedQueueAllocationCapture, CountsSuccessfulAllocationRequests)
+  {
+    std::uint64_t allocations{};
+    {
+      AllocationCapture capture;
+      auto* control = ::operator new(16);
+      ::operator delete(control);
+      allocations = capture.stop();
+    }
+    EXPECT_EQ(allocations, 1u);
+  }
+
+  TEST(RecordedQueuePerformance, EstablishedDeliveryEmptyPollingAndFullCreditStayAllocationFree)
+  {
+    support::ProducerLogDirectory directory;
+    auto options = support::recorded_queue_options(directory.path(), 2, 1024);
+    const auto codec = support::recorded_queue_codec(options);
+    const auto bytes = support::recorded_queue_payload(codec, 42);
+    const auto outgoing = support::recorded_queue_message(options, bytes);
+    require_value(recorded::create_recorded_queue(options));
+    auto sender = require_value(recorded::RecordedProducer::open(options));
+    recorded::RecordedConsumer receiver;
+    diagnostics::Sample openSample;
+    {
+      diagnostics::Capture capture(openSample, diagnostics::Collection::Counts);
+      receiver = require_value(recorded::RecordedConsumer::open(options));
+    }
+    if constexpr (diagnostics::instrumentation_enabled)
+    {
+      // Actual cold endpoint attachment is the positive control for linked
+      // native instrumentation; disabled/miswired counters cannot prove zeros.
+      EXPECT_GT(openSample._counters[static_cast<std::size_t>(diagnostics::Counter::NativeReadCalls)], 0u);
+      EXPECT_GT(openSample._counters[static_cast<std::size_t>(diagnostics::Counter::NativeMapCalls)], 0u);
+      EXPECT_GT(openSample._counters[static_cast<std::size_t>(diagnostics::Counter::FileStatCalls)], 0u);
+    }
+    const auto consumer = require_value(receiver.claim());
+    std::array<double, sample_count> roundtripNs{};
+    std::array<std::uint64_t, sample_count> roundtripAllocations{};
+    std::array<std::uint64_t, sample_count> startingHistory{};
+    for (std::size_t sample = 0; sample != sample_count; ++sample)
+    {
+      startingHistory[sample] = sample * cycles;
+      CycleResult result;
+      {
+        AllocationCapture allocations;
+        const auto start = std::chrono::steady_clock::now();
+        result = roundtrip_cycles(sender, receiver, outgoing, consumer, startingHistory[sample] + 1, cycles);
+        const auto stop = std::chrono::steady_clock::now();
+        roundtripAllocations[sample] = allocations.stop();
+        roundtripNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+      }
+      observed_checksum = result._checksum;
+      ASSERT_TRUE(result._valid);
+      ASSERT_EQ(result._count, cycles);
+      EXPECT_EQ(roundtripAllocations[sample], 0u);
+      ASSERT_TRUE(result._last);
+      // Copying is intentionally outside the guard: ownership allocates, while
+      // this check proves the measured view carries usable retained decoding.
+      const auto copied = require_value(result._last->copy_message(8));
+      EXPECT_EQ(copied._header, result._last->_header);
+      EXPECT_EQ(std::get<std::uint64_t>(require_value(copied.decode(codec)).at(0)), 42u);
+    }
+
+    diagnostics::Sample roundtripSample;
+    CycleResult diagnosticRoundtrips;
+    {
+      diagnostics::Capture capture(roundtripSample, diagnostics::Collection::Counts);
+      diagnosticRoundtrips = roundtrip_cycles(sender, receiver, outgoing, consumer, sample_count * cycles + 1, cycles);
+    }
+    ASSERT_TRUE(diagnosticRoundtrips._valid);
+    ASSERT_EQ(diagnosticRoundtrips._count, cycles);
+
+    const auto emptyPolls = [&]
+    {
+      bool valid = true;
+      for (std::size_t index = 0; index != cycles; ++index)
+      {
+        const auto received = receiver.try_receive();
+        const auto* message = std::get_if<std::optional<MessageView>>(&received);
+        valid = valid && message && !*message;
+      }
+      return valid;
+    };
+    std::array<double, sample_count> emptyNs{};
+    std::array<std::uint64_t, sample_count> emptyAllocations{};
+    for (std::size_t sample = 0; sample != sample_count; ++sample)
+    {
+      bool valid{};
+      {
+        AllocationCapture allocations;
+        const auto start = std::chrono::steady_clock::now();
+        valid = emptyPolls();
+        const auto stop = std::chrono::steady_clock::now();
+        emptyAllocations[sample] = allocations.stop();
+        emptyNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+      }
+      EXPECT_TRUE(valid);
+      EXPECT_EQ(emptyAllocations[sample], 0u);
+    }
+    diagnostics::Sample emptySample;
+    bool diagnosticEmpty{};
+    {
+      diagnostics::Capture capture(emptySample, diagnostics::Collection::Counts);
+      diagnosticEmpty = emptyPolls();
+    }
+    EXPECT_TRUE(diagnosticEmpty);
+
+    // Withhold consumption to exhaust exactly two logical credits. One newly
+    // issued ID is retried repeatedly, always known-unaccepted and never retired.
+    for (unsigned index = 0; index != options._capacity; ++index)
+    {
+      support::require_recorded_send(sender.try_send(require_value(sender.next_publication_id()), outgoing));
+    }
+    const auto waiting = require_value(sender.next_publication_id());
+    const auto fullSends = [&]
+    {
+      bool valid = true;
+      for (std::size_t index = 0; index != cycles; ++index)
+      {
+        valid = std::holds_alternative<recorded::QueueCreditFull>(sender.try_send(waiting, outgoing)) && valid;
+      }
+      return valid;
+    };
+    std::array<double, sample_count> fullNs{};
+    std::array<std::uint64_t, sample_count> fullAllocations{};
+    for (std::size_t sample = 0; sample != sample_count; ++sample)
+    {
+      bool valid{};
+      {
+        AllocationCapture allocations;
+        const auto start = std::chrono::steady_clock::now();
+        valid = fullSends();
+        const auto stop = std::chrono::steady_clock::now();
+        fullAllocations[sample] = allocations.stop();
+        fullNs[sample] = std::chrono::duration<double, std::nano>(stop - start).count() / cycles;
+      }
+      EXPECT_TRUE(valid);
+      EXPECT_EQ(fullAllocations[sample], 0u);
+    }
+    EXPECT_FALSE(require_value(sender.lookup(waiting)));
+    diagnostics::Sample fullSample;
+    bool diagnosticFull{};
+    {
+      diagnostics::Capture capture(fullSample, diagnostics::Collection::Counts);
+      diagnosticFull = fullSends();
+    }
+    EXPECT_TRUE(diagnosticFull);
+    ASSERT_TRUE(require_value(receiver.try_receive()));
+    const auto accepted = support::require_recorded_send(sender.try_send(waiting, outgoing));
+    EXPECT_FALSE(accepted._duplicate);
+    ASSERT_TRUE(require_value(receiver.try_receive()));
+    const auto final = require_value(receiver.try_receive());
+    ASSERT_TRUE(final);
+    EXPECT_EQ(final->_header._publication, waiting);
+    EXPECT_FALSE(require_value(receiver.try_receive()));
+
+    // Counts are collected separately from latency samples. These are the
+    // existing native/gate counters, not a claim that every syscall is absent.
+    for (const auto* sample : {&roundtripSample, &emptySample, &fullSample})
+    {
+      expect_no_native_messaging_work(*sample);
+    }
+
+    std::cout << std::fixed << std::setprecision(3)
+              << "{\"study\":\"recorded_queue_same_process_cost\",\"payload_bytes\":8,\"ring_capacity\":2,"
+              << "\"cycles_per_block\":" << cycles << ",\"starting_history_records\":";
+    support::write_samples(startingHistory);
+    std::cout << ",\"id_send_lookup_receive_ns_per_roundtrip\":";
+    support::write_samples(roundtripNs);
+    std::cout << ",\"verified_roundtrips_per_second\":" << 1e9 / support::median(roundtripNs)
+              << ",\"empty_receive_ns_per_call\":";
+    support::write_samples(emptyNs);
+    std::cout << ",\"full_credit_ns_per_attempt\":";
+    support::write_samples(fullNs);
+    std::cout << ",\"roundtrip_allocations\":";
+    support::write_samples(roundtripAllocations);
+    std::cout << ",\"empty_allocations\":";
+    support::write_samples(emptyAllocations);
+    std::cout << ",\"full_allocations\":";
+    support::write_samples(fullAllocations);
+    std::cout << ",\"diagnostics_enabled\":" << (diagnostics::instrumentation_enabled ? "true" : "false") << "}\n";
+  }
+}

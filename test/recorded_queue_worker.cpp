@@ -17,16 +17,33 @@ namespace
   namespace recorded = angaria::detail::recorded;
   namespace support = angaria::test_support;
 
-  class PausedProducer final : public recorded::RecordedQueueObserver
+  class PausedEndpoint final : public recorded::RecordedQueueObserver
   {
   public:
-    explicit PausedProducer(recorded::RecordedQueueCheckpoint point) : _point(point)
+    explicit PausedEndpoint(recorded::RecordedQueueCheckpoint point) : _point(point)
     {
+    }
+
+    explicit PausedEndpoint(recorded::ProducerLogCheckpoint point) : _point(point)
+    {
+    }
+
+    angaria::OperationResult checkpoint(recorded::ProducerLogCheckpoint point) override
+    {
+      return pause_at(point);
     }
 
     angaria::OperationResult checkpoint(recorded::RecordedQueueCheckpoint point) override
     {
-      if (!_paused && point == _point)
+      return pause_at(point);
+    }
+
+  private:
+    template <typename Point>
+    angaria::OperationResult pause_at(Point point)
+    {
+      const auto* selected = std::get_if<Point>(&_point);
+      if (!_paused && selected && point == *selected)
       {
         _paused = true;
         support::report('R');
@@ -35,8 +52,7 @@ namespace
       return std::monostate{};
     }
 
-  private:
-    recorded::RecordedQueueCheckpoint _point;
+    std::variant<recorded::RecordedQueueCheckpoint, recorded::ProducerLogCheckpoint> _point;
     bool _paused{};
   };
 }
@@ -47,19 +63,22 @@ int main(int argc, char** argv)
   {
     if (argc != 3)
     {
-      throw std::runtime_error("usage: recorded_queue_worker directory consume|hold-consumer|commit|stamp|published");
+      throw std::runtime_error("usage: recorded_queue_worker directory mode");
     }
     ::alarm(15);
     const auto options = support::recorded_queue_options(std::filesystem::path{argv[1]});
     const auto codec = support::recorded_queue_codec(options);
     const std::string mode{argv[2]};
-    if (mode == "consume" || mode == "hold-consumer")
+    const bool consumerBoundary = mode == "consumer-before-credit" || mode == "consumer-after-credit";
+    if (mode == "consume" || mode == "hold-consumer" || consumerBoundary)
     {
-      auto consumer = support::require_value(recorded::RecordedConsumer::open(options));
+      PausedEndpoint observer{mode == "consumer-before-credit" ?
+          recorded::RecordedQueueCheckpoint::DeliveryBeforeCredit : recorded::RecordedQueueCheckpoint::DeliveryAfterCredit};
+      auto consumer = support::require_value(recorded::RecordedConsumer::open(options, consumerBoundary ? &observer : nullptr));
       support::report('O');
       support::report(support::require_value(consumer.claim())._incarnation);
       support::wait_for_parent();
-      if (mode == "consume")
+      if (mode != "hold-consumer")
       {
         const auto message = support::require_value(consumer.try_receive());
         if (!message)
@@ -74,14 +93,19 @@ int main(int argc, char** argv)
       }
       return 0;
     }
-    if (mode != "commit" && mode != "stamp" && mode != "published")
+    if (mode != "partial" && mode != "before-commit" && mode != "after-log-commit" &&
+        mode != "commit" && mode != "stamp" && mode != "published")
     {
       throw std::runtime_error("Unknown recorded Queue worker mode");
     }
-    const auto point = mode == "commit" ? recorded::RecordedQueueCheckpoint::CommittedBeforeHint :
-                       mode == "stamp" ? recorded::RecordedQueueCheckpoint::DescriptorBeforeStamp :
-                                         recorded::RecordedQueueCheckpoint::DescriptorPublished;
-    PausedProducer observer{point};
+    const auto logPoint = mode == "partial" ? recorded::ProducerLogCheckpoint::PartialMaterialization :
+                          mode == "before-commit" ? recorded::ProducerLogCheckpoint::BeforeCommit :
+                                                    recorded::ProducerLogCheckpoint::AfterCommit;
+    const auto queuePoint = mode == "commit" ? recorded::RecordedQueueCheckpoint::CommittedBeforeHint :
+                            mode == "stamp" ? recorded::RecordedQueueCheckpoint::DescriptorBeforeStamp :
+                                              recorded::RecordedQueueCheckpoint::DescriptorPublished;
+    auto observer = mode == "partial" || mode == "before-commit" || mode == "after-log-commit" ?
+        PausedEndpoint{logPoint} : PausedEndpoint{queuePoint};
     auto producer = support::require_value(recorded::RecordedProducer::open(options, &observer));
     const auto claim = support::require_value(producer.claim());
     support::report('O');

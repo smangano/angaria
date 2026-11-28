@@ -1,0 +1,209 @@
+[
+  {
+    "attempts": 3,
+    "baseline_id_send_lookup_receive_ns": {
+      "max": 660.156,
+      "median": 431.641,
+      "min": 382.812
+    },
+    "baseline_major_faults": {
+      "max": 0,
+      "median": 0,
+      "min": 0
+    },
+    "baseline_minor_faults": {
+      "max": 3,
+      "median": 0,
+      "min": 0
+    },
+    "baseline_verified_publications_per_second": 2316740.06871451,
+    "block_samples": 15,
+    "consumer_open_ns": {
+      "max": 77250.0,
+      "median": 66291.0,
+      "min": 57459.0
+    },
+    "following_stream_id_send_lookup_receive_ns": {
+      "max": 1203.735,
+      "median": 511.505,
+      "min": 463.409
+    },
+    "following_stream_major_faults": {
+      "max": 48,
+      "median": 48,
+      "min": 48
+    },
+    "following_stream_minor_faults": {
+      "max": 96,
+      "median": 48,
+      "min": 48
+    },
+    "following_stream_verified_publications_per_second": 1955015.1024916668,
+    "history_before_baseline": 0,
+    "producer_open_ns": {
+      "max": 107625.0,
+      "median": 93250.0,
+      "min": 81583.0
+    },
+    "recovered_id_send_lookup_receive_ns": {
+      "max": 8720.703,
+      "median": 1063.797,
+      "min": 777.984
+    },
+    "recovered_major_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "recovered_minor_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "recovered_verified_publications_per_second": 940028.9716929075,
+    "replay_ns_per_record": {
+      "max": 136.719,
+      "median": 99.609,
+      "min": 91.141
+    },
+    "retained_on_replacement": 64
+  },
+  {
+    "attempts": 3,
+    "baseline_id_send_lookup_receive_ns": {
+      "max": 885.422,
+      "median": 777.344,
+      "min": 717.453
+    },
+    "baseline_major_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "baseline_minor_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "baseline_verified_publications_per_second": 1286431.7470772269,
+    "block_samples": 15,
+    "consumer_open_ns": {
+      "max": 86958.0,
+      "median": 72250.0,
+      "min": 62791.0
+    },
+    "following_stream_id_send_lookup_receive_ns": {
+      "max": 576.945,
+      "median": 506.378,
+      "min": 456.635
+    },
+    "following_stream_major_faults": {
+      "max": 48,
+      "median": 48,
+      "min": 48
+    },
+    "following_stream_minor_faults": {
+      "max": 48,
+      "median": 48,
+      "min": 48
+    },
+    "following_stream_verified_publications_per_second": 1974809.3321589802,
+    "history_before_baseline": 128,
+    "producer_open_ns": {
+      "max": 114917.0,
+      "median": 102917.0,
+      "min": 92666.0
+    },
+    "recovered_id_send_lookup_receive_ns": {
+      "max": 1100.25,
+      "median": 819.672,
+      "min": 746.734
+    },
+    "recovered_major_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "recovered_minor_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "recovered_verified_publications_per_second": 1220000.1952000312,
+    "replay_ns_per_record": {
+      "max": 101.781,
+      "median": 98.958,
+      "min": 85.505
+    },
+    "retained_on_replacement": 192
+  },
+  {
+    "attempts": 3,
+    "baseline_id_send_lookup_receive_ns": {
+      "max": 472.656,
+      "median": 429.688,
+      "min": 406.25
+    },
+    "baseline_major_faults": {
+      "max": 0,
+      "median": 0,
+      "min": 0
+    },
+    "baseline_minor_faults": {
+      "max": 1,
+      "median": 0,
+      "min": 0
+    },
+    "baseline_verified_publications_per_second": 2327270.019176705,
+    "block_samples": 15,
+    "consumer_open_ns": {
+      "max": 262166.0,
+      "median": 233792.0,
+      "min": 228125.0
+    },
+    "following_stream_id_send_lookup_receive_ns": {
+      "max": 945.77,
+      "median": 502.146,
+      "min": 487.905
+    },
+    "following_stream_major_faults": {
+      "max": 48,
+      "median": 48,
+      "min": 48
+    },
+    "following_stream_minor_faults": {
+      "max": 72,
+      "median": 48,
+      "min": 48
+    },
+    "following_stream_verified_publications_per_second": 1991452.685075655,
+    "history_before_baseline": 4096,
+    "producer_open_ns": {
+      "max": 384125.0,
+      "median": 294083.0,
+      "min": 267958.0
+    },
+    "recovered_id_send_lookup_receive_ns": {
+      "max": 507.156,
+      "median": 477.859,
+      "min": 427.734
+    },
+    "recovered_major_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "recovered_minor_faults": {
+      "max": 1,
+      "median": 1,
+      "min": 1
+    },
+    "recovered_verified_publications_per_second": 2092667.502338556,
+    "replay_ns_per_record": {
+      "max": 101.582,
+      "median": 90.104,
+      "min": 86.639
+    },
+    "retained_on_replacement": 4160
+  }
+]

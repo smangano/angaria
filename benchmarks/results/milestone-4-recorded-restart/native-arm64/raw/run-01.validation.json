@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/build/owned-log-normal/angaria_recorded_queue_performance",
+    "--gtest_color=no",
+    "--gtest_output=xml:/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/benchmarks/results/milestone-4-recorded-restart/native-arm64/raw/run-01.xml"
+  ],
+  "elapsed_seconds": 0.12072870798874646,
+  "errors": [],
+  "exit_code": 0,
+  "run": "run-01",
+  "started_utc": "2026-11-28T04:08:25.052462+00:00",
+  "valid": true
+}

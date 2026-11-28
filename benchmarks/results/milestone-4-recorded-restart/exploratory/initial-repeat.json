@@ -1,0 +1,1017 @@
+[
+  [
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 0,
+      "retained_on_replacement": 64,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        424.469,
+        507.812,
+        384.766,
+        387.375,
+        467.438
+      ],
+      "producer_open_ns": [
+        90917.0,
+        92000.0,
+        84959.0,
+        81083.0,
+        95667.0
+      ],
+      "consumer_open_ns": [
+        58459.0,
+        62291.0,
+        60500.0,
+        58542.0,
+        65125.0
+      ],
+      "replay_ns_per_record": [
+        97.0,
+        97.656,
+        91.141,
+        93.094,
+        111.984
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        7941.406,
+        7603.516,
+        8344.406,
+        1117.188,
+        1083.984
+      ],
+      "baseline_verified_publications_per_second": 2355886.034,
+      "recovered_verified_publications_per_second": 131518.109,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 128,
+      "retained_on_replacement": 192,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        947.266,
+        848.953,
+        740.891,
+        755.203,
+        733.062
+      ],
+      "producer_open_ns": [
+        116750.0,
+        112708.0,
+        87417.0,
+        90500.0,
+        105416.0
+      ],
+      "consumer_open_ns": [
+        74417.0,
+        74208.0,
+        62125.0,
+        63708.0,
+        65916.0
+      ],
+      "replay_ns_per_record": [
+        100.26,
+        101.13,
+        87.891,
+        89.844,
+        90.495
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        888.031,
+        826.812,
+        845.703,
+        830.734,
+        813.156
+      ],
+      "baseline_verified_publications_per_second": 1324147.063,
+      "recovered_verified_publications_per_second": 1203754.208,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 4096,
+      "retained_on_replacement": 4160,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        494.141,
+        464.844,
+        433.594,
+        468.75,
+        492.844
+      ],
+      "producer_open_ns": [
+        277625.0,
+        297792.0,
+        316833.0,
+        295792.0,
+        316709.0
+      ],
+      "consumer_open_ns": [
+        243000.0,
+        255792.0,
+        258000.0,
+        256375.0,
+        252375.0
+      ],
+      "replay_ns_per_record": [
+        94.351,
+        98.137,
+        99.319,
+        91.617,
+        88.722
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        489.594,
+        448.562,
+        496.75,
+        481.125,
+        483.062
+      ],
+      "baseline_verified_publications_per_second": 2133333.333,
+      "recovered_verified_publications_per_second": 2070125.501,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    }
+  ],
+  [
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 0,
+      "retained_on_replacement": 64,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        423.828,
+        405.609,
+        389.984,
+        436.188,
+        443.359
+      ],
+      "producer_open_ns": [
+        83000.0,
+        81709.0,
+        81583.0,
+        92417.0,
+        90875.0
+      ],
+      "consumer_open_ns": [
+        57375.0,
+        57167.0,
+        57416.0,
+        61125.0,
+        63167.0
+      ],
+      "replay_ns_per_record": [
+        93.75,
+        95.062,
+        94.406,
+        102.859,
+        110.672
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        7731.766,
+        8074.875,
+        1154.938,
+        881.5,
+        998.703
+      ],
+      "baseline_verified_publications_per_second": 2359447.005,
+      "recovered_verified_publications_per_second": 865847.719,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 128,
+      "retained_on_replacement": 192,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        832.031,
+        725.266,
+        771.484,
+        738.281,
+        740.891
+      ],
+      "producer_open_ns": [
+        102292.0,
+        93292.0,
+        96291.0,
+        90542.0,
+        85792.0
+      ],
+      "consumer_open_ns": [
+        72250.0,
+        75000.0,
+        65167.0,
+        62500.0,
+        60917.0
+      ],
+      "replay_ns_per_record": [
+        99.391,
+        98.094,
+        89.411,
+        88.76,
+        90.062
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        875.0,
+        809.25,
+        847.656,
+        793.609,
+        770.172
+      ],
+      "baseline_verified_publications_per_second": 1349726.891,
+      "recovered_verified_publications_per_second": 1235712.079,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 4096,
+      "retained_on_replacement": 4160,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        432.938,
+        461.594,
+        464.844,
+        455.078,
+        458.984
+      ],
+      "producer_open_ns": [
+        283791.0,
+        292542.0,
+        325833.0,
+        313709.0,
+        289542.0
+      ],
+      "consumer_open_ns": [
+        246042.0,
+        242292.0,
+        264917.0,
+        253083.0,
+        248375.0
+      ],
+      "replay_ns_per_record": [
+        94.331,
+        95.293,
+        105.659,
+        93.339,
+        94.05
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        488.922,
+        486.984,
+        526.047,
+        479.812,
+        476.562
+      ],
+      "baseline_verified_publications_per_second": 2178723.404,
+      "recovered_verified_publications_per_second": 2053453.974,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    }
+  ],
+  [
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 0,
+      "retained_on_replacement": 64,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        521.484,
+        381.516,
+        429.688,
+        392.578,
+        437.5
+      ],
+      "producer_open_ns": [
+        110625.0,
+        79042.0,
+        88667.0,
+        91208.0,
+        93208.0
+      ],
+      "consumer_open_ns": [
+        69000.0,
+        55667.0,
+        65209.0,
+        56458.0,
+        59500.0
+      ],
+      "replay_ns_per_record": [
+        98.953,
+        93.109,
+        103.516,
+        97.0,
+        90.5
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        7919.266,
+        7347.0,
+        963.547,
+        1112.625,
+        846.359
+      ],
+      "baseline_verified_publications_per_second": 2327272.727,
+      "recovered_verified_publications_per_second": 898775.418,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 128,
+      "retained_on_replacement": 192,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        816.406,
+        782.547,
+        740.234,
+        815.75,
+        719.406
+      ],
+      "producer_open_ns": [
+        101125.0,
+        99375.0,
+        90500.0,
+        100792.0,
+        85334.0
+      ],
+      "consumer_open_ns": [
+        65916.0,
+        69833.0,
+        62125.0,
+        72208.0,
+        63208.0
+      ],
+      "replay_ns_per_record": [
+        89.625,
+        85.719,
+        91.578,
+        117.625,
+        89.193
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        813.812,
+        776.703,
+        800.781,
+        979.812,
+        796.234
+      ],
+      "baseline_verified_publications_per_second": 1277878.721,
+      "recovered_verified_publications_per_second": 1248780.488,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 4096,
+      "retained_on_replacement": 4160,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        481.781,
+        451.172,
+        467.453,
+        466.141,
+        420.578
+      ],
+      "producer_open_ns": [
+        293000.0,
+        285625.0,
+        299541.0,
+        295417.0,
+        274583.0
+      ],
+      "consumer_open_ns": [
+        260333.0,
+        257292.0,
+        256042.0,
+        255167.0,
+        255750.0
+      ],
+      "replay_ns_per_record": [
+        94.571,
+        93.72,
+        95.503,
+        95.543,
+        95.082
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        501.953,
+        475.266,
+        518.875,
+        525.391,
+        487.625
+      ],
+      "baseline_verified_publications_per_second": 2145275.366,
+      "recovered_verified_publications_per_second": 1992217.899,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    }
+  ],
+  [
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 0,
+      "retained_on_replacement": 64,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        481.781,
+        456.375,
+        438.141,
+        403.656,
+        1203.125
+      ],
+      "producer_open_ns": [
+        96666.0,
+        89167.0,
+        97000.0,
+        86625.0,
+        101583.0
+      ],
+      "consumer_open_ns": [
+        65625.0,
+        63625.0,
+        66667.0,
+        61833.0,
+        69541.0
+      ],
+      "replay_ns_per_record": [
+        97.0,
+        106.766,
+        106.125,
+        95.047,
+        104.156
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        8345.703,
+        7498.047,
+        6919.266,
+        957.688,
+        932.281
+      ],
+      "baseline_verified_publications_per_second": 2191180.498,
+      "recovered_verified_publications_per_second": 144524.008,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 128,
+      "retained_on_replacement": 192,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        774.734,
+        745.438,
+        829.422,
+        766.266,
+        744.141
+      ],
+      "producer_open_ns": [
+        105083.0,
+        88125.0,
+        96958.0,
+        89291.0,
+        88375.0
+      ],
+      "consumer_open_ns": [
+        73792.0,
+        63333.0,
+        71500.0,
+        63166.0,
+        65000.0
+      ],
+      "replay_ns_per_record": [
+        90.932,
+        90.276,
+        100.698,
+        88.542,
+        89.625
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        849.609,
+        804.688,
+        909.5,
+        807.938,
+        833.328
+      ],
+      "baseline_verified_publications_per_second": 1305030.485,
+      "recovered_verified_publications_per_second": 1200007.5,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 4096,
+      "retained_on_replacement": 4160,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        488.938,
+        489.578,
+        423.828,
+        458.984,
+        416.656
+      ],
+      "producer_open_ns": [
+        315625.0,
+        320875.0,
+        292541.0,
+        291250.0,
+        308958.0
+      ],
+      "consumer_open_ns": [
+        270458.0,
+        283584.0,
+        254916.0,
+        252500.0,
+        252416.0
+      ],
+      "replay_ns_per_record": [
+        96.825,
+        96.715,
+        94.962,
+        94.321,
+        95.853
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        483.062,
+        507.812,
+        490.234,
+        481.781,
+        488.938
+      ],
+      "baseline_verified_publications_per_second": 2178723.404,
+      "recovered_verified_publications_per_second": 2045251.182,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    }
+  ],
+  [
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 0,
+      "retained_on_replacement": 64,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        423.188,
+        394.531,
+        386.719,
+        380.203,
+        416.672
+      ],
+      "producer_open_ns": [
+        82542.0,
+        79959.0,
+        78958.0,
+        85000.0,
+        92750.0
+      ],
+      "consumer_open_ns": [
+        57833.0,
+        54750.0,
+        56334.0,
+        55417.0,
+        63833.0
+      ],
+      "replay_ns_per_record": [
+        93.75,
+        94.406,
+        93.75,
+        93.094,
+        109.375
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        9361.984,
+        6695.953,
+        9340.484,
+        918.609,
+        860.016
+      ],
+      "baseline_verified_publications_per_second": 2534653.465,
+      "recovered_verified_publications_per_second": 149343.937,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 128,
+      "retained_on_replacement": 192,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        782.547,
+        799.484,
+        734.375,
+        763.672,
+        790.359
+      ],
+      "producer_open_ns": [
+        95875.0,
+        103917.0,
+        86667.0,
+        89750.0,
+        97625.0
+      ],
+      "consumer_open_ns": [
+        69792.0,
+        69250.0,
+        60583.0,
+        62958.0,
+        68792.0
+      ],
+      "replay_ns_per_record": [
+        86.151,
+        100.911,
+        86.151,
+        92.016,
+        99.823
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        785.156,
+        972.0,
+        801.422,
+        802.078,
+        841.141
+      ],
+      "baseline_verified_publications_per_second": 1277878.721,
+      "recovered_verified_publications_per_second": 1246761.343,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    },
+    {
+      "study": "recorded_queue_replacement_cost",
+      "history_before_baseline": 4096,
+      "retained_on_replacement": 4160,
+      "payload_bytes": 8,
+      "ring_capacity": 2,
+      "cycles_per_block": 64,
+      "baseline_id_send_lookup_receive_ns": [
+        478.516,
+        465.5,
+        415.359,
+        462.891,
+        412.109
+      ],
+      "producer_open_ns": [
+        295958.0,
+        317083.0,
+        293583.0,
+        294250.0,
+        288041.0
+      ],
+      "consumer_open_ns": [
+        253333.0,
+        298666.0,
+        265250.0,
+        259625.0,
+        248959.0
+      ],
+      "replay_ns_per_record": [
+        93.79,
+        100.27,
+        95.523,
+        99.058,
+        95.222
+      ],
+      "recovered_id_send_lookup_receive_ns": [
+        478.516,
+        466.141,
+        490.891,
+        485.688,
+        475.922
+      ],
+      "baseline_verified_publications_per_second": 2160337.553,
+      "recovered_verified_publications_per_second": 2089795.918,
+      "replay_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "baseline_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "recovered_allocations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "diagnostics_enabled": false
+    }
+  ]
+]
