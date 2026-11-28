@@ -1,0 +1,65 @@
+Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+[==========] Running 28 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 28 tests from PublicRuntimeAdmission
+[ RUN      ] PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup
+[       OK ] PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup (5 ms)
+[ RUN      ] PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds
+[       OK ] PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds (3 ms)
+[ RUN      ] PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease
+[       OK ] PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease (3 ms)
+[ RUN      ] PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies
+[       OK ] PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies (7 ms)
+[ RUN      ] PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation
+[       OK ] PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation (3 ms)
+[ RUN      ] PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema
+[       OK ] PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema (4 ms)
+[ RUN      ] PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches
+[       OK ] PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches (4 ms)
+[ RUN      ] PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent
+[       OK ] PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent (3 ms)
+[ RUN      ] PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues
+[       OK ] PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues (4 ms)
+[ RUN      ] PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue
+[       OK ] PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue (5 ms)
+[ RUN      ] PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark
+[       OK ] PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark (3 ms)
+[ RUN      ] PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck
+[       OK ] PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck (3 ms)
+[ RUN      ] PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken
+[       OK ] PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken (3 ms)
+[ RUN      ] PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck
+[       OK ] PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck (3 ms)
+[ RUN      ] PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit
+[       OK ] PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit (4 ms)
+[ RUN      ] PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage
+[       OK ] PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage (3 ms)
+[ RUN      ] PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld
+[       OK ] PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld (6 ms)
+[ RUN      ] PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread
+[       OK ] PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread (3 ms)
+[ RUN      ] PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim
+[       OK ] PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim (3 ms)
+[ RUN      ] PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent
+[       OK ] PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent (3 ms)
+[ RUN      ] PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation
+[       OK ] PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation (3 ms)
+[ RUN      ] PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens
+[       OK ] PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens (4 ms)
+[ RUN      ] PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation
+[       OK ] PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation (4 ms)
+[ RUN      ] PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence
+[       OK ] PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence (3 ms)
+[ RUN      ] PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages
+[       OK ] PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages (3 ms)
+[ RUN      ] PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement
+[       OK ] PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement (8 ms)
+[ RUN      ] PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing
+[       OK ] PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing (3 ms)
+[ RUN      ] PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable
+[       OK ] PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable (3 ms)
+[----------] 28 tests from PublicRuntimeAdmission (119 ms total)
+
+[----------] Global test environment tear-down
+[==========] 28 tests from 1 test suite ran. (119 ms total)
+[  PASSED  ] 28 tests.

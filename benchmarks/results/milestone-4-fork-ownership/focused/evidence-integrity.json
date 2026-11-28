@@ -1,0 +1,71 @@
+[
+  {
+    "host": "linux-x86_64-head-full",
+    "attempts": 207,
+    "raw_hashes_checked": 207,
+    "summary_recomputed": true,
+    "source": "9618efb501691af8f14251f9f546cbbf87b3fbc1"
+  },
+  {
+    "host": "macos-hosted-head-full",
+    "attempts": 207,
+    "raw_hashes_checked": 207,
+    "summary_recomputed": true,
+    "source": "9618efb501691af8f14251f9f546cbbf87b3fbc1"
+  },
+  {
+    "host": "macos-m4-head-full",
+    "attempts": 207,
+    "raw_hashes_checked": 207,
+    "summary_recomputed": true,
+    "source": "9618efb501691af8f14251f9f546cbbf87b3fbc1"
+  },
+  {
+    "host": "linux-x86_64-paired",
+    "attempts": 36,
+    "raw_reconstruction_verified": true,
+    "summary_recomputed": true,
+    "source": "9618efb501691af8f14251f9f546cbbf87b3fbc1",
+    "verification_log": "linux-x86_64-paired-verify.log"
+  },
+  {
+    "host": "macos-hosted-paired",
+    "attempts": 36,
+    "raw_reconstruction_verified": true,
+    "summary_recomputed": true,
+    "source": "9618efb501691af8f14251f9f546cbbf87b3fbc1",
+    "verification_log": "macos-hosted-paired-verify.log"
+  },
+  {
+    "host": "macos-m4-paired",
+    "attempts": 36,
+    "raw_reconstruction_verified": true,
+    "summary_recomputed": true,
+    "source": "9618efb501691af8f14251f9f546cbbf87b3fbc1",
+    "verification_log": "macos-m4-paired-verify.log"
+  },
+  {
+    "host": "linux-x86_64-confirmation",
+    "attempts": 36,
+    "raw_reconstruction_verified": true,
+    "summary_recomputed": true,
+    "source": "19b76adfc9dcca8c1b5bcc4c0fe4329800e771b8",
+    "verification_log": "linux-x86_64-confirmation-verify.log"
+  },
+  {
+    "host": "macos-hosted-confirmation",
+    "attempts": 36,
+    "raw_reconstruction_verified": true,
+    "summary_recomputed": true,
+    "source": "19b76adfc9dcca8c1b5bcc4c0fe4329800e771b8",
+    "verification_log": "macos-hosted-confirmation-verify.log"
+  },
+  {
+    "host": "macos-m4-confirmation",
+    "attempts": 36,
+    "raw_reconstruction_verified": true,
+    "summary_recomputed": true,
+    "source": "19b76adfc9dcca8c1b5bcc4c0fe4329800e771b8",
+    "verification_log": "macos-m4-confirmation-verify.log"
+  }
+]
