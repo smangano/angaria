@@ -1,0 +1,10 @@
+{
+  "scope": "Exploratory observations only; not pooled with the frozen official study. The initial harness had neither fault counters nor the following stream. The fault-counter pilot first added a 64-message following block; the final pilot extended it to 4096 before source freeze. No exploratory timing outliers were removed.",
+  "sha256": {
+    "initial.stdout.txt": "e4f708b040bec83142b0b30ad8d752c6ffc46444177c8dd96c27f628d86187b3",
+    "initial-repeat.json": "860246a28c01c92f04591ad70a785b0bf69240024a807463fc4dbb654fc182d8",
+    "short-following-with-faults.stdout.txt": "060b087284c2d9d8ce6063fcfa1caa917016e1e2041a926129bb4edc497e7445",
+    "long-following-pilot.stdout.txt": "6a379c4b383efb526681154606aa622c64cb34825714597e6a3b548489177aa7",
+    "initial-harness.cpp.txt": "f663eaf74422e24766a069017c3588514b2401053a18b3cb445047d293a0c705"
+  }
+}
