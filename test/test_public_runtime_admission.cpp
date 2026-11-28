@@ -777,15 +777,32 @@ namespace
     const auto& sourceState = angaria::detail::SourceAccess::state(source);
     const auto taskState = std::atomic_load_explicit(&sourceState->_task, std::memory_order_acquire);
     std::atomic<bool> locked{};
-    std::jthread holder([&](std::stop_token stop)
+    std::atomic<bool> stop{};
+    std::thread holder([&]
     {
       std::scoped_lock locks(taskState->_producerMutex, sourceState->_mutex);
       locked.store(true, std::memory_order_release);
-      while (!stop.stop_requested())
+      while (!stop.load(std::memory_order_acquire))
       {
         std::this_thread::yield();
       }
     });
+    // Keep cleanup automatic if fork fails, an assertion returns early, or
+    // the bounded child wait throws. This test also runs on older libc++.
+    struct StopAndJoin
+    {
+      std::atomic<bool>& _stop;
+      std::thread& _thread;
+
+      ~StopAndJoin()
+      {
+        _stop.store(true, std::memory_order_release);
+        if (_thread.joinable())
+        {
+          _thread.join();
+        }
+      }
+    } joinHolder{stop, holder};
     while (!locked.load(std::memory_order_acquire))
     {
       std::this_thread::yield();
@@ -819,7 +836,7 @@ namespace
     }
     const auto status = angaria::test_support::wait_for_exit(child,
         "Cannot reap inherited-lock child", "Inherited-lock child exceeded its deadline");
-    holder.request_stop();
+    stop.store(true, std::memory_order_release);
     holder.join();
     ASSERT_TRUE(WIFEXITED(status)) << "Child signal: " << (WIFSIGNALED(status) ? WTERMSIG(status) : 0);
     EXPECT_EQ(WEXITSTATUS(status), 0);
