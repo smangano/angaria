@@ -100,6 +100,12 @@ def _hash_stream(source):
 
 
 def metadata(executable, options):
+    """Common host/build identity; each runner adds its own data-plane inputs.
+
+    The public IPC runner reuses this without the retired native-transport
+    executable. Keeping a driver-specific source here would make current IPC
+    provenance fail before starting any participants.
+    """
     def optional(command, cwd=None):
         try:
             return subprocess.check_output(command, cwd=cwd, stderr=subprocess.DEVNULL,
@@ -139,7 +145,7 @@ def metadata(executable, options):
                 "runner_arguments": sys.argv[1:],
                 "summary_method": "median of per-run quantiles; samples are not pooled"}
     sources = {name: sha256(ROOT / name) for name in
-               ("CMakeLists.txt", "VERSION", "benchmarks/native_transport.cpp", "benchmarks/run_native.py")}
+               ("CMakeLists.txt", "VERSION", "benchmarks/run_native.py")}
     return manifest, sources, settings
 
 

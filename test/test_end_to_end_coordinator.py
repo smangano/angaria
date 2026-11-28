@@ -11,12 +11,15 @@ from pathlib import Path
 import sys
 import tarfile
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "benchmarks"))
 import run_end_to_end as coordinator
+import run_native
 
 
 class EndToEndCoordinator(unittest.TestCase):
@@ -138,6 +141,36 @@ class EndToEndCoordinator(unittest.TestCase):
             with self.subTest(encoded=encoded):
                 with self.assertRaises(RuntimeError):
                     coordinator.load_json(encoded)
+
+    def test_current_public_metadata_requires_no_retired_transport_driver(self):
+        # Exercise the real IPC/common-metadata call chain in a minimal current
+        # source/build tree. No native_transport.cpp or former support header
+        # exists here; silently skipping all data-plane hashes is not a fix.
+        source = self.directory / "current-source"
+        (source / "benchmarks").mkdir(parents=True)
+        (source / "src").mkdir()
+        (source / "include/angaria").mkdir(parents=True)
+        inputs = {"CMakeLists.txt": "# Current build fixture\n", "VERSION": "0.4.39\n",
+                  "benchmarks/run_native.py": "# Common metadata fixture\n",
+                  "benchmarks/ipc_comparison.cpp": "// Public IPC adapter fixture\n",
+                  "benchmarks/ipc_comparison_support.h": "// Public IPC wire fixture\n",
+                  "src/public_runtime.cpp": "// Public runtime fixture\n"}
+        for name, content in inputs.items():
+            (source / name).write_text(content)
+        build = self.directory / "current-build"
+        build.mkdir()
+        (build / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n")
+        executable = build / "angaria_ipc_comparison"
+        executable.write_bytes(b"metadata-only executable fixture\n")
+        options = SimpleNamespace(host_label="metadata regression fixture", smoke=True,
+                                  timeout=30, repetitions=1, angaria_profile="public-recorded")
+        with mock.patch.object(run_native, "ROOT", source), mock.patch.object(coordinator.ipc, "ROOT", source):
+            manifest, hashes, settings = coordinator.ipc.comparison_metadata(executable, options)
+        self.assertEqual(manifest["executable_sha256"], coordinator.ipc.sha256(executable))
+        self.assertEqual(settings["CMAKE_BUILD_TYPE"], "Release")
+        for name in inputs:
+            self.assertEqual(hashes[name], coordinator.ipc.sha256(source / name))
+        self.assertFalse(any("native_transport.cpp" in name or "transport_support.h" in name for name in hashes))
 
 
 if __name__ == "__main__":
