@@ -1,5 +1,7 @@
 # Fork-aware ownership: retained measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Framework **0.4.40**, milestone **4.38**, PR [#71](https://github.com/smangano/angaria/pull/71). Baseline [`ee200f0`](https://github.com/smangano/angaria/tree/ee200f06d2f757bfeb6cd7cddbe1b03eb328714b) is merged 0.4.39. Initial token implementation [`9618efb`](https://github.com/smangano/angaria/tree/9618efb501691af8f14251f9f546cbbf87b3fbc1) removes messaging PID queries. Final [`19b76ad`](https://github.com/smangano/angaria/tree/19b76adfc9dcca8c1b5bcc4c0fe4329800e771b8) inlines the flag probe. Test-only commit `026deb3` replaces unavailable `std::jthread`/`stop_token` in the held-lock regression with portable automatic stop/join cleanup; it changes no production messaging code.
 
 ## Method and populations
@@ -10,7 +12,7 @@ The headline change is the **median of six same-round HEAD/BASE throughput ratio
 
 Initial qualification runs comprise **108 paired attempts** and **621 separate full-HEAD attempts** across hosted Linux x86_64, hosted Mac ARM64, and the local Apple M4. The full matrices use the initial non-inlined token implementation and establish its broader workload qualification, not final-inline before/after improvements across all payloads. Final confirmation repeats **108 paired attempts** for the inline implementation. Both phases remain separate below; unfavorable initial measurements are not replaced by confirmation.
 
-[Initial hosted workflow](https://github.com/smangano/angaria/actions/runs/46141428969) built both revisions in each host job and reconstructed raw evidence before plotting. The [final confirmation workflow](https://github.com/smangano/angaria/actions/runs/46143279203) runs paired measurements and the Linux PID guard without repeating the unchanged full workload plan. Every folder retains its manifest, source/build hashes, compiler/host information, reports, raw sample/control archives, recomputed summary and PNG/SVG plots. Workflow artifacts are copied here before their 14-day expiration. The local launcher's Python reports an x86_64 process under translation; both timed Mac binaries are independently verified as native ARM64 in the manifests.
+[Initial hosted workflow](https://github.com/smangano/angaria/actions/runs/46141428969) built both revisions in each host job and reconstructed raw evidence before plotting. The [final confirmation workflow](https://github.com/smangano/angaria/actions/runs/46143279203) runs paired measurements and the Linux PID guard without repeating the unchanged full workload plan. Every folder here retains its manifest, source/build hashes, compiler/host information, reports, recomputed summary and PNG/SVG plots. Raw sample/control archives are preserved in the external archive before workflow artifacts expire after 14 days; restore them before reconstruction. The local launcher's Python reports an x86_64 process under translation; both timed Mac binaries are independently verified as native ARM64 in the manifests.
 
 ## Final inline confirmation
 

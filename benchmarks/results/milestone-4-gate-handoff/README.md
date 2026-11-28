@@ -1,5 +1,7 @@
 # Local gate handoff measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.15**, framework **0.4.17**. The [guide and risk assessment](../../../docs/performance-gate-handoff.md) explain the process-local preference and results. The [diagnostic method](../../../docs/performance-diagnostics.md) defines geometry, operations, phases, counters, and incomplete outcomes.
 
 ## Provenance

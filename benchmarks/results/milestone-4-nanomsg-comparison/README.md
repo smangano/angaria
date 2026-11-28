@@ -1,5 +1,7 @@
 # Independent-process IPC baseline
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.28**, framework **0.4.30**, implements the first 1:1 [comparison phase](../../../docs/nanomsg-comparison-plan.md). The current Angaria acknowledged/recorded path is substantially slower and more variable than classic libnanomsg's unacknowledged/unrecorded IPC path in this workload. The short-burst results also expose long Angaria producer stalls that ordinary per-message medians can hide.
 
 ## Measured latency and completed throughput
@@ -44,7 +46,7 @@ A preliminary adapter characterization with a per-message claim lookup is preser
 ## Retained evidence and reproduction
 
 - [Manifest](linux-x86_64/manifest.toml): host, source/executable hashes, exact dependency/runtime ABI, C/C++ flags, order and limits.
-- [All run outcomes](linux-x86_64/runs.csv), [raw reports](linux-x86_64/reports.jsonl.gz), and [all attempt files](linux-x86_64/raw-attempts.tar.gz): commands, stdout/stderr, control events, per-message timings and reports.
+- [All run outcomes](linux-x86_64/runs.csv), [raw reports](../README.md#restore-archived-evidence), and [all attempt files](../README.md#restore-archived-evidence): commands, stdout/stderr, control events, per-message timings and reports.
 - [SVG figure](comparison-linux-x86_64.svg), [derived table](comparison.csv), and [plot/validation script](generate_figures.py). CSV latency columns explicitly use microseconds. Retained CSV/SVG text uses normalized line endings/whitespace; raw report and attempt archives preserve the original evidence.
 
 Follow the [build and run guide](../../../docs/nanomsg-comparison.md) to collect another matrix. To recreate the figure from retained evidence with Python and Matplotlib:

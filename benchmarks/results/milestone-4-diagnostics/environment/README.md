@@ -13,7 +13,7 @@ Each run uses 128 measured messages, 16 warmups, one serial producer, and an eig
 
 The [whole-program resource report](resource-usage.txt), from `/usr/bin/time -l`, describes another successful run with the same arguments. Its [benchmark report](resource-usage-report.json) verifies 128 completions. It recorded 3.22 s real time, 0.70 s user CPU, 2.34 s system CPU, **627,603 page reclaims**, and 59 page faults. These OS counters include initialization, warmup, work, and teardown. They are not per-operation allocations or storage-device traffic measurements.
 
-The [compressed native stack report](original-arm64-sample.txt.gz) samples a separate 384-message/16-warmup serial run for five seconds. The process completed all 384 messages. Its 3,372 main-thread observations include setup/warmup and multiple public operations, rather than isolating send. The sampler's collapsed top-of-stack table reports:
+The [archived compressed native stack report](../../README.md#restore-archived-evidence) samples a separate 384-message/16-warmup serial run for five seconds. The process completed all 384 messages. Its 3,372 main-thread observations include setup/warmup and multiple public operations, rather than isolating send. The sampler's collapsed top-of-stack table reports:
 
 | Top frame | Observations | Share of main-thread observations |
 | --- | --- | --- |

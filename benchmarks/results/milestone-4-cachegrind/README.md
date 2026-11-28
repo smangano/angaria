@@ -1,5 +1,7 @@
 # Linux Cachegrind cycle profile
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.24**, framework **0.4.26**. [GitHub Linux run 45985142320](https://github.com/smangano/angaria/actions/runs/45985142320/job/140458717930) completed **nine profiles / 144 measured message cycles**, three fresh-Session repetitions at H0/32/128. Every report completes 16/16 with verified data/header/token/acknowledgment and zero pending or unacknowledged-at-stop deliveries. H means messages already sent and acknowledged before the sixteen new cycles. Preloading adds 480 messages outside profiling.
 
 This is a CPU-work/cache-model experiment, not a latency benchmark or optimization. Transport algorithms and public API behavior are unchanged. The [method guide](../../../docs/performance-cachegrind.md) describes opt-in hooks, exact region boundaries, on-demand triggering and reproduction.
