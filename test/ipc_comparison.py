@@ -47,14 +47,15 @@ def independent_hash(row, size):
     return "%016x" % value
 
 
-def run_cohort(executable, output, arguments, messages, history, payload, interval):
+def run_cohort(executable, output, arguments, messages, history, payload, interval, angaria_profile="angaria"):
     result = subprocess.run([sys.executable, "-B", str(ROOT / "benchmarks/run_ipc_comparison.py"),
                              str(executable), "--output", str(output), "--budget-ms", "3000",
                              "--timeout", "10", "--start-lead-ms", "20"] + arguments,
                             capture_output=True, text=True, timeout=45)
     require(result.returncode == 0, "Cohort failed; retained at %s\n%s\n%s" % (output, result.stdout, result.stderr))
     reports = [json.loads(line) for line in (output / "reports.jsonl").read_text().splitlines()]
-    require([row["profile"] for row in reports] == ["angaria", "nanomsg", "nanomsg", "angaria"], "ABBA order changed")
+    require([row["profile"] for row in reports] == [angaria_profile, "nanomsg", "nanomsg", angaria_profile],
+            "ABBA order changed")
     require(all(row["status"] == "complete" for row in reports), "Incomplete smoke population")
     manifest = (output / "manifest.toml").read_text()
     require('"completed_runs" = 4' in manifest and '"failed_runs" = 0' in manifest and '"repetitions" = 2' in manifest,
@@ -107,6 +108,44 @@ def run_cohort(executable, output, arguments, messages, history, payload, interv
                 for row in summary), "Short cohorts invented a tail estimate")
     require(not any(row["profile"] == "nanomsg" and row["metric"] == "acknowledge_api_ns" for row in summary), "PUSH gained a fabricated acknowledgment")
     return reports
+
+
+def recorded_lookup_checks(reports):
+    """The real new-profile rows must prove lookup and include its full cost."""
+    original = reports[0]
+    require(original["profile"] == "recorded-connection", "Wrong lookup-qualification profile")
+    producer, consumer = (original["worker_reports"][role] for role in ipc.ROLES)
+    case = {key: original[key] for key in ipc.DIMENSIONS}
+    t0 = original["control_timing"]["t0_ns"]
+    for worker in (producer, consumer):
+        require(worker["catalog_bytes_before"] == worker["catalog_bytes_after"] > 0 and
+                worker["file_bytes_before"] == worker["file_bytes_after"] > 0,
+                "New runtime changed its sealed catalog or reserved file lengths")
+    require(all(row["lookup_found"] is True for row in producer["rows"]) and
+            original["acknowledged"] == 0 and "lookup_api_ns" in original["metrics"],
+            "New profile omitted its ordinary lookup or gained acknowledgments")
+    for field, wrong in (("lookup_found", False), ("lookup_record_offset", 0),
+                         ("lookup_record_end", 0), ("lookup_record_ordinal", 0),
+                         ("lookup_queue_sequence", 0), ("lookup_start_ns", 0),
+                         ("lookup_end_ns", producer["data_end_ns"] + 1)):
+        pair = copy.deepcopy((producer, consumer))
+        pair[0]["rows"][0][field] = wrong
+        rejected(lambda: ipc.validate_rows(*pair, "recorded-connection", case, t0))
+    missing = copy.deepcopy((producer, consumer))
+    del missing[0]["rows"][0]["lookup_found"]
+    rejected(lambda: ipc.validate_rows(*missing, "recorded-connection", case, t0))
+
+    # Independent timing control: if the final lookup finishes after consumer
+    # verification, complete publication throughput must wait for that lookup.
+    pair = copy.deepcopy((producer, consumer))
+    delayed = max(pair[0]["data_end_ns"], max(row["verified_ns"] for row in pair[1]["rows"])) + 100
+    pair[0]["rows"][-1]["lookup_end_ns"] = delayed
+    pair[0]["data_end_ns"] = delayed + 1
+    pair[0]["resource_end_ns"] = max(pair[0]["resource_end_ns"], delayed + 1)
+    derived = ipc.derive_result(*pair, "recorded-connection", case, t0)
+    require(derived["cohort_verified_ns"] == delayed - t0 and
+            derived["rates"]["bounded_cohort_verified_per_second"] == case["messages"] * 1e9 / (delayed - t0),
+            "Complete throughput excluded required producer outcome lookup")
 
 
 def tamper_checks(reports):
@@ -250,6 +289,13 @@ def main():
         reports = run_cohort(executable, output / "smoke", ["--smoke"], 2, 0, 64, 0)
         run_cohort(executable, output / "history", ["--blocks", "1", "--messages", "3", "--histories", "2",
                                                   "--payload-bytes", "1024", "--interval-ns", "1000000"], 3, 2, 1024, 1000000)
+        recorded = run_cohort(executable, output / "recorded", ["--angaria-profile", "recorded-connection",
+                             "--blocks", "1", "--messages", "8", "--histories", "2", "--payload-bytes", "64",
+                             "--ring-slots", "1"], 8, 2, 64, 0, "recorded-connection")
+        recorded_lookup_checks(recorded)
+        run_cohort(executable, output / "recorded-large", ["--angaria-profile", "recorded-connection",
+                   "--blocks", "1", "--messages", "3", "--histories", "2", "--payload-bytes", "1024",
+                   "--interval-ns", "1000000"], 3, 2, 1024, 1000000, "recorded-connection")
         tamper_checks(reports)
         summary_checks(reports, output / "incomplete-summary")
         cleanup_check(output / "timeout")
@@ -268,7 +314,7 @@ def main():
         print("Retained qualification evidence: " + str(output), file=sys.stderr)
         raise
     shutil.rmtree(output)
-    print("IPC comparison: eight real cohorts, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed")
+    print("IPC comparison: sixteen real cohorts, recorded lookup/credit/order, metadata/wire/tail validation, corruption rejection, and timeout cleanup passed")
 
 
 if __name__ == "__main__":

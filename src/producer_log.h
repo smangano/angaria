@@ -123,6 +123,9 @@ namespace angaria::detail::recorded
     Result<PublicationRecordView> view(const LogReference& reference) const;
     Result<std::uint64_t> committed_end() const;
     Result<std::size_t> record_count() const;
+    // Derived accepted Queue progress, rebuilt at open and advanced at commit.
+    // Reading it does not inspect files or traverse retained Publications.
+    Result<std::uint64_t> queue_sequence(QueueId queue) const;
 
   private:
     struct State;
@@ -145,6 +148,11 @@ namespace angaria::detail::recorded
     // Validate only newly acquired committed ranges and freeze an explicit cut.
     Result<ProducerReplayCursor> capture();
     Result<std::optional<PublicationRecordView>> next(ProducerReplayCursor& cursor) const;
+    // Explicit live extension of this cursor. After its current cut is
+    // exhausted, include at most one additional record, validating at most one
+    // newly committed record. Other cursor copies remain frozen. An empty
+    // poll only acquires the tail; ordinary polls allocate no storage.
+    Result<std::optional<PublicationRecordView>> poll_next(ProducerReplayCursor& cursor);
     Result<PublicationRecordView> view(const LogReference& reference) const;
     Result<OwnedPublicationRecord> copy_record(const LogReference& reference,
                                                std::uint64_t maxPayloadBytes) const;
@@ -153,6 +161,7 @@ namespace angaria::detail::recorded
   private:
     struct State;
     explicit ProducerLogReader(std::unique_ptr<State> state) noexcept;
+    void check_cursor(const ProducerReplayCursor& cursor) const;
     std::unique_ptr<State> _state;
   };
 } // namespace angaria::detail::recorded

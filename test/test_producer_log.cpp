@@ -270,6 +270,8 @@ TEST_F(ProducerLogTest, AppendCommitsCompleteHeadersPayloadAndIndependentQueueSe
 {
   create();
   auto producer = writer();
+  EXPECT_EQ(require_value(producer.queue_sequence(QueueId{4})), 0u);
+  EXPECT_EQ(require_value(producer.queue_sequence(QueueId{5})), 0u);
   const auto firstId = require_value(producer.next_publication_id());
   const auto request = support::producer_append_request(firstId, payload);
   const auto first = require_value(producer.append(request));
@@ -285,6 +287,9 @@ TEST_F(ProducerLogTest, AppendCommitsCompleteHeadersPayloadAndIndependentQueueSe
       require_value(producer.next_publication_id()), payload)));
   EXPECT_EQ(third._queueSequence, 2u);
   EXPECT_EQ(third._recordOrdinal, 3u);
+  EXPECT_EQ(require_value(producer.queue_sequence(QueueId{4})), 2u);
+  EXPECT_EQ(require_value(producer.queue_sequence(QueueId{5})), 1u);
+  expect_error(producer.queue_sequence(QueueId{999}), ErrorCode::InvalidArgument);
   EXPECT_EQ(require_value(producer.committed_end()), third._reference._end);
   EXPECT_EQ(std::filesystem::file_size(_paths._log), _options._header._fileBytes);
 
@@ -301,6 +306,12 @@ TEST_F(ProducerLogTest, AppendCommitsCompleteHeadersPayloadAndIndependentQueueSe
   EXPECT_EQ(destination._enqueuedAt, request._publishedAt);
   EXPECT_EQ(view._schemaReference, request._schemaReference);
   EXPECT_EQ(view._topologyRevision, request._topologyRevision);
+  // Reattachment rebuilds both Queue counters from the shared producer
+  // stream, rather than confusing them with its total publication count.
+  producer = recorded::ProducerLog{};
+  auto restored = writer();
+  EXPECT_EQ(require_value(restored.queue_sequence(QueueId{4})), 2u);
+  EXPECT_EQ(require_value(restored.queue_sequence(QueueId{5})), 1u);
 }
 
 TEST_F(ProducerLogTest, PreparedInputCannotOverridePublicationOrDeliveryIdentity)
@@ -435,6 +446,10 @@ TEST_F(ProducerLogTest, ReopeningAdvancesIncarnationAndRebuildsAcceptanceAndQueu
     unaccepted = require_value(producer.next_publication_id());
   }
   auto replacement = writer();
+  // Queue credit uses recovered accepted progress, not the new claim's local
+  // publication-ID counter or a scan performed by each credit check.
+  EXPECT_EQ(require_value(replacement.queue_sequence(QueueId{4})), 1u);
+  EXPECT_EQ(require_value(replacement.queue_sequence(QueueId{5})), 0u);
   const auto next = require_value(replacement.next_publication_id());
   EXPECT_GT(next._producer._incarnation, accepted._producer._incarnation);
   EXPECT_EQ(next._sequence, 1u);
@@ -447,6 +462,7 @@ TEST_F(ProducerLogTest, ReopeningAdvancesIncarnationAndRebuildsAcceptanceAndQueu
   const auto second = require_value(replacement.append(support::producer_append_request(next, payload)));
   EXPECT_EQ(second._recordOrdinal, 2u);
   EXPECT_EQ(second._queueSequence, 2u);
+  EXPECT_EQ(require_value(replacement.queue_sequence(QueueId{4})), 2u);
 }
 
 TEST_F(ProducerLogTest, ExhaustedOrRolledBackIncarnationsFailWithoutChangingEitherFile)
@@ -533,6 +549,155 @@ TEST_F(ProducerLogTest, ReplayRejectsForgedRecordBoundariesAndForeignPhysicalCur
   require_value(recorded::ProducerLog::create(otherPaths, _options));
   auto other = require_value(recorded::ProducerLogReader::open(otherPaths._log, _options));
   EXPECT_TRUE(std::holds_alternative<Error>(other.next(cut)));
+  expect_error(other.poll_next(cut), ErrorCode::InvalidArgument);
+  recorded::ProducerReplayCursor unbound;
+  expect_error(replay.poll_next(unbound), ErrorCode::InvalidArgument);
+  const auto valid = require_value(replay.poll_next(cut));
+  ASSERT_TRUE(valid);
+  EXPECT_EQ(valid->_reference, first._reference);
+}
+
+TEST_F(ProducerLogTest, LivePollingValidatesOneNewRecordAndPreservesOtherFrozenCuts)
+{
+  create();
+  auto producer = writer();
+  auto replay = reader();
+  auto live = require_value(replay.capture());
+  auto frozen = live;
+  EXPECT_FALSE(require_value(replay.poll_next(live)));
+  EXPECT_EQ(live.record_count(), 0u);
+  EXPECT_EQ(live.committed_end(), recorded::producer_header_bytes);
+
+  std::array<recorded::ProducerAppendResult, 3> accepted;
+  for (std::size_t index = 0; index != accepted.size(); ++index)
+  {
+    const auto queue = index == 1 ? QueueId{5} : QueueId{4};
+    accepted[index] = require_value(producer.append(support::producer_append_request(
+        require_value(producer.next_publication_id()), payload, queue)));
+  }
+  EXPECT_EQ(require_value(replay.committed_end()), accepted.back()._reference._end);
+  const auto original = file_bytes(_paths._log);
+  for (std::size_t index = 0; index != accepted.size(); ++index)
+  {
+    const auto record = require_value(replay.poll_next(live));
+    ASSERT_TRUE(record);
+    EXPECT_EQ(record->_reference, accepted[index]._reference);
+    EXPECT_EQ(record->_recordOrdinal, index + 1);
+    EXPECT_EQ(live.record_count(), index + 1);
+    EXPECT_EQ(live.committed_end(), accepted[index]._reference._end);
+    // A later accepted record must remain unindexed until its own poll. The
+    // full atomic tail is visible, but does not make this an unbounded capture.
+    if (index + 1 != accepted.size())
+    {
+      expect_error(replay.view(accepted[index + 1]._reference), ErrorCode::NotFound);
+    }
+    EXPECT_FALSE(require_value(replay.next(live)));
+    EXPECT_FALSE(require_value(replay.next(frozen)));
+  }
+  EXPECT_EQ(frozen.record_count(), 0u);
+  EXPECT_EQ(frozen.committed_end(), recorded::producer_header_bytes);
+  EXPECT_FALSE(require_value(replay.poll_next(live)));
+  EXPECT_FALSE(require_value(replay.poll_next(live)));
+  EXPECT_EQ(file_bytes(_paths._log), original);
+}
+
+TEST_F(ProducerLogTest, LivePollingReusesValidatedHistoryWithoutExtendingOtherCuts)
+{
+  create();
+  auto producer = writer();
+  std::array<recorded::ProducerAppendResult, 4> accepted;
+  for (std::size_t index = 0; index != 2; ++index)
+  {
+    accepted[index] = require_value(producer.append(support::producer_append_request(
+        require_value(producer.next_publication_id()), payload)));
+  }
+  auto replay = reader();
+  auto live = require_value(replay.capture());
+  auto frozen = live;
+  for (std::size_t index = 2; index != accepted.size(); ++index)
+  {
+    accepted[index] = require_value(producer.append(support::producer_append_request(
+        require_value(producer.next_publication_id()), payload)));
+  }
+  // Polling existing entries does not inspect the new suffix or enlarge the
+  // caller's original cut. The ordinary next() operation remains frozen.
+  for (std::size_t index = 0; index != 2; ++index)
+  {
+    const auto polled = require_value(replay.poll_next(live));
+    ASSERT_TRUE(polled);
+    EXPECT_EQ(polled->_reference, accepted[index]._reference);
+    EXPECT_EQ(live.record_count(), 2u);
+    expect_error(replay.view(accepted[2]._reference), ErrorCode::NotFound);
+    const auto replayed = require_value(replay.next(frozen));
+    ASSERT_TRUE(replayed);
+    EXPECT_EQ(replayed->_reference, accepted[index]._reference);
+  }
+  EXPECT_FALSE(require_value(replay.next(frozen)));
+
+  // A different capture may validate ahead. Live extension still exposes only
+  // one extra entry at a time, reusing that already validated index directly.
+  auto full = require_value(replay.capture());
+  EXPECT_EQ(full.record_count(), accepted.size());
+  for (std::size_t index = 2; index != accepted.size(); ++index)
+  {
+    const auto polled = require_value(replay.poll_next(live));
+    ASSERT_TRUE(polled);
+    EXPECT_EQ(polled->_reference, accepted[index]._reference);
+    EXPECT_EQ(live.record_count(), index + 1);
+    EXPECT_EQ(live.committed_end(), accepted[index]._reference._end);
+    EXPECT_FALSE(require_value(replay.next(frozen)));
+  }
+  EXPECT_FALSE(require_value(replay.poll_next(live)));
+}
+
+TEST_F(ProducerLogTest, LivePollingFailureRemainsClosedAfterTheDamagedRecordIsRepaired)
+{
+  create();
+  auto producer = writer();
+  const auto first = require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  auto replay = reader();
+  auto live = require_value(replay.capture());
+  auto frozen = live;
+  const auto initial = require_value(replay.poll_next(live));
+  ASSERT_TRUE(initial);
+  EXPECT_EQ(initial->_reference, first._reference);
+  const auto second = require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  const auto third = require_value(producer.append(support::producer_append_request(
+      require_value(producer.next_publication_id()), payload)));
+  producer = recorded::ProducerLog{};
+  auto file = require_value(mapped::NativeFile::open_existing(_paths._log, mapped::FileAccess::ReadWrite));
+  std::array<std::byte, 1> savedMagic{};
+  require_value(file.read_exact(third._reference._offset, savedMagic));
+  const std::array damagedMagic{std::byte{0xff}};
+  // Deliberate serialized fault injection, with the producer closed and no
+  // concurrent reader operation. Atomic controls and the valid prefix remain.
+  require_value(file.write_exact(third._reference._offset, damagedMagic));
+  const auto valid = require_value(replay.poll_next(live));
+  ASSERT_TRUE(valid);
+  EXPECT_EQ(valid->_reference, second._reference);
+  EXPECT_EQ(live.record_count(), 2u);
+  expect_error(replay.poll_next(live), ErrorCode::IoError);
+  require_value(file.write_exact(third._reference._offset, savedMagic));
+  expect_error(replay.poll_next(live), ErrorCode::IoError);
+  expect_error(replay.capture(), ErrorCode::IoError);
+  expect_error(replay.next(frozen), ErrorCode::IoError);
+  expect_error(replay.view(first._reference), ErrorCode::IoError);
+  expect_error(replay.view(second._reference), ErrorCode::IoError);
+  EXPECT_EQ(live.record_count(), 2u);
+  EXPECT_EQ(live.committed_end(), second._reference._end);
+
+  auto reopened = reader();
+  auto repaired = require_value(reopened.capture());
+  EXPECT_EQ(repaired.record_count(), 3u);
+  for (const auto& accepted : {first, second, third})
+  {
+    const auto record = require_value(reopened.next(repaired));
+    ASSERT_TRUE(record);
+    EXPECT_EQ(record->_reference, accepted._reference);
+  }
+  EXPECT_FALSE(require_value(reopened.next(repaired)));
 }
 
 TEST_F(ProducerLogTest, AnExistingWriterCannotBeClaimedByAnotherOpenOrExecProcess)
@@ -670,6 +835,7 @@ TEST_F(ProducerLogTest, ObserverErrorsRespectTheSingleCommitAuthority)
     expect_error(producer.append(request), committed ? ErrorCode::OutcomeUnknown : ErrorCode::IoError);
     EXPECT_TRUE(observer.fired());
     EXPECT_EQ(require_value(producer.record_count()), committed ? 1u : 0u);
+    EXPECT_EQ(require_value(producer.queue_sequence(QueueId{4})), committed ? 1u : 0u);
     EXPECT_EQ(require_value(producer.lookup(id)).has_value(), committed);
     auto replay = require_value(recorded::ProducerLogReader::open(paths._log, options));
     auto cut = require_value(replay.capture());
@@ -857,6 +1023,7 @@ TEST_F(ProducerLogTest, IncrementalReplayFailureRemainsClosedAfterTheSuffixIsRep
   // previously valid record would violate the permanent failure guarantee.
   expect_error(replay.capture(), ErrorCode::IoError);
   expect_error(replay.next(oldCut), ErrorCode::IoError);
+  expect_error(replay.poll_next(oldCut), ErrorCode::IoError);
   for (const auto& accepted : {first, second, third})
   {
     expect_error(replay.view(accepted._reference), ErrorCode::IoError);

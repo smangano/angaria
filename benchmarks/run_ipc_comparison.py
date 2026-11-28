@@ -28,6 +28,7 @@ from run_native import ROOT, check, metadata, sha256
 
 
 PROFILES = ("angaria", "nanomsg")
+IDENTITY_PROFILES = ("angaria", "recorded-spsc", "recorded-connection")
 ROLES = ("producer", "consumer")
 DIMENSIONS = ("messages", "history", "payload_bytes", "interval_ns", "socket_buffer_bytes", "budget_ms")
 MAX_STDOUT = 4 * 1024 * 1024
@@ -252,6 +253,18 @@ def common_report(report, role, profile, case, version):
     for key in ("thread_count_start", "thread_count_end"):
         if report.get(key) is not None:
             integer(report[key], key, 1)
+    if profile == "recorded-connection":
+        check(report.get("producer_path_scope") == "ID issuance, try_send retries and ordinary lookup",
+              "Recorded producer path omitted ordinary outcome lookup")
+        check(report.get("lookup_observation_category") == "send", "Missing lookup diagnostic attribution")
+        check(report.get("file_byte_scope") == "reserved producer log, owner and connection; catalog reported separately",
+              "Recorded resource accounting conflates transport and catalog")
+        check(integer(report.get("file_bytes_before"), "reserved bytes", 1) ==
+              integer(report.get("file_bytes_after"), "reserved bytes after", 1),
+              "Recorded data resources grew during communication")
+        check(integer(report.get("catalog_bytes_before"), "catalog bytes", 1) ==
+              integer(report.get("catalog_bytes_after"), "catalog bytes after", 1),
+              "Sealed catalog changed during communication")
 
 
 def validate_rows(producer, consumer, profile, case, t0):
@@ -300,8 +313,25 @@ def validate_rows(producer, consumer, profile, case, t0):
             sample("successful_send_api_ns", success_end - success_start)
             sample("send_backpressure_wall_ns", end - start)
             sample("scheduled_acceptance_ns", end - scheduled)
-            sample("logical_producer_path_ns", end - logical)
-            if profile in ("angaria", "recorded-spsc"):
+            if profile == "recorded-connection":
+                lookup_start, lookup_end = (integer(row.get(key), key) for key in ("lookup_start_ns", "lookup_end_ns"))
+                check(end <= lookup_start <= lookup_end <= producer["data_end_ns"],
+                      "Ordinary lookup escapes the accepted producer path")
+                check(row.get("lookup_found") is True, "Ordinary lookup did not resolve the accepted ID")
+                for suffix in ("record_offset", "record_end", "record_ordinal", "queue_sequence"):
+                    check(integer(row.get("accepted_" + suffix), "accepted " + suffix, 1) ==
+                          integer(row.get("lookup_" + suffix), "lookup " + suffix, 1),
+                          "Ordinary lookup differs from its accepted record")
+                offset, record_end = row["accepted_record_offset"], row["accepted_record_end"]
+                record_bytes = ((128 + 32 + size + 63) // 64) * 64
+                check(offset == 4096 + (sequence - 1) * record_bytes and record_end == offset + record_bytes and
+                      row["accepted_record_ordinal"] == row["accepted_queue_sequence"] == sequence,
+                      "Recorded acceptance boundary or Queue order is inconsistent")
+                sample("lookup_api_ns", lookup_end - lookup_start)
+                sample("logical_producer_path_ns", lookup_end - logical)
+            else:
+                sample("logical_producer_path_ns", end - logical)
+            if profile in IDENTITY_PROFILES:
                 id_start, id_end = (integer(row.get(key), key) for key in ("id_start_ns", "id_end_ns"))
                 check(logical <= id_start <= id_end <= start, "ID issuance escapes the producer path")
                 sample("issue_api_ns", id_end - id_start)
@@ -347,7 +377,7 @@ def validate_rows(producer, consumer, profile, case, t0):
             sample("acknowledge_api_ns", ack_end - ack_start)
         else:
             check(ack_start == ack_end == 0, "Unacknowledged profile reports an acknowledgment")
-        if profile in ("angaria", "recorded-spsc"):
+        if profile in IDENTITY_PROFILES:
             for key in ("publication_sequence", "publication_incarnation"):
                 check(integer(row.get(key), key, 1) == integer(original.get(key), key, 1), "Angaria library identity differs between roles")
         received[sequence] = row
@@ -402,6 +432,10 @@ def derive_result(producer, consumer, profile, case, t0):
     if rows:
         check(bool(accepted_rows), "Verified work has no accepted producer interval")
         last_verified = max(row["verified_ns"] for row in rows)
+        if complete and profile == "recorded-connection":
+            # A fast consumer cannot hide the producer's required outcome
+            # lookup from the complete publication-throughput denominator.
+            last_verified = max(last_verified, max(row["lookup_end_ns"] for row in accepted_rows))
         first_send = min(row["send_start_ns"] for row in accepted_rows)
         cohort_ns, active_ns = last_verified - t0, last_verified - first_send
         check(cohort_ns > 0 and active_ns > 0, "Nonpositive common cohort interval")
@@ -606,6 +640,9 @@ def parse_arguments():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--output", type=Path, required=True, help="new result directory")
     parser.add_argument("--blocks", type=int, default=5, help="ABBA/BAAB blocks; two runs per profile per block")
+    parser.add_argument("--angaria-profile", choices=("angaria", "recorded-connection"), default="angaria",
+                        help="Angaria side of the matched pair; the default retains the current acknowledged runtime")
+    parser.add_argument("--ring-slots", type=int, default=8, help="fixed Angaria Queue credit capacity for this series")
     parser.add_argument("--messages", type=int, default=16)
     parser.add_argument("--histories", default="0,32,128")
     parser.add_argument("--payload-bytes", default="64,256,1024")
@@ -621,6 +658,7 @@ def parse_arguments():
         histories = list(dict.fromkeys(int(value) for value in options.histories.split(",")))
         payloads = list(dict.fromkeys(int(value) for value in options.payload_bytes.split(",")))
         check(options.blocks > 0 and 1 <= options.messages <= 128, "Positive blocks and 1..128 messages required")
+        check(1 <= options.ring_slots <= 128, "Ring slots must be 1..128")
         check(histories and all(0 <= value <= 128 for value in histories), "History must be 0..128")
         check(payloads and all(value in (64, 256, 1024) for value in payloads), "Payload must be 64, 256 or 1024")
         check(1 <= options.budget_ms <= 600000 and options.timeout > 0 and 1024 <= options.socket_buffer_bytes <= (1 << 31) - 1,
@@ -637,6 +675,9 @@ def parse_arguments():
         cases = [dict(messages=options.messages, history=history, payload_bytes=payload,
                       interval_ns=options.interval_ns, socket_buffer_bytes=options.socket_buffer_bytes,
                       budget_ms=options.budget_ms) for history in histories for payload in payloads]
+        if options.angaria_profile == "recorded-connection" or options.ring_slots != 8:
+            for case in cases:
+                case["ring_slots"] = options.ring_slots
     except (ValueError, OSError, RuntimeError) as error:
         parser.error(str(error))
     return options, executable, cases
@@ -663,6 +704,11 @@ def comparison_metadata(executable, options):
     sources["benchmarks/run_ipc_comparison.py"] = sha256(Path(__file__))
     if (ROOT / "test/ipc_comparison.py").is_file():
         sources["test/ipc_comparison.py"] = sha256(ROOT / "test/ipc_comparison.py")
+    if getattr(options, "angaria_profile", "angaria") == "recorded-connection":
+        for directory in ("src", "include/angaria", "benchmarks"):
+            for path in sorted((ROOT / directory).rglob("*")):
+                if path.is_file() and path.suffix in (".h", ".cpp") and " 2." not in path.name:
+                    sources[str(path.relative_to(ROOT))] = sha256(path)
     return manifest, sources, settings
 
 
@@ -682,13 +728,21 @@ def main():
                         throughput_scope="Bounded cohort, not sustained capacity; common T0 and active intervals reported separately",
                         summary_method="Median/min/max of separate-run nearest-rank p50; qualified pooled tails only within identical complete fresh-cohort cells",
                         p99_min_samples=10000, p999_min_samples=1000000,
-                        semantic_profiles=["Angaria acknowledged retained delivery", "classic libnanomsg IPC unacknowledged observed delivery"])
+                        semantic_profiles=["Angaria acknowledged retained delivery" if options.angaria_profile == "angaria" else
+                                           "Private producer-log recorded/unacknowledged delivery with ordinary accepted-ID lookup",
+                                           "classic libnanomsg IPC unrecorded/unacknowledged observed delivery"])
+        manifest["angaria_profile"] = options.angaria_profile
+        if options.angaria_profile == "recorded-connection":
+            manifest.update(ring_slots=options.ring_slots,
+                            throughput_scope="Bounded cohort through both consumer verification and producer ordinary lookup; not sustained capacity",
+                            prepared_scope="Real sealed Registry/schema definitions checked at open; ID, schema-validating send, ordinary lookup and receive timed")
         write_artifacts(output, reports, manifest, sources, settings, cases)
         version = (ROOT / "VERSION").read_text().strip()
         for case in cases:
             for block in range(1, options.blocks + 1):
-                order = ("angaria", "nanomsg", "nanomsg", "angaria") if block % 2 else (
-                    "nanomsg", "angaria", "angaria", "nanomsg")
+                angaria_profile = options.angaria_profile
+                order = (angaria_profile, "nanomsg", "nanomsg", angaria_profile) if block % 2 else (
+                    "nanomsg", angaria_profile, angaria_profile, "nanomsg")
                 for position, profile in enumerate(order, 1):
                     index = len(reports) + 1
                     name = f"attempt-{index:04d}-{profile}-h{case['history']}-b{case['payload_bytes']}"

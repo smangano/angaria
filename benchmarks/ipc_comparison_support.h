@@ -35,7 +35,8 @@ namespace angaria::benchmarks::ipc
   {
     Angaria,
     Nanomsg,
-    RecordedSpsc
+    RecordedSpsc,
+    RecordedConnection
   };
 
   enum class Role
@@ -48,7 +49,8 @@ namespace angaria::benchmarks::ipc
   inline std::string_view profile_name(Profile profile)
   {
     return profile == Profile::Angaria ? "angaria" :
-           profile == Profile::RecordedSpsc ? "recorded-spsc" : "nanomsg";
+           profile == Profile::RecordedSpsc ? "recorded-spsc" :
+           profile == Profile::RecordedConnection ? "recorded-connection" : "nanomsg";
   }
 
   inline std::string_view role_name(Role role)
@@ -98,10 +100,12 @@ namespace angaria::benchmarks::ipc
       const std::string_view argument{argv[++index]};
       if (flag == "--profile")
       {
-        require(!haveProfile && (argument == "angaria" || argument == "nanomsg" || argument == "recorded-spsc"),
-                "Expected one --profile angaria|nanomsg|recorded-spsc");
+        require(!haveProfile && (argument == "angaria" || argument == "nanomsg" || argument == "recorded-spsc" ||
+                                 argument == "recorded-connection"),
+                "Expected one --profile angaria|nanomsg|recorded-spsc|recorded-connection");
         options._profile = argument == "angaria" ? Profile::Angaria :
-                           argument == "recorded-spsc" ? Profile::RecordedSpsc : Profile::Nanomsg;
+                           argument == "recorded-spsc" ? Profile::RecordedSpsc :
+                           argument == "recorded-connection" ? Profile::RecordedConnection : Profile::Nanomsg;
         haveProfile = true;
       }
       else if (flag == "--role")

@@ -33,3 +33,5 @@ benchmarks/results/milestone-4-producer-log-append/*.svg -text whitespace=-blank
 benchmarks/results/milestone-4-producer-log-append/raw/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
 benchmarks/results/milestone-4-producer-log-append/fault-probe/*.patch -text whitespace=-blank-at-eol,-blank-at-eof
 benchmarks/results/milestone-4-producer-log-append/provenance/* -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-recorded-connection/**/*.svg -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-recorded-connection/**/provenance/* -text whitespace=-blank-at-eol,-blank-at-eof
