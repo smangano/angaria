@@ -37,6 +37,13 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
+def cohort_size(rows):
+    counts = {row.get("messages") for row in rows}
+    ipc.check(len(counts) == 1 and all(type(value) is int and value > 0 for value in counts),
+              "Store different message-count cohorts separately; their summaries/plots cannot be pooled")
+    return next(iter(counts))
+
+
 def command_metadata(argv):
     try:
         result = subprocess.run(argv, capture_output=True, text=True, timeout=10)
@@ -140,11 +147,14 @@ def pack(raw, output, commit, extra=None):
         first = next((json.loads(line) for line in stream if line.strip()), {})
     version = first.get("worker_reports", {}).get("producer", {}).get("framework_version",
                 first.get("setup", {}).get("framework_version", "unavailable"))
+    message_counts = sorted({case["messages"] for case in cases})
+    count_description = "/".join(str(value) for value in message_counts) or "unavailable"
     manifest = dict(schema_version=1, source_commit=commit, framework_version=version,
                     retention_script_sha256=ipc.sha256(Path(__file__)),
                     created_utc=datetime.now(timezone.utc).isoformat(), status="retained",
                     runner_metadata=metadata, source_sha256=sources, cmake=cmake, cases=cases,
-                    interpretation="Finite fresh 128-message cohorts by default; no sustained-capacity, p99 or old-engine speedup claim",
+                    message_counts=message_counts,
+                    interpretation="Finite fresh " + count_description + "-message cohorts; no sustained-capacity, p99 or old-engine speedup claim",
                     guarantees=LABELS, raw_archive_scope="All attempt directories, including failed attempts; original stdout/stderr and reports preserved",
                     vm_fault_counts="Not collected by the IPC harness; no fault or physical-I/O inference from timing",
                     cpu_scope="Original worker/process and coordinator intervals retained; includes lead/control waits and library threads")
@@ -197,11 +207,13 @@ def reconstruct(output):
                   "Collection failed or source/build changed; every attempted result remains retained")
     with gzip.open(output / "reports.jsonl.gz", "rt") as stream:
         reports = [json.loads(line) for line in stream if line.strip()]
+    messages = cohort_size(reports)
     metadata = manifest["runner_metadata"]
     ipc.check(metadata.get("status") == "complete" and metadata.get("angaria_profile") == PROFILES[0],
               "Runner did not complete the requested recorded comparison")
     ipc.check(metadata.get("git_tracked_dirty") is False, "Runner did not measure a frozen tracked source tree")
     cases = manifest["cases"]
+    ipc.check(cohort_size(cases) == messages, "Case and report message counts differ")
     ipc.check(len(reports) == metadata["planned_runs"] == len(cases) * metadata["blocks"] * 4,
               "Incomplete matched matrix; retained attempts cannot be silently excluded")
     expected = [(case, block, position, profile) for case in cases for block in range(1, metadata["blocks"] + 1)
@@ -229,6 +241,7 @@ def reconstruct(output):
 
 
 def summaries(reports):
+    cohort_size(reports)
     result = []
     cells = sorted({(row["profile"], row["history"], row["payload_bytes"]) for row in reports})
     for profile, history, payload in cells:
@@ -242,6 +255,7 @@ def summaries(reports):
 
 
 def plot(output, manifest, reports, rows):
+    messages = cohort_size(reports)
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -279,7 +293,7 @@ def plot(output, manifest, reports, rows):
     figure.subplots_adjust(top=.80, bottom=.20, hspace=.48, wspace=.38)
     figure.text(.5, .035,
                 "Dots: every attempt; line: median; whiskers: full run range. Latency points are per-run nearest-rank p50.\n"
-                "Finite fresh " + str(reports[0]["messages"]) + "-message cohorts; throughput waits for verified delivery and Angaria's ordinary producer lookup.\n"
+                "Finite fresh " + str(messages) + "-message cohorts; throughput waits for verified delivery and Angaria's ordinary producer lookup.\n"
                 "Different recording guarantees; no sustained-capacity or per-message p99 claim. No timing outliers are removed.\n"
                 "Angaria uses nonblocking spin/yield; nanomsg uses nonblocking socket calls with poll. Startup and setup are outside data intervals.",
                 ha="center", fontsize=9, linespacing=1.6)

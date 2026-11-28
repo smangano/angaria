@@ -84,6 +84,14 @@ Both profiles run in the same UDS-enabled execution context. No CPU affinity is 
 
 The initial Angaria binding is deliberately private: one outgoing Queue, one Source input and one exact Binary schema per producer/consumer pair. Integrated public Task lifecycle, multi-Queue/schema endpoint sharing, acknowledgment progress, public TOML admission and runtime replacement remain prerequisites described in the [implementation plan](../../../docs/recorded-unacknowledged-delivery-plan.md). The public API and its acknowledged default are unchanged. This series does not claim delivery fan-out, consumer execution-order replay or public-profile admission.
 
+## Initial Linux short-cohort control
+
+The first on-demand Linux x86_64 run used the IPC runner's default **16 messages per cohort**, with **H=0/32/128**, instead of the Mac series' explicit 128 messages and H=0/16/128. All **180 attempts completed** on GitHub-hosted Ubuntu 24.04 x86_64 with GCC **13.3.0**. This valid initial matrix is retained as a [separate short-cohort control](linux-x86_64-cohort16/manifest.json); it is not pooled with the Mac data or any subsequent explicit 128-message Linux series.
+
+Its [primary figure](linux-x86_64-cohort16/latency-throughput.png), [secondary active-window figure](linux-x86_64-cohort16/active-window-latency-throughput.png), [original metadata](linux-x86_64-cohort16/manifest.toml), [all reports](linux-x86_64-cohort16/reports.jsonl.gz) and [raw attempt archive](linux-x86_64-cohort16/raw-attempts.tar.gz) preserve the actual workload and every observation. Its source commit is [`c363a29f15db8a74ba54140788da1f85c4acc584`](https://github.com/smangano/angaria/commit/c363a29f15db8a74ba54140788da1f85c4acc584). Imported Linux provenance comes from the original runner metadata; Mac build/library details are not substituted for that host's missing build snapshots.
+
+An analysis-only follow-up makes packed metadata derive its message-count label from the actual cases and rejects summaries/plots that would pool different cohort sizes. It changes no runtime or IPC timing code. The original Mac 128-message records, numeric plot values and raw evidence remain unchanged.
+
 ## Evidence and reproduction
 
 Measured source: [`8da7d23107f7da3603213a180f1b9b38afa1ca40`](https://github.com/smangano/angaria/commit/8da7d23107f7da3603213a180f1b9b38afa1ca40). The [Mac manifest](macos-arm64/manifest.json) records **283 frozen source/harness input hashes**, executable/Angaria/nanomsg static-library hashes, compiler/build flags and architecture. Source, executable, libraries and build inputs were verified unchanged before and after the run. The Python coordinator is x86_64; the timed C++ executable is native ARM64. Linux results, when collected, must remain a separately labeled host dataset rather than being pooled with this one.

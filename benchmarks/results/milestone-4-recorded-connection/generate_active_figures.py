@@ -59,7 +59,7 @@ def generate(directory):
     figure.legend(handles, labels, loc="upper center", bbox_to_anchor=(.5, .94), frameon=False, fontsize=10)
     figure.suptitle("Secondary active-window comparison — " + manifest["runner_metadata"].get("host_label", ""), fontsize=13)
     figure.subplots_adjust(top=.78, bottom=.23, hspace=.65, wspace=.38)
-    messages = reports[0]["messages"]
+    messages = study.cohort_size(reports)
     capacity = manifest["runner_metadata"]["ring_slots"]
     socket_bytes = reports[0]["socket_buffer_bytes"]
     resolutions = sorted({worker["clock_resolution_ns"] for row in reports for worker in row["worker_reports"].values()})
