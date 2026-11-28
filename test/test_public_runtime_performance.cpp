@@ -5,6 +5,10 @@
 #include "performance_diagnostics.h"
 #include "public_runtime_fixture.h"
 
+#if defined(ANGARIA_TEST_WRAP_GETPID)
+#include "getpid_capture.h"
+#endif
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -15,6 +19,8 @@
 #include <iostream>
 #include <optional>
 #include <variant>
+
+#include <unistd.h>
 
 namespace
 {
@@ -82,6 +88,93 @@ namespace
     }
     return result;
   }
+
+#if defined(ANGARIA_TEST_WRAP_GETPID)
+  TEST(PublicRuntimePerformance, GetpidInterceptionObservesActualCalls)
+  {
+    // A zero count is useful only when the interception itself is qualified.
+    // Both calls still reach libc and must return the real process identity.
+    support::GetpidCapture capture;
+    const auto first = ::getpid();
+    const auto second = ::getpid();
+    const auto observed = capture.stop();
+    EXPECT_GT(first, 0);
+    EXPECT_EQ(first, second);
+    EXPECT_EQ(observed, 2u);
+  }
+
+  TEST(PublicRuntimePerformance, LinuxHotMessagingAvoidsGetpidCallsInBothModes)
+  {
+    for (const bool acknowledged : {false, true})
+    {
+      SCOPED_TRACE(acknowledged ? "required" : "none");
+      support::PublicRuntimeConfiguration configuration;
+      configuration._mode = acknowledged ? AcknowledgmentMode::Required : AcknowledgmentMode::None;
+      configuration._publications = 4096;
+      support::PublicRuntimeFixture fixture(configuration);
+      auto& producer = fixture.created()._creator;
+      auto writer = require_value(producer.open_writer(fixture.queues().front()));
+      auto consumer = require_value(fixture.created()._session.attach_task(fixture.consumer_ids().front()));
+      auto source = require_value(consumer.open_source_set(fixture.sources().front()));
+      const auto payload = fixture.payload(127);
+      const auto outgoing = fixture.message(payload);
+      const auto warm = roundtrips(producer, writer, source, outgoing, acknowledged, 32);
+      ASSERT_TRUE(warm._valid);
+      ASSERT_EQ(warm._completed, 32u);
+      CycleReport result;
+      std::size_t empty{};
+      std::uint64_t calls{};
+      bool progressValid{};
+      {
+        // Setup, teardown and GoogleTest reporting are outside this scope.
+        // Actual symbol interception covers ID/send/status/receive/ACK calls,
+        // including empty polling that optional file counters do not see.
+        support::GetpidCapture capture;
+        result = roundtrips(producer, writer, source, outgoing, acknowledged, cycles);
+        // Also cover owning convenience reports, repeated pins, release and
+        // acknowledgment watermark queries, outside ordinary timing samples.
+        const auto extra = require_value(producer.next_publication_id());
+        const auto accepted = require_value(writer.send(extra, outgoing));
+        const auto status = require_value(producer.publication_status(extra));
+        const auto received = source.receive();
+        progressValid = accepted._status == AcceptanceStatus::Accepted && status._status == AcceptanceStatus::Accepted &&
+            accepted._publication == extra && status._publication == extra &&
+            status._topologyRevision == accepted._topologyRevision &&
+            accepted._destinations.size() == 1 && status._destinations.size() == 1 &&
+            accepted._destinations[0]._queueSequence == status._destinations[0]._queueSequence;
+        if (acknowledged)
+        {
+          const auto delivery = std::get<Delivery>(received);
+          progressValid = progressValid && std::get<Delivery>(source.receive())._token == delivery._token;
+          const auto before = require_value(writer.acknowledged_sequence());
+          require_value(source.release(delivery._token));
+          const auto redelivery = std::get<Delivery>(source.receive());
+          progressValid = progressValid && redelivery._token != delivery._token &&
+              require_value(writer.acknowledged_sequence()) == before;
+          require_value(source.acknowledge(redelivery._token));
+          progressValid = progressValid && require_value(writer.acknowledged_sequence()) == before + 1;
+        }
+        else
+        {
+          const auto unsupported = writer.acknowledged_sequence();
+          const auto* error = std::get_if<Error>(&unsupported);
+          progressValid = progressValid && std::holds_alternative<MessageView>(received) && error &&
+              error->_code == ErrorCode::UnsupportedPolicy;
+        }
+        for (std::size_t index = 0; index != 10000; ++index)
+        {
+          empty += std::holds_alternative<ReceiveTimeout>(source.receive()) ? 1 : 0;
+        }
+        calls = capture.stop();
+      }
+      ASSERT_TRUE(result._valid);
+      EXPECT_EQ(result._completed, cycles);
+      EXPECT_TRUE(progressValid);
+      EXPECT_EQ(empty, 10000u);
+      EXPECT_EQ(calls, 0u);
+    }
+  }
+#endif
 
   TEST(PublicRuntimePerformance, BufferedMessagingKeepsGateFileAndAllocationWorkOutOfBothHotPaths)
   {

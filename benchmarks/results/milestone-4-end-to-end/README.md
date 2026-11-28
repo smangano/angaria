@@ -1,5 +1,7 @@
 # End-to-end qualification: both recorded modes and nanomsg
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Framework **0.4.38**, milestone step **4.36**, workstream step **7**. Measurement source: [`8bcd30810b55a69d00eeed1625a3018e3ced1527`](https://github.com/smangano/angaria/commit/8bcd30810b55a69d00eeed1625a3018e3ced1527). The [methodology](../../../docs/end-to-end-qualification.md) defines every window, guarantee and case. This PR adds qualification coverage; it makes no transport-algorithm speedup claim.
 
 **514 full-matrix attempts completed, with no failed or discarded attempts:** 257 on the local Apple M4 and 257 on one hosted Intel Xeon 6975P-C. Each host runs both recorded modes and nanomsg in the same ordinary Release executable. The six balanced orders put every primary adapter twice in each position. The long case uses three rotations; short legacy controls use five rotations. Two additional hosted native smoke sets retain 22 attempts each.

@@ -1,1 +1,6 @@
 /build/
+
+# Keep large benchmark evidence in the external archive; retain reports and plots.
+/benchmarks/results/**/*.gz
+/benchmarks/results/**/*.out
+/benchmarks/results/**/raw/

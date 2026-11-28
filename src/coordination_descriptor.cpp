@@ -72,6 +72,20 @@ namespace angaria::detail::mapped
     _registrationError = ::pthread_atfork(before_fork, after_fork_parent, after_fork_child);
   }
 
+  Result<ProcessToken> bind_process_token(const std::filesystem::path& diagnostic)
+  {
+    auto& registry = descriptors();
+    if (registry._inheritedChild || registry._ownerPid != static_cast<std::uint64_t>(::getpid()))
+    {
+      return storage_error(ErrorCode::WrongOwner, diagnostic, "Process ownership requires exec after fork");
+    }
+    if (registry._registrationError != 0)
+    {
+      return native_io_error(diagnostic, "register coordination fork handlers", registry._registrationError);
+    }
+    return ProcessToken{&registry._inheritedChild};
+  }
+
   CoordinationDescriptor::~CoordinationDescriptor()
   {
     if (_registry == nullptr)

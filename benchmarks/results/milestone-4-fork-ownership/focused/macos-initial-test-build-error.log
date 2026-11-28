@@ -1,0 +1,265 @@
+macOS ARM64	Build	﻿2026-11-28T11:47:04.1016200Z ##[group]Run cmake --build build --parallel 3
+macOS ARM64	Build	2026-11-28T11:47:04.1016650Z ^[[36;1mcmake --build build --parallel 3^[[0m
+macOS ARM64	Build	2026-11-28T11:47:04.1075470Z shell: /bin/bash -e {0}
+macOS ARM64	Build	2026-11-28T11:47:04.1075900Z ##[endgroup]
+macOS ARM64	Build	2026-11-28T11:47:04.3000780Z [  1%] Building CXX object CMakeFiles/angaria.dir/src/capture.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:04.3021080Z [  1%] Building CXX object CMakeFiles/angaria.dir/src/performance_diagnostics.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:04.3023970Z [  2%] Building CXX object CMakeFiles/angaria_public_api_review.dir/examples/api_review.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:06.9944810Z [  2%] Building CXX object CMakeFiles/angaria.dir/src/inspection.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:07.2877820Z [  3%] Building CXX object CMakeFiles/angaria.dir/src/log.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:09.5232330Z [  3%] Built target angaria_public_api_review
+macOS ARM64	Build	2026-11-28T11:47:09.5434950Z [  3%] Building CXX object CMakeFiles/angaria.dir/src/message_record.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:10.6473550Z [  4%] Building CXX object CMakeFiles/angaria.dir/src/message.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:11.2655980Z [  4%] Building CXX object CMakeFiles/angaria.dir/src/producer_log_format.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:11.6416630Z [  5%] Building CXX object CMakeFiles/angaria.dir/src/producer_log.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:12.2695600Z [  5%] Building CXX object CMakeFiles/angaria.dir/src/recorded_queue.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:12.9953400Z [  6%] Building CXX object CMakeFiles/angaria.dir/src/recorded_progress.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:15.5684050Z [  6%] Building CXX object CMakeFiles/angaria.dir/src/payload.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:16.1153020Z [  7%] Building CXX object CMakeFiles/angaria.dir/src/configuration.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:17.8066800Z [  7%] Building CXX object CMakeFiles/angaria.dir/src/configuration_runtime.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:19.3704730Z [  8%] Building CXX object CMakeFiles/angaria.dir/src/mapped_superblock.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:20.5639200Z [  9%] Building CXX object CMakeFiles/angaria.dir/src/native_file.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:21.5602810Z [  9%] Building CXX object CMakeFiles/angaria.dir/src/native_reservation.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:23.3207520Z [ 10%] Building CXX object CMakeFiles/angaria.dir/src/mapped_region.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:23.5515840Z [ 10%] Building CXX object CMakeFiles/angaria.dir/src/native_atomic.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:25.2998260Z [ 11%] Building CXX object CMakeFiles/angaria.dir/src/coordination_descriptor.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:25.3111800Z [ 11%] Building CXX object CMakeFiles/angaria.dir/src/native_claim.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:25.3873790Z [ 12%] Building CXX object CMakeFiles/angaria.dir/src/session_controller.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:26.6023080Z [ 12%] Building CXX object CMakeFiles/angaria.dir/src/journal_format.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:26.6346210Z [ 13%] Building CXX object CMakeFiles/angaria.dir/src/journal_validation.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:27.7846280Z [ 13%] Building CXX object CMakeFiles/angaria.dir/src/mutation_journal.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:27.8868620Z [ 14%] Building CXX object CMakeFiles/angaria.dir/src/session_metadata.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:28.5676850Z [ 14%] Building CXX object CMakeFiles/angaria.dir/src/runtime_state.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:29.4973770Z [ 15%] Building CXX object CMakeFiles/angaria.dir/src/registry_snapshot.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:30.4033620Z [ 16%] Building CXX object CMakeFiles/angaria.dir/src/runtime_session.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:30.8237320Z [ 16%] Building CXX object CMakeFiles/angaria.dir/src/task_runtime.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:32.8414410Z [ 17%] Building CXX object CMakeFiles/angaria.dir/src/task_registry.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:33.4167350Z [ 17%] Building CXX object CMakeFiles/angaria.dir/src/schema_metadata.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:33.5907730Z [ 18%] Building CXX object CMakeFiles/angaria.dir/src/schema_runtime.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:34.9090750Z [ 18%] Building CXX object CMakeFiles/angaria.dir/src/schema_registry.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:36.5289470Z [ 19%] Building CXX object CMakeFiles/angaria.dir/src/topology_metadata.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:36.6553490Z [ 19%] Building CXX object CMakeFiles/angaria.dir/src/topology_runtime.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:37.4930540Z [ 20%] Building CXX object CMakeFiles/angaria.dir/src/topology_registry.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:38.0490530Z [ 20%] Building CXX object CMakeFiles/angaria.dir/src/topology_policy.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:39.1700900Z [ 21%] Building CXX object CMakeFiles/angaria.dir/src/topology_append.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:39.3331680Z [ 21%] Building CXX object CMakeFiles/angaria.dir/src/topology_mutations.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:40.5352560Z [ 22%] Building CXX object CMakeFiles/angaria.dir/src/endpoint_runtime.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:40.7923040Z [ 23%] Building CXX object CMakeFiles/angaria.dir/src/public_runtime.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:41.9423650Z [ 23%] Building CXX object CMakeFiles/angaria.dir/src/public_runtime_storage.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:42.7334350Z [ 24%] Building CXX object CMakeFiles/angaria.dir/src/source_lifecycle.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:43.0130730Z [ 24%] Building CXX object CMakeFiles/angaria.dir/src/source_receive.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:45.0928660Z [ 25%] Linking CXX static library libangaria.a
+macOS ARM64	Build	2026-11-28T11:47:46.8653840Z [ 25%] Built target angaria
+macOS ARM64	Build	2026-11-28T11:47:46.9267550Z [ 26%] Building CXX object CMakeFiles/angaria_primer_01_session.dir/examples/primer/01_session.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:46.9315730Z [ 26%] Building CXX object CMakeFiles/angaria_inspect.dir/tools/inspect.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:46.9423460Z [ 26%] Building CXX object CMakeFiles/angaria_api_contract.dir/examples/trading_api.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:48.2556330Z [ 27%] Linking CXX executable angaria_primer_01_session
+macOS ARM64	Build	2026-11-28T11:47:48.4048110Z [ 27%] Built target angaria_primer_01_session
+macOS ARM64	Build	2026-11-28T11:47:48.4551590Z [ 27%] Building CXX object CMakeFiles/angaria_primer_02_tasks.dir/examples/primer/02_tasks.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:48.5638190Z [ 28%] Linking CXX executable angaria_inspect
+macOS ARM64	Build	2026-11-28T11:47:48.6611850Z [ 28%] Built target angaria_inspect
+macOS ARM64	Build	2026-11-28T11:47:48.7049830Z [ 28%] Building CXX object CMakeFiles/angaria_primer_03_schemas.dir/examples/primer/03_schemas.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:48.8194730Z [ 28%] Built target angaria_api_contract
+macOS ARM64	Build	2026-11-28T11:47:48.8529930Z [ 28%] Building CXX object CMakeFiles/angaria_primer_04_connections.dir/examples/primer/04_connections.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:49.7110620Z [ 29%] Linking CXX executable angaria_primer_02_tasks
+macOS ARM64	Build	2026-11-28T11:47:49.8153520Z [ 29%] Built target angaria_primer_02_tasks
+macOS ARM64	Build	2026-11-28T11:47:49.8576980Z [ 29%] Building CXX object CMakeFiles/angaria_primer_05_fanout.dir/examples/primer/05_fanout.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:50.2331020Z [ 30%] Linking CXX executable angaria_primer_03_schemas
+macOS ARM64	Build	2026-11-28T11:47:50.2543060Z [ 31%] Linking CXX executable angaria_primer_04_connections
+macOS ARM64	Build	2026-11-28T11:47:50.3672990Z [ 31%] Built target angaria_primer_03_schemas
+macOS ARM64	Build	2026-11-28T11:47:50.3880300Z [ 31%] Built target angaria_primer_04_connections
+macOS ARM64	Build	2026-11-28T11:47:50.4206560Z [ 31%] Building CXX object CMakeFiles/angaria_primer_06_processes.dir/examples/primer/06_processes.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:50.4421220Z [ 31%] Building CXX object CMakeFiles/angaria_primer_07_configuration.dir/examples/primer/07_configuration.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:51.5396360Z [ 32%] Linking CXX executable angaria_primer_05_fanout
+macOS ARM64	Build	2026-11-28T11:47:51.6588950Z [ 32%] Built target angaria_primer_05_fanout
+macOS ARM64	Build	2026-11-28T11:47:51.6991970Z [ 33%] Building CXX object CMakeFiles/angaria_primer_08_registry.dir/examples/primer/08_registry.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:51.8315600Z [ 34%] Linking CXX executable angaria_primer_07_configuration
+macOS ARM64	Build	2026-11-28T11:47:51.9347680Z [ 34%] Built target angaria_primer_07_configuration
+macOS ARM64	Build	2026-11-28T11:47:51.9871410Z [ 35%] Building CXX object CMakeFiles/angaria_primer_09_payload.dir/examples/primer/09_payload.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:52.1613390Z [ 36%] Linking CXX executable angaria_primer_06_processes
+macOS ARM64	Build	2026-11-28T11:47:52.2748550Z [ 36%] Built target angaria_primer_06_processes
+macOS ARM64	Build	2026-11-28T11:47:52.3459800Z [ 37%] Building CXX object CMakeFiles/angaria_primer_10_logical_fields.dir/examples/primer/10_logical_fields.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:53.6292520Z [ 37%] Linking CXX executable angaria_primer_09_payload
+macOS ARM64	Build	2026-11-28T11:47:53.6733580Z [ 37%] Linking CXX executable angaria_primer_08_registry
+macOS ARM64	Build	2026-11-28T11:47:53.7827820Z [ 37%] Built target angaria_primer_09_payload
+macOS ARM64	Build	2026-11-28T11:47:53.8028060Z [ 37%] Built target angaria_primer_08_registry
+macOS ARM64	Build	2026-11-28T11:47:53.8432240Z [ 38%] Building CXX object CMakeFiles/angaria_primer_11_message_record.dir/examples/primer/11_message_record.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:53.8632870Z [ 39%] Building CXX object CMakeFiles/angaria_primer_12_capture.dir/examples/primer/12_capture.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:54.0859840Z [ 39%] Linking CXX executable angaria_primer_10_logical_fields
+macOS ARM64	Build	2026-11-28T11:47:54.2029170Z [ 39%] Built target angaria_primer_10_logical_fields
+macOS ARM64	Build	2026-11-28T11:47:54.2739790Z [ 40%] Building CXX object CMakeFiles/angaria_primer_13_process_exchange.dir/examples/primer/13_process_exchange.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:55.6589050Z [ 40%] Linking CXX executable angaria_primer_11_message_record
+macOS ARM64	Build	2026-11-28T11:47:55.7765700Z [ 40%] Built target angaria_primer_11_message_record
+macOS ARM64	Build	2026-11-28T11:47:55.8216190Z [ 41%] Building CXX object CMakeFiles/angaria_primer_14_direct_send.dir/examples/primer/14_direct_send.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:55.9904820Z [ 41%] Linking CXX executable angaria_primer_12_capture
+macOS ARM64	Build	2026-11-28T11:47:56.1010370Z [ 41%] Built target angaria_primer_12_capture
+macOS ARM64	Build	2026-11-28T11:47:56.1553550Z [ 42%] Building CXX object CMakeFiles/angaria_primer_15_receive.dir/examples/primer/15_receive.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:56.7631960Z [ 42%] Linking CXX executable angaria_primer_13_process_exchange
+macOS ARM64	Build	2026-11-28T11:47:56.8744030Z [ 42%] Built target angaria_primer_13_process_exchange
+macOS ARM64	Build	2026-11-28T11:47:56.9349700Z [ 42%] Building CXX object CMakeFiles/angaria_primer_16_unacknowledged.dir/examples/primer/16_unacknowledged.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:58.0507310Z [ 42%] Linking CXX executable angaria_primer_14_direct_send
+macOS ARM64	Build	2026-11-28T11:47:58.1852160Z [ 42%] Built target angaria_primer_14_direct_send
+macOS ARM64	Build	2026-11-28T11:47:58.2414770Z [ 42%] Building CXX object CMakeFiles/angaria_primer_17_native_pipeline.dir/examples/primer/17_native_pipeline.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:58.7811260Z [ 43%] Linking CXX executable angaria_primer_15_receive
+macOS ARM64	Build	2026-11-28T11:47:58.8946930Z [ 43%] Built target angaria_primer_15_receive
+macOS ARM64	Build	2026-11-28T11:47:58.9490950Z [ 43%] Building CXX object CMakeFiles/angaria_primer_18_log_replay.dir/examples/primer/18_log_replay.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:59.2656990Z [ 44%] Linking CXX executable angaria_primer_16_unacknowledged
+macOS ARM64	Build	2026-11-28T11:47:59.4402330Z [ 44%] Built target angaria_primer_16_unacknowledged
+macOS ARM64	Build	2026-11-28T11:47:59.4512010Z [ 45%] Building CXX object CMakeFiles/angaria_primer_17_native_pipeline.dir/examples/primer/native_pipeline/producers.cpp.o
+macOS ARM64	Build	2026-11-28T11:47:59.4998240Z [ 45%] Building CXX object CMakeFiles/angaria_admission_storage_tests.dir/test/test_mapped_superblock.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:00.6925800Z [ 46%] Linking CXX executable angaria_primer_18_log_replay
+macOS ARM64	Build	2026-11-28T11:48:00.7929660Z [ 46%] Built target angaria_primer_18_log_replay
+macOS ARM64	Build	2026-11-28T11:48:00.8358830Z [ 47%] Building CXX object CMakeFiles/angaria_recorded_admission_tests.dir/test/test_recorded_admission.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:01.1766210Z [ 47%] Building CXX object CMakeFiles/angaria_primer_17_native_pipeline.dir/examples/primer/native_pipeline/consumers.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:01.9006750Z [ 48%] Building CXX object CMakeFiles/angaria_admission_storage_tests.dir/test/test_session_metadata.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:03.2814970Z [ 49%] Linking CXX executable angaria_primer_17_native_pipeline
+macOS ARM64	Build	2026-11-28T11:48:03.4280320Z [ 49%] Built target angaria_primer_17_native_pipeline
+macOS ARM64	Build	2026-11-28T11:48:03.4485720Z [ 49%] Building CXX object CMakeFiles/angaria_recorded_admission_tests.dir/test/test_log_archive.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:04.6594370Z [ 49%] Building CXX object CMakeFiles/angaria_admission_storage_tests.dir/test/test_topology_metadata.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:05.2266200Z [ 49%] Building CXX object CMakeFiles/angaria_public_runtime_consumer_worker.dir/test/public_runtime_consumer_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:06.6409100Z [ 50%] Linking CXX executable angaria_public_runtime_consumer_worker
+macOS ARM64	Build	2026-11-28T11:48:06.7645310Z [ 50%] Built target angaria_public_runtime_consumer_worker
+macOS ARM64	Build	2026-11-28T11:48:06.7848180Z [ 51%] Building CXX object CMakeFiles/angaria_admission_storage_tests.dir/test/test_file_configuration.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:07.8591680Z [ 52%] Linking CXX executable angaria_recorded_admission_tests
+macOS ARM64	Build	2026-11-28T11:48:07.9827240Z [ 52%] Building CXX object CMakeFiles/angaria_admission_storage_tests.dir/test/test_public_runtime_storage.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:08.0232120Z [ 52%] Built target angaria_recorded_admission_tests
+macOS ARM64	Build	2026-11-28T11:48:08.0955040Z [ 52%] Building CXX object CMakeFiles/angaria_public_runtime_performance.dir/test/test_public_runtime_performance.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:11.5535250Z [ 52%] Building CXX object CMakeFiles/angaria_producer_log_performance.dir/test/test_producer_log_performance.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:11.5879730Z [ 53%] Linking CXX executable angaria_public_runtime_performance
+macOS ARM64	Build	2026-11-28T11:48:11.7351420Z [ 53%] Built target angaria_public_runtime_performance
+macOS ARM64	Build	2026-11-28T11:48:11.7985040Z [ 53%] Building CXX object CMakeFiles/angaria_producer_log_append_performance.dir/test/test_producer_log_append_performance.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:13.4006120Z [ 54%] Linking CXX executable angaria_admission_storage_tests
+macOS ARM64	Build	2026-11-28T11:48:13.5887410Z [ 54%] Built target angaria_admission_storage_tests
+macOS ARM64	Build	2026-11-28T11:48:13.6427970Z [ 54%] Building CXX object CMakeFiles/angaria_recorded_queue_performance.dir/test/test_recorded_queue_performance.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:14.3741370Z [ 55%] Linking CXX executable angaria_producer_log_performance
+macOS ARM64	Build	2026-11-28T11:48:14.4994020Z [ 55%] Built target angaria_producer_log_performance
+macOS ARM64	Build	2026-11-28T11:48:14.5511580Z [ 55%] Building CXX object CMakeFiles/angaria_recorded_acknowledged_performance.dir/test/test_recorded_acknowledged_performance.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:16.4528060Z [ 56%] Linking CXX executable angaria_producer_log_append_performance
+macOS ARM64	Build	2026-11-28T11:48:16.5963540Z [ 56%] Built target angaria_producer_log_append_performance
+macOS ARM64	Build	2026-11-28T11:48:16.6575520Z [ 56%] Building CXX object CMakeFiles/angaria_native_atomic_worker.dir/test/native_atomic_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:17.4225940Z [ 57%] Linking CXX executable angaria_recorded_queue_performance
+macOS ARM64	Build	2026-11-28T11:48:17.5552770Z [ 57%] Built target angaria_recorded_queue_performance
+macOS ARM64	Build	2026-11-28T11:48:17.6318240Z [ 57%] Building CXX object CMakeFiles/angaria_native_controller_worker.dir/test/native_controller_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:17.7829100Z [ 58%] Linking CXX executable angaria_recorded_acknowledged_performance
+macOS ARM64	Build	2026-11-28T11:48:17.9247160Z [ 58%] Built target angaria_recorded_acknowledged_performance
+macOS ARM64	Build	2026-11-28T11:48:17.9875980Z [ 58%] Building CXX object CMakeFiles/angaria_native_journal_worker.dir/test/native_journal_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:18.2420380Z [ 59%] Linking CXX executable angaria_native_atomic_worker
+macOS ARM64	Build	2026-11-28T11:48:18.3640200Z [ 59%] Built target angaria_native_atomic_worker
+macOS ARM64	Build	2026-11-28T11:48:18.4585820Z [ 60%] Building CXX object CMakeFiles/angaria_native_session_worker.dir/test/native_session_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:19.4423200Z [ 61%] Linking CXX executable angaria_native_controller_worker
+macOS ARM64	Build	2026-11-28T11:48:19.5793190Z [ 61%] Built target angaria_native_controller_worker
+macOS ARM64	Build	2026-11-28T11:48:19.6400200Z [ 62%] Building CXX object CMakeFiles/angaria_native_registration_worker.dir/test/native_registration_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:20.3212460Z [ 63%] Linking CXX executable angaria_native_journal_worker
+macOS ARM64	Build	2026-11-28T11:48:20.4781450Z [ 63%] Built target angaria_native_journal_worker
+macOS ARM64	Build	2026-11-28T11:48:20.5631920Z [ 64%] Building CXX object CMakeFiles/angaria_native_schema_worker.dir/test/native_schema_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:22.0647040Z [ 64%] Linking CXX executable angaria_native_session_worker
+macOS ARM64	Build	2026-11-28T11:48:22.1894950Z [ 64%] Built target angaria_native_session_worker
+macOS ARM64	Build	2026-11-28T11:48:22.2428610Z [ 65%] Building CXX object CMakeFiles/angaria_native_topology_worker.dir/test/native_topology_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:22.9766240Z [ 65%] Linking CXX executable angaria_native_registration_worker
+macOS ARM64	Build	2026-11-28T11:48:23.1021760Z [ 65%] Built target angaria_native_registration_worker
+macOS ARM64	Build	2026-11-28T11:48:23.2217280Z [ 65%] Building CXX object CMakeFiles/angaria_native_activation_worker.dir/test/native_activation_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:23.5237170Z [ 65%] Linking CXX executable angaria_native_schema_worker
+macOS ARM64	Build	2026-11-28T11:48:23.6246530Z [ 65%] Built target angaria_native_schema_worker
+macOS ARM64	Build	2026-11-28T11:48:23.6785050Z [ 66%] Building CXX object CMakeFiles/angaria_native_registry_worker.dir/test/native_registry_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:24.5023180Z [ 66%] Linking CXX executable angaria_native_topology_worker
+macOS ARM64	Build	2026-11-28T11:48:24.6037890Z [ 66%] Built target angaria_native_topology_worker
+macOS ARM64	Build	2026-11-28T11:48:24.6682020Z [ 67%] Building CXX object CMakeFiles/angaria_capture_diagnostic_worker.dir/test/capture_diagnostic_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:25.1169220Z [ 68%] Linking CXX executable angaria_native_activation_worker
+macOS ARM64	Build	2026-11-28T11:48:25.2406950Z [ 68%] Built target angaria_native_activation_worker
+macOS ARM64	Build	2026-11-28T11:48:25.2967330Z [ 69%] Building CXX object CMakeFiles/angaria_producer_log_worker.dir/test/producer_log_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:26.0712580Z [ 69%] Linking CXX executable angaria_native_registry_worker
+macOS ARM64	Build	2026-11-28T11:48:26.2548730Z [ 69%] Built target angaria_native_registry_worker
+macOS ARM64	Build	2026-11-28T11:48:26.3070570Z [ 69%] Building CXX object CMakeFiles/angaria_recorded_queue_worker.dir/test/recorded_queue_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:26.3515490Z [ 70%] Linking CXX executable angaria_capture_diagnostic_worker
+macOS ARM64	Build	2026-11-28T11:48:26.4705080Z [ 70%] Built target angaria_capture_diagnostic_worker
+macOS ARM64	Build	2026-11-28T11:48:26.5276500Z [ 70%] Building CXX object CMakeFiles/angaria_recorded_queue_independence_worker.dir/test/recorded_queue_independence_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:27.0283940Z [ 70%] Linking CXX executable angaria_producer_log_worker
+macOS ARM64	Build	2026-11-28T11:48:27.1191680Z [ 70%] Built target angaria_producer_log_worker
+macOS ARM64	Build	2026-11-28T11:48:27.1696950Z [ 70%] Building CXX object CMakeFiles/angaria_recorded_acknowledged_queue_worker.dir/test/recorded_acknowledged_queue_worker.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:28.7809130Z [ 71%] Linking CXX executable angaria_recorded_queue_worker
+macOS ARM64	Build	2026-11-28T11:48:28.8816470Z [ 71%] Built target angaria_recorded_queue_worker
+macOS ARM64	Build	2026-11-28T11:48:28.9419890Z [ 72%] Building CXX object CMakeFiles/angaria_native_storage_startup.dir/test/native_storage_startup.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:29.9551410Z [ 73%] Linking CXX executable angaria_recorded_queue_independence_worker
+macOS ARM64	Build	2026-11-28T11:48:30.0735110Z [ 73%] Built target angaria_recorded_queue_independence_worker
+macOS ARM64	Build	2026-11-28T11:48:30.1348150Z [ 73%] Building CXX object CMakeFiles/angaria_native_controller_shutdown.dir/test/native_controller_shutdown.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:30.3614650Z [ 73%] Linking CXX executable angaria_native_storage_startup
+macOS ARM64	Build	2026-11-28T11:48:30.4130900Z [ 74%] Linking CXX executable angaria_recorded_acknowledged_queue_worker
+macOS ARM64	Build	2026-11-28T11:48:30.4558900Z [ 74%] Built target angaria_native_storage_startup
+macOS ARM64	Build	2026-11-28T11:48:30.5100390Z [ 74%] Building CXX object CMakeFiles/angaria_public_runtime_tests.dir/test/test_public_runtime_admission.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:30.5307260Z [ 74%] Built target angaria_recorded_acknowledged_queue_worker
+macOS ARM64	Build	2026-11-28T11:48:30.5810710Z [ 74%] Building CXX object CMakeFiles/angaria_tests.dir/test/test.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:32.1188420Z [ 75%] Linking CXX executable angaria_native_controller_shutdown
+macOS ARM64	Build	2026-11-28T11:48:32.2194960Z [ 75%] Built target angaria_native_controller_shutdown
+macOS ARM64	Build	2026-11-28T11:48:32.2296810Z [ 76%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_performance_diagnostics.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:32.4309240Z [ 76%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_shared_helpers.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:33.2095040Z /Users/runner/work/angaria/angaria/test/test_public_runtime_admission.cpp:780:17: error: expected ';' after expression
+macOS ARM64	Build	2026-11-28T11:48:33.2235860Z   780 |     std::jthread holder([&](std::stop_token stop)
+macOS ARM64	Build	2026-11-28T11:48:33.2317180Z       |                 ^
+macOS ARM64	Build	2026-11-28T11:48:33.2418300Z       |                 ;
+macOS ARM64	Build	2026-11-28T11:48:33.2520600Z /Users/runner/work/angaria/angaria/test/test_public_runtime_admission.cpp:780:5: error: no member named 'jthread' in namespace 'std'; did you mean 'pread'?
+macOS ARM64	Build	2026-11-28T11:48:33.2638450Z   780 |     std::jthread holder([&](std::stop_token stop)
+macOS ARM64	Build	2026-11-28T11:48:33.2739900Z       |     ^~~~~~~~~~~~
+macOS ARM64	Build	2026-11-28T11:48:33.2840420Z       |     pread
+macOS ARM64	Build	2026-11-28T11:48:33.2943180Z /Applications/Xcode_16.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/unistd.h:577:10: note: 'pread' declared here
+macOS ARM64	Build	2026-11-28T11:48:33.3046060Z   577 | ssize_t  pread(int __fd, void *_LIBC_SIZE(__nbyte) __buf, size_t __nbyte, off_t __offset) __DARWIN_ALIAS_C(pread);
+macOS ARM64	Build	2026-11-28T11:48:33.3146340Z       |          ^
+macOS ARM64	Build	2026-11-28T11:48:33.3246960Z /Users/runner/work/angaria/angaria/test/test_public_runtime_admission.cpp:780:34: error: no type named 'stop_token' in namespace 'std'
+macOS ARM64	Build	2026-11-28T11:48:33.3348270Z   780 |     std::jthread holder([&](std::stop_token stop)
+macOS ARM64	Build	2026-11-28T11:48:33.3448530Z       |                             ~~~~~^
+macOS ARM64	Build	2026-11-28T11:48:33.3549570Z /Users/runner/work/angaria/angaria/test/test_public_runtime_admission.cpp:780:18: error: use of undeclared identifier 'holder'
+macOS ARM64	Build	2026-11-28T11:48:33.3650060Z   780 |     std::jthread holder([&](std::stop_token stop)
+macOS ARM64	Build	2026-11-28T11:48:33.3751490Z       |                  ^
+macOS ARM64	Build	2026-11-28T11:48:33.3852940Z /Users/runner/work/angaria/angaria/test/test_public_runtime_admission.cpp:822:5: error: use of undeclared identifier 'holder'
+macOS ARM64	Build	2026-11-28T11:48:33.3955190Z   822 |     holder.request_stop();
+macOS ARM64	Build	2026-11-28T11:48:33.4055860Z       |     ^
+macOS ARM64	Build	2026-11-28T11:48:33.4157600Z /Users/runner/work/angaria/angaria/test/test_public_runtime_admission.cpp:823:5: error: use of undeclared identifier 'holder'
+macOS ARM64	Build	2026-11-28T11:48:33.4259200Z   823 |     holder.join();
+macOS ARM64	Build	2026-11-28T11:48:33.4360980Z       |     ^
+macOS ARM64	Build	2026-11-28T11:48:33.6655830Z 6 errors generated.
+macOS ARM64	Build	2026-11-28T11:48:33.6759480Z make[2]: *** [CMakeFiles/angaria_public_runtime_tests.dir/test/test_public_runtime_admission.cpp.o] Error 1
+macOS ARM64	Build	2026-11-28T11:48:33.6871060Z make[1]: *** [CMakeFiles/angaria_public_runtime_tests.dir/all] Error 2
+macOS ARM64	Build	2026-11-28T11:48:33.6873220Z [ 77%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_append_layout.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:33.6977830Z make[1]: *** Waiting for unfinished jobs....
+macOS ARM64	Build	2026-11-28T11:48:33.9435770Z [ 78%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_field.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:34.5951230Z [ 78%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_payload.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:35.4271220Z [ 79%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_message_record.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:35.5797570Z [ 79%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_message.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:38.3221880Z [ 80%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_producer_log_format.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:40.0030950Z [ 80%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_producer_log.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:41.0392670Z [ 81%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_recorded_queue.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:41.1967250Z [ 81%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_recorded_queue_restart.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:46.3255120Z [ 82%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_recorded_queue_independence.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:46.4169020Z [ 82%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_recorded_acknowledged_queue.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:47.4258350Z [ 83%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_recorded_progress.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:50.6532450Z [ 83%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_recorded_queue_format.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:51.1111100Z [ 84%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_capture.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:53.4823370Z [ 85%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_inspection.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:54.3299070Z [ 85%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_configuration.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:54.3704810Z [ 86%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_registry_snapshot.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:57.9633550Z [ 86%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_registry_qualification.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:58.4518610Z [ 87%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_task_catalog_validation.cpp.o
+macOS ARM64	Build	2026-11-28T11:48:59.0899730Z [ 87%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_identities.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:00.4001110Z [ 88%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_api_contract.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:00.5989740Z [ 88%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_mapped_format.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:00.6978890Z [ 89%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_native_file.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:02.3430820Z [ 89%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_native_atomic.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:02.5522340Z [ 90%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_session_controller.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:04.0899310Z [ 90%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_journal_format.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:04.9475020Z [ 91%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_journal_validation.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:07.5290430Z [ 92%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_mutation_journal.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:07.6163080Z [ 92%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_journal_bulk_redo.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:08.2347030Z [ 93%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_runtime_session.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:09.8379940Z [ 93%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_runtime_access.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:12.6456000Z [ 94%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_task_registration.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:13.2107140Z [ 94%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_task_registration_recovery.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:15.0076610Z [ 95%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_schema_metadata.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:18.4217820Z [ 95%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_schema_registry.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:19.0044870Z [ 96%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_schema_recovery.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:20.2366920Z [ 96%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_topology_registry.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:22.8628910Z [ 97%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_topology_recovery.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:25.7795870Z [ 97%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_topology_activation.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:26.0982740Z [ 98%] Building CXX object CMakeFiles/angaria_tests.dir/test/test_activation_recovery.cpp.o
+macOS ARM64	Build	2026-11-28T11:49:33.4458290Z [ 99%] Linking CXX executable angaria_tests
+macOS ARM64	Build	2026-11-28T11:49:34.2924620Z make: *** [all] Error 2
+macOS ARM64	Build	2026-11-28T11:49:34.2925060Z [ 99%] Built target angaria_tests
+macOS ARM64	Build	2026-11-28T11:49:34.3050970Z ##[error]Process completed with exit code 2.

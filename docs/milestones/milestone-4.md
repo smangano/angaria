@@ -242,3 +242,9 @@ The obsolete Session-gated message engine, old message journal records/compacts,
 Public `LogArchive` freezes one accepted-prefix cut per producer and supplies bounded owning iteration, exact-schema inspection and flat capture export without claiming Tasks or acknowledging work. It preserves producer and Queue order, not a global execution schedule. Standalone catalog/receipt bundles, receipt snapshots and execution traces remain later APIs. The primer's eighteenth lesson demonstrates replay; the sixteenth now demonstrates recorded unacknowledged delivery.
 
 [Public runtime performance qualification](../public-runtime-performance.md) combines allocation/native-work/Session-gate guards with actual public API latency and verified throughput against nanomsg. Its results retain all attempts, uncertainty/reconstruction checks and the differing recording/processing guarantees. Per-Queue processing lower bounds are observable separately from transport credit.
+
+## Step 4.38 — fork-aware ownership checks (0.4.40)
+
+The [ownership optimization](../performance-fork-aware-ownership.md) replaces hot PID calls in public Task/Source operations and producer-log readers with tokens invalidated by the existing registered fork handler. Public checks retain live claims, Thread/parent semantics and rejection before inherited mutexes or atomic shared-pointer operations. Stored format, acceptance, transport credit, acknowledgment and replay remain unchanged.
+
+New primitive/reader and held-lock public fork tests qualify the safety boundary. A Linux interception test calibrates actual `getpid` observations and requires zero direct calls in warmed messaging and empty polling. Matched baseline/head and nanomsg measurements must retain raw evidence, balanced order and observed ranges. The public primer's ownership rules and all eighteen runnable lessons remain applicable; its performance references track this work.

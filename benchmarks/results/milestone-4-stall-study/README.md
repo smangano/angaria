@@ -1,5 +1,7 @@
 # Stall diagnosis and the current-log SPSC experiment
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.29**, framework **0.4.31**, provides a replay-preserving experiment with substantially better observed latency and completed throughput. On the hosted Linux 64-byte/H=128 case, the experimental path delivers **1,510 publications/s versus 80/s** for current acknowledged Angaria, while median logical-start delivery latency falls **4.32 ms → 0.63 ms**. The experiment removes consumer gate/receipt operations; it retains current producer ID issuance, validation and serialized log commit. It supplies no application processing acknowledgment.
 
 ## Ordinary latency and completed throughput
@@ -59,7 +61,7 @@ Linux uses GitHub-hosted Ubuntu 24.04, Intel Xeon 6973P-C, GCC/G++ 13.3.0 and Re
 [Hosted qualification and measurements](https://github.com/smangano/angaria/actions/runs/46077661240) pass on Linux x86_64, Linux ARM64 and macOS ARM64. The ordinary source CI passes its expanded 832-test suites. [Validation records](validation.json) preserve relevant log evidence. The public primer's seventeen runnable lessons were reviewed; the private prototype is not presented as a public unacknowledged API.
 
 - [Mac study](macos-arm64/study.json), [Linux study](linux-x86_64/study.json): complete/incomplete attempt accounting and executable identities.
-- [Mac raw study archive](macos-arm64/raw-study.tar.gz), [Linux raw study archive](linux-x86_64/raw-study.tar.gz): all manifests, source hashes, commands, process/control output, message rows and diagnostic CSVs.
+- [Mac raw study archive](../README.md#restore-archived-evidence), [Linux raw study archive](../README.md#restore-archived-evidence): all manifests, source hashes, commands, process/control output, message rows and diagnostic CSVs.
 - Each host directory also retains five scoped compressed report files, manifests, and outcome/summary CSVs. No Sessions or IPC socket files are retained.
 - [Derived measurements](comparison.csv), [diagnostic totals](diagnostic-findings.json), and [reconstruction/plot script](generate_figures.py). Retained CSV/SVG text has normalized whitespace; raw archives preserve original files.
 

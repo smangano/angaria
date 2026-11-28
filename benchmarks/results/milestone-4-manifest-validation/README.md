@@ -1,5 +1,7 @@
 # Validation-only manifest measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.26**, framework **0.4.28**. The [guide and risk assessment](../../../docs/performance-manifest-validation.md) explain the change: complete journal-history scans validate manifest references and redo-command bytes without constructing owning reference/command vectors or copying payloads. A manifest describes a committed batch; redo commands describe state changes recovery can apply again. Recovery/application retain owning decoding. Shared framing and semantic checks preserve corruption rejection and first-error details. Public APIs, formats, ownership, synchronization and scan frequency remain unchanged.
 
 ## Native latency and throughput

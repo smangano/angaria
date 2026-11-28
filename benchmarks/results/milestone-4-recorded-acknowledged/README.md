@@ -1,5 +1,7 @@
 # Optional acknowledged progress: matched process measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Framework **0.4.37**, milestone step **4.35**, implements [consumer-owned acknowledged progress](../../../docs/recorded-acknowledged-progress.md) over the same producer-owned message log. This study retains **720 complete attempts** in four separate 180-attempt matrices. Every attempt completed, with no budget stops or discarded timing outliers.
 
 **Within their own Linux pairs**, Angaria has higher median active completed throughput in **7/9 unacknowledged cells** and **8/9 acknowledged cells**. Nanomsg has higher median active throughput in **all nine cells of each Mac matrix**. These are host-specific finite-cohort observations with different processing guarantees, buffering and wait policies. They establish neither intrinsic transport speedups nor sustained capacity.

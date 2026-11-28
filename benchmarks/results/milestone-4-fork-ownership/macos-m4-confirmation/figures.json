@@ -1,0 +1,7 @@
+{
+  "attempts": 36,
+  "figures": [
+    "latency-throughput.png"
+  ],
+  "matplotlib": "3.9.2"
+}

@@ -1,0 +1,600 @@
+UpdateCTestConfiguration  from :/private/tmp/angaria-public-admission-diagnostics-build/DartConfiguration.tcl
+Parse Config file:/private/tmp/angaria-public-admission-diagnostics-build/DartConfiguration.tcl
+Test project /private/tmp/angaria-public-admission-diagnostics-build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 3
+      Start  3: PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup
+
+3: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup" "--gtest_also_run_disabled_tests"
+3: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+3: Test timeout computed to be: 30
+3: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+3: Note: Google Test filter = PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup
+3: [==========] Running 1 test from 1 test suite.
+3: [----------] Global test environment set-up.
+3: [----------] 1 test from PublicRuntimeAdmission
+3: [ RUN      ] PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup
+3: [       OK ] PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup (6 ms)
+3: [----------] 1 test from PublicRuntimeAdmission (6 ms total)
+3: 
+3: [----------] Global test environment tear-down
+3: [==========] 1 test from 1 test suite ran. (6 ms total)
+3: [  PASSED  ] 1 test.
+ 1/29 Test  #3: PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup ..............................   Passed    0.01 sec
+test 4
+      Start  4: PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds
+
+4: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds" "--gtest_also_run_disabled_tests"
+4: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+4: Test timeout computed to be: 30
+4: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+4: Note: Google Test filter = PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds
+4: [==========] Running 1 test from 1 test suite.
+4: [----------] Global test environment set-up.
+4: [----------] 1 test from PublicRuntimeAdmission
+4: [ RUN      ] PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds
+4: [       OK ] PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds (5 ms)
+4: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+4: 
+4: [----------] Global test environment tear-down
+4: [==========] 1 test from 1 test suite ran. (5 ms total)
+4: [  PASSED  ] 1 test.
+ 2/29 Test  #4: PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds ...............................   Passed    0.01 sec
+test 5
+      Start  5: PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease
+
+5: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease" "--gtest_also_run_disabled_tests"
+5: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+5: Test timeout computed to be: 30
+5: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+5: Note: Google Test filter = PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease
+5: [==========] Running 1 test from 1 test suite.
+5: [----------] Global test environment set-up.
+5: [----------] 1 test from PublicRuntimeAdmission
+5: [ RUN      ] PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease
+5: [       OK ] PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease (5 ms)
+5: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+5: 
+5: [----------] Global test environment tear-down
+5: [==========] 1 test from 1 test suite ran. (5 ms total)
+5: [  PASSED  ] 1 test.
+ 3/29 Test  #5: PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease ...................   Passed    0.01 sec
+test 6
+      Start  6: PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies
+
+6: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies" "--gtest_also_run_disabled_tests"
+6: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+6: Test timeout computed to be: 30
+6: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+6: Note: Google Test filter = PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies
+6: [==========] Running 1 test from 1 test suite.
+6: [----------] Global test environment set-up.
+6: [----------] 1 test from PublicRuntimeAdmission
+6: [ RUN      ] PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies
+6: [       OK ] PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies (9 ms)
+6: [----------] 1 test from PublicRuntimeAdmission (9 ms total)
+6: 
+6: [----------] Global test environment tear-down
+6: [==========] 1 test from 1 test suite ran. (9 ms total)
+6: [  PASSED  ] 1 test.
+ 4/29 Test  #6: PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies ..................   Passed    0.01 sec
+test 7
+      Start  7: PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation
+
+7: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation" "--gtest_also_run_disabled_tests"
+7: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+7: Test timeout computed to be: 30
+7: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+7: Note: Google Test filter = PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation
+7: [==========] Running 1 test from 1 test suite.
+7: [----------] Global test environment set-up.
+7: [----------] 1 test from PublicRuntimeAdmission
+7: [ RUN      ] PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation
+7: [       OK ] PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation (4 ms)
+7: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+7: 
+7: [----------] Global test environment tear-down
+7: [==========] 1 test from 1 test suite ran. (5 ms total)
+7: [  PASSED  ] 1 test.
+ 5/29 Test  #7: PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation ...............   Passed    0.01 sec
+test 8
+      Start  8: PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema
+
+8: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema" "--gtest_also_run_disabled_tests"
+8: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+8: Test timeout computed to be: 30
+8: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+8: Note: Google Test filter = PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema
+8: [==========] Running 1 test from 1 test suite.
+8: [----------] Global test environment set-up.
+8: [----------] 1 test from PublicRuntimeAdmission
+8: [ RUN      ] PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema
+8: [       OK ] PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema (7 ms)
+8: [----------] 1 test from PublicRuntimeAdmission (7 ms total)
+8: 
+8: [----------] Global test environment tear-down
+8: [==========] 1 test from 1 test suite ran. (7 ms total)
+8: [  PASSED  ] 1 test.
+ 6/29 Test  #8: PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema ...................   Passed    0.01 sec
+test 9
+      Start  9: PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches
+
+9: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches" "--gtest_also_run_disabled_tests"
+9: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+9: Test timeout computed to be: 30
+9: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+9: Note: Google Test filter = PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches
+9: [==========] Running 1 test from 1 test suite.
+9: [----------] Global test environment set-up.
+9: [----------] 1 test from PublicRuntimeAdmission
+9: [ RUN      ] PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches
+9: [       OK ] PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches (6 ms)
+9: [----------] 1 test from PublicRuntimeAdmission (6 ms total)
+9: 
+9: [----------] Global test environment tear-down
+9: [==========] 1 test from 1 test suite ran. (6 ms total)
+9: [  PASSED  ] 1 test.
+ 7/29 Test  #9: PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches .......................   Passed    0.01 sec
+test 10
+      Start 10: PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent
+
+10: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent" "--gtest_also_run_disabled_tests"
+10: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+10: Test timeout computed to be: 30
+10: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+10: Note: Google Test filter = PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent
+10: [==========] Running 1 test from 1 test suite.
+10: [----------] Global test environment set-up.
+10: [----------] 1 test from PublicRuntimeAdmission
+10: [ RUN      ] PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent
+10: [       OK ] PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent (5 ms)
+10: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+10: 
+10: [----------] Global test environment tear-down
+10: [==========] 1 test from 1 test suite ran. (5 ms total)
+10: [  PASSED  ] 1 test.
+ 8/29 Test #10: PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent ........................   Passed    0.01 sec
+test 11
+      Start 11: PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues
+
+11: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues" "--gtest_also_run_disabled_tests"
+11: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+11: Test timeout computed to be: 30
+11: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+11: Note: Google Test filter = PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues
+11: [==========] Running 1 test from 1 test suite.
+11: [----------] Global test environment set-up.
+11: [----------] 1 test from PublicRuntimeAdmission
+11: [ RUN      ] PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues
+11: [       OK ] PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues (5 ms)
+11: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+11: 
+11: [----------] Global test environment tear-down
+11: [==========] 1 test from 1 test suite ran. (5 ms total)
+11: [  PASSED  ] 1 test.
+ 9/29 Test #11: PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues .....................   Passed    0.01 sec
+test 12
+      Start 12: PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue
+
+12: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue" "--gtest_also_run_disabled_tests"
+12: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+12: Test timeout computed to be: 30
+12: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+12: Note: Google Test filter = PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue
+12: [==========] Running 1 test from 1 test suite.
+12: [----------] Global test environment set-up.
+12: [----------] 1 test from PublicRuntimeAdmission
+12: [ RUN      ] PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue
+12: [       OK ] PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue (6 ms)
+12: [----------] 1 test from PublicRuntimeAdmission (6 ms total)
+12: 
+12: [----------] Global test environment tear-down
+12: [==========] 1 test from 1 test suite ran. (6 ms total)
+12: [  PASSED  ] 1 test.
+10/29 Test #12: PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue ................   Passed    0.01 sec
+test 13
+      Start 13: PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark
+
+13: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark" "--gtest_also_run_disabled_tests"
+13: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+13: Test timeout computed to be: 30
+13: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+13: Note: Google Test filter = PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark
+13: [==========] Running 1 test from 1 test suite.
+13: [----------] Global test environment set-up.
+13: [----------] 1 test from PublicRuntimeAdmission
+13: [ RUN      ] PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark
+13: [       OK ] PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark (4 ms)
+13: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+13: 
+13: [----------] Global test environment tear-down
+13: [==========] 1 test from 1 test suite ran. (4 ms total)
+13: [  PASSED  ] 1 test.
+11/29 Test #13: PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark ...............   Passed    0.01 sec
+test 14
+      Start 14: PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck
+
+14: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck" "--gtest_also_run_disabled_tests"
+14: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+14: Test timeout computed to be: 30
+14: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+14: Note: Google Test filter = PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck
+14: [==========] Running 1 test from 1 test suite.
+14: [----------] Global test environment set-up.
+14: [----------] 1 test from PublicRuntimeAdmission
+14: [ RUN      ] PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck
+14: [       OK ] PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck (4 ms)
+14: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+14: 
+14: [----------] Global test environment tear-down
+14: [==========] 1 test from 1 test suite ran. (4 ms total)
+14: [  PASSED  ] 1 test.
+12/29 Test #14: PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck ...   Passed    0.01 sec
+test 15
+      Start 15: PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken
+
+15: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken" "--gtest_also_run_disabled_tests"
+15: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+15: Test timeout computed to be: 30
+15: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+15: Note: Google Test filter = PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken
+15: [==========] Running 1 test from 1 test suite.
+15: [----------] Global test environment set-up.
+15: [----------] 1 test from PublicRuntimeAdmission
+15: [ RUN      ] PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken
+15: [       OK ] PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken (4 ms)
+15: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+15: 
+15: [----------] Global test environment tear-down
+15: [==========] 1 test from 1 test suite ran. (4 ms total)
+15: [  PASSED  ] 1 test.
+13/29 Test #15: PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken ...........................   Passed    0.01 sec
+test 16
+      Start 16: PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck
+
+16: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck" "--gtest_also_run_disabled_tests"
+16: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+16: Test timeout computed to be: 30
+16: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+16: Note: Google Test filter = PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck
+16: [==========] Running 1 test from 1 test suite.
+16: [----------] Global test environment set-up.
+16: [----------] 1 test from PublicRuntimeAdmission
+16: [ RUN      ] PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck
+16: [       OK ] PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck (4 ms)
+16: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+16: 
+16: [----------] Global test environment tear-down
+16: [==========] 1 test from 1 test suite ran. (4 ms total)
+16: [  PASSED  ] 1 test.
+14/29 Test #16: PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck ...................   Passed    0.01 sec
+test 17
+      Start 17: PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit
+
+17: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit" "--gtest_also_run_disabled_tests"
+17: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+17: Test timeout computed to be: 30
+17: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+17: Note: Google Test filter = PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit
+17: [==========] Running 1 test from 1 test suite.
+17: [----------] Global test environment set-up.
+17: [----------] 1 test from PublicRuntimeAdmission
+17: [ RUN      ] PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit
+17: [       OK ] PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit (5 ms)
+17: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+17: 
+17: [----------] Global test environment tear-down
+17: [==========] 1 test from 1 test suite ran. (5 ms total)
+17: [  PASSED  ] 1 test.
+15/29 Test #17: PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit ......................................   Passed    0.01 sec
+test 18
+      Start 18: PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage
+
+18: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage" "--gtest_also_run_disabled_tests"
+18: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+18: Test timeout computed to be: 30
+18: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+18: Note: Google Test filter = PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage
+18: [==========] Running 1 test from 1 test suite.
+18: [----------] Global test environment set-up.
+18: [----------] 1 test from PublicRuntimeAdmission
+18: [ RUN      ] PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage
+18: [       OK ] PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage (4 ms)
+18: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+18: 
+18: [----------] Global test environment tear-down
+18: [==========] 1 test from 1 test suite ran. (4 ms total)
+18: [  PASSED  ] 1 test.
+16/29 Test #18: PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage ..........................   Passed    0.01 sec
+test 19
+      Start 19: PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld
+
+19: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld" "--gtest_also_run_disabled_tests"
+19: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+19: Test timeout computed to be: 30
+19: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+19: Note: Google Test filter = PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld
+19: [==========] Running 1 test from 1 test suite.
+19: [----------] Global test environment set-up.
+19: [----------] 1 test from PublicRuntimeAdmission
+19: [ RUN      ] PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld
+19: [       OK ] PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld (7 ms)
+19: [----------] 1 test from PublicRuntimeAdmission (7 ms total)
+19: 
+19: [----------] Global test environment tear-down
+19: [==========] 1 test from 1 test suite ran. (7 ms total)
+19: [  PASSED  ] 1 test.
+17/29 Test #19: PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld .............   Passed    0.01 sec
+test 20
+      Start 20: PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread
+
+20: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread" "--gtest_also_run_disabled_tests"
+20: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+20: Test timeout computed to be: 30
+20: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+20: Note: Google Test filter = PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread
+20: [==========] Running 1 test from 1 test suite.
+20: [----------] Global test environment set-up.
+20: [----------] 1 test from PublicRuntimeAdmission
+20: [ RUN      ] PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread
+20: [       OK ] PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread (5 ms)
+20: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+20: 
+20: [----------] Global test environment tear-down
+20: [==========] 1 test from 1 test suite ran. (5 ms total)
+20: [  PASSED  ] 1 test.
+18/29 Test #20: PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread ..........................   Passed    0.01 sec
+test 21
+      Start 21: PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim
+
+21: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim" "--gtest_also_run_disabled_tests"
+21: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+21: Test timeout computed to be: 30
+21: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+21: Note: Google Test filter = PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim
+21: [==========] Running 1 test from 1 test suite.
+21: [----------] Global test environment set-up.
+21: [----------] 1 test from PublicRuntimeAdmission
+21: [ RUN      ] PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim
+21: [       OK ] PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim (4 ms)
+21: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+21: 
+21: [----------] Global test environment tear-down
+21: [==========] 1 test from 1 test suite ran. (4 ms total)
+21: [  PASSED  ] 1 test.
+19/29 Test #21: PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim .............   Passed    0.01 sec
+test 22
+      Start 22: PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent
+
+22: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent" "--gtest_also_run_disabled_tests"
+22: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+22: Test timeout computed to be: 30
+22: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+22: Note: Google Test filter = PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent
+22: [==========] Running 1 test from 1 test suite.
+22: [----------] Global test environment set-up.
+22: [----------] 1 test from PublicRuntimeAdmission
+22: [ RUN      ] PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent
+22: [       OK ] PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent (5 ms)
+22: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+22: 
+22: [----------] Global test environment tear-down
+22: [==========] 1 test from 1 test suite ran. (5 ms total)
+22: [  PASSED  ] 1 test.
+20/29 Test #22: PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent ................   Passed    0.01 sec
+test 23
+      Start 23: PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation
+
+23: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation" "--gtest_also_run_disabled_tests"
+23: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+23: Test timeout computed to be: 30
+23: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+23: Note: Google Test filter = PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation
+23: [==========] Running 1 test from 1 test suite.
+23: [----------] Global test environment set-up.
+23: [----------] 1 test from PublicRuntimeAdmission
+23: [ RUN      ] PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation
+23: [       OK ] PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation (6 ms)
+23: [----------] 1 test from PublicRuntimeAdmission (6 ms total)
+23: 
+23: [----------] Global test environment tear-down
+23: [==========] 1 test from 1 test suite ran. (6 ms total)
+23: [  PASSED  ] 1 test.
+21/29 Test #23: PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation ................   Passed    0.01 sec
+test 24
+      Start 24: PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens
+
+24: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens" "--gtest_also_run_disabled_tests"
+24: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+24: Test timeout computed to be: 30
+24: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+24: Note: Google Test filter = PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens
+24: [==========] Running 1 test from 1 test suite.
+24: [----------] Global test environment set-up.
+24: [----------] 1 test from PublicRuntimeAdmission
+24: [ RUN      ] PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens
+24: [       OK ] PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens (5 ms)
+24: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+24: 
+24: [----------] Global test environment tear-down
+24: [==========] 1 test from 1 test suite ran. (5 ms total)
+24: [  PASSED  ] 1 test.
+22/29 Test #24: PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens ................   Passed    0.01 sec
+test 25
+      Start 25: PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation
+
+25: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation" "--gtest_also_run_disabled_tests"
+25: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+25: Test timeout computed to be: 30
+25: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+25: Note: Google Test filter = PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation
+25: [==========] Running 1 test from 1 test suite.
+25: [----------] Global test environment set-up.
+25: [----------] 1 test from PublicRuntimeAdmission
+25: [ RUN      ] PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation
+25: [       OK ] PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation (5 ms)
+25: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+25: 
+25: [----------] Global test environment tear-down
+25: [==========] 1 test from 1 test suite ran. (5 ms total)
+25: [  PASSED  ] 1 test.
+23/29 Test #25: PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation ...............   Passed    0.01 sec
+test 26
+      Start 26: PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence
+
+26: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence" "--gtest_also_run_disabled_tests"
+26: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+26: Test timeout computed to be: 30
+26: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+26: Note: Google Test filter = PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence
+26: [==========] Running 1 test from 1 test suite.
+26: [----------] Global test environment set-up.
+26: [----------] 1 test from PublicRuntimeAdmission
+26: [ RUN      ] PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence
+26: [       OK ] PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence (5 ms)
+26: [----------] 1 test from PublicRuntimeAdmission (5 ms total)
+26: 
+26: [----------] Global test environment tear-down
+26: [==========] 1 test from 1 test suite ran. (5 ms total)
+26: [  PASSED  ] 1 test.
+24/29 Test #26: PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence ..............   Passed    0.01 sec
+test 27
+      Start 27: PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages
+
+27: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages" "--gtest_also_run_disabled_tests"
+27: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+27: Test timeout computed to be: 30
+27: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+27: Note: Google Test filter = PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages
+27: [==========] Running 1 test from 1 test suite.
+27: [----------] Global test environment set-up.
+27: [----------] 1 test from PublicRuntimeAdmission
+27: [ RUN      ] PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages
+27: [       OK ] PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages (4 ms)
+27: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+27: 
+27: [----------] Global test environment tear-down
+27: [==========] 1 test from 1 test suite ran. (4 ms total)
+27: [  PASSED  ] 1 test.
+25/29 Test #27: PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages ..........   Passed    0.01 sec
+test 28
+      Start 28: PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement
+
+28: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement" "--gtest_also_run_disabled_tests"
+28: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+28: Test timeout computed to be: 30
+28: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+28: Note: Google Test filter = PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement
+28: [==========] Running 1 test from 1 test suite.
+28: [----------] Global test environment set-up.
+28: [----------] 1 test from PublicRuntimeAdmission
+28: [ RUN      ] PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement
+28: [       OK ] PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement (62 ms)
+28: [----------] 1 test from PublicRuntimeAdmission (62 ms total)
+28: 
+28: [----------] Global test environment tear-down
+28: [==========] 1 test from 1 test suite ran. (62 ms total)
+28: [  PASSED  ] 1 test.
+26/29 Test #28: PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement ............   Passed    0.07 sec
+test 29
+      Start 29: PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing
+
+29: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing" "--gtest_also_run_disabled_tests"
+29: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+29: Test timeout computed to be: 30
+29: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+29: Note: Google Test filter = PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing
+29: [==========] Running 1 test from 1 test suite.
+29: [----------] Global test environment set-up.
+29: [----------] 1 test from PublicRuntimeAdmission
+29: [ RUN      ] PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing
+29: [       OK ] PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing (4 ms)
+29: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+29: 
+29: [----------] Global test environment tear-down
+29: [==========] 1 test from 1 test suite ran. (4 ms total)
+29: [  PASSED  ] 1 test.
+27/29 Test #29: PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing .......................   Passed    0.01 sec
+test 30
+      Start 30: PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable
+
+30: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_tests "--gtest_filter=PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable" "--gtest_also_run_disabled_tests"
+30: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+30: Test timeout computed to be: 30
+30: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+30: Note: Google Test filter = PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable
+30: [==========] Running 1 test from 1 test suite.
+30: [----------] Global test environment set-up.
+30: [----------] 1 test from PublicRuntimeAdmission
+30: [ RUN      ] PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable
+30: [       OK ] PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable (4 ms)
+30: [----------] 1 test from PublicRuntimeAdmission (4 ms total)
+30: 
+30: [----------] Global test environment tear-down
+30: [==========] 1 test from 1 test suite ran. (4 ms total)
+30: [  PASSED  ] 1 test.
+28/29 Test #30: PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable ........................   Passed    0.01 sec
+test 32
+      Start 32: public_runtime_performance
+
+32: Test command: /private/tmp/angaria-public-admission-diagnostics-build/angaria_public_runtime_performance
+32: Working Directory: /private/tmp/angaria-public-admission-diagnostics-build
+32: Test timeout computed to be: 30
+32: Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+32: [==========] Running 2 tests from 1 test suite.
+32: [----------] Global test environment set-up.
+32: [----------] 2 tests from PublicRuntimePerformance
+32: [ RUN      ] PublicRuntimePerformance.BufferedMessagingKeepsGateFileAndAllocationWorkOutOfBothHotPaths
+32: PUBLIC_RUNTIME_PERFORMANCE {"mode":"none","prior_history":0,"warmup_cycles":32,"cycles_per_run":256,"runs":5,"median_cycle_ns":777.508,"min_cycle_ns":579.102,"max_cycle_ns":884.605,"completed_cycles_per_second":1.28616e+06,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+32: PUBLIC_RUNTIME_PERFORMANCE {"mode":"none","prior_history":128,"warmup_cycles":160,"cycles_per_run":256,"runs":5,"median_cycle_ns":823.406,"min_cycle_ns":649.902,"max_cycle_ns":838.703,"completed_cycles_per_second":1.21447e+06,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+32: PUBLIC_RUNTIME_PERFORMANCE {"mode":"required","prior_history":0,"warmup_cycles":32,"cycles_per_run":256,"runs":5,"median_cycle_ns":938.316,"min_cycle_ns":817.707,"max_cycle_ns":1527.51,"completed_cycles_per_second":1.06574e+06,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+32: PUBLIC_RUNTIME_PERFORMANCE {"mode":"required","prior_history":128,"warmup_cycles":160,"cycles_per_run":256,"runs":5,"median_cycle_ns":1125.65,"min_cycle_ns":945.477,"max_cycle_ns":1212.57,"completed_cycles_per_second":888374,"scope":"same-process ID/send/status/receive/selectedACK; not IPC latency"}
+32: [       OK ] PublicRuntimePerformance.BufferedMessagingKeepsGateFileAndAllocationWorkOutOfBothHotPaths (23 ms)
+32: [ RUN      ] PublicRuntimePerformance.RepeatedEmptyPublicReceiveDoesNoHeapFileOrAdministrativeWork
+32: [       OK ] PublicRuntimePerformance.RepeatedEmptyPublicReceiveDoesNoHeapFileOrAdministrativeWork (9 ms)
+32: [----------] 2 tests from PublicRuntimePerformance (33 ms total)
+32: 
+32: [----------] Global test environment tear-down
+32: [==========] 2 tests from 1 test suite ran. (33 ms total)
+32: [  PASSED  ] 2 tests.
+29/29 Test #32: public_runtime_performance .............................................................................   Passed    0.27 sec
+
+The following tests passed:
+	PublicRuntimeAdmission.InvalidAndWrongOwnerOpeningsDoNotSealOrMutateSetup
+	PublicRuntimeAdmission.PublicationStatusDuringSetupDoesNotSealOrIssueIds
+	PublicRuntimeAdmission.DefaultAcknowledgmentKeepsAnExactPinUntilAcknowledgeOrRelease
+	PublicRuntimeAdmission.BothReceiveModesPreserveEveryObservedHeaderFieldInOwningCopies
+	PublicRuntimeAdmission.UnacknowledgedReceiveReturnsCreditWithoutCreatingATokenObligation
+	PublicRuntimeAdmission.OneTaskSharesItsIssuerAcrossWritersAndSelectsEveryExactSchema
+	PublicRuntimeAdmission.SharedLogDiscoveryAdvancesPastOtherQueuesInBoundedBatches
+	PublicRuntimeAdmission.FullQueueIsKnownUnacceptedAndAnAcceptedRetryIsIdempotent
+	PublicRuntimeAdmission.LaterTaskAcceptanceRetiresAnEarlierUnacceptedIdAcrossQueues
+	PublicRuntimeAdmission.AcceptedSequencesAndCommittedAcknowledgmentWatermarksArePerQueue
+	PublicRuntimeAdmission.UnacknowledgedAcceptanceHasAQueueSequenceButNoProcessingWatermark
+	PublicRuntimeAdmission.ReturningTransportCreditDoesNotAcknowledgeProcessingAndLogFullDoesNotBlockAck
+	PublicRuntimeAdmission.CloseReopenRedeliversAnUnacknowledgedPinWithANewToken
+	PublicRuntimeAdmission.UnacknowledgedCloseReopenMayDeliverAgainWithoutInventingAnAck
+	PublicRuntimeAdmission.EmptyAndInvalidReceiveArgumentsAreExplicit
+	PublicRuntimeAdmission.TooSmallOutcomeStorageCannotAccidentallyAcceptAMessage
+	PublicRuntimeAdmission.EstablishedMessagingContinuesWhileTheActualAdministrativeGateIsHeld
+	PublicRuntimeAdmission.ProcessEndpointsSupportCoordinatedUseFromAnotherThread
+	PublicRuntimeAdmission.ThreadProducerRejectsAnotherThreadAndItsWriterRetainsTheParentClaim
+	PublicRuntimeAdmission.ThreadConsumerChecksAffinityAndClosingTheSourceReleasesItsParent
+	PublicRuntimeAdmission.ForeignThreadSourceDestructionDoesNotLeaveAStaleLocalReservation
+	PublicRuntimeAdmission.ForkChildrenCannotUseInheritedMessagingHandlesOrProcessingTokens
+	PublicRuntimeAdmission.InheritedHandlesRejectBeforeHeldLocalLocksAndSourceTaskValidation
+	PublicRuntimeAdmission.ProducerReplacementFindsEarlierAcceptanceAndStartsItsOwnIdSequence
+	PublicRuntimeAdmission.ReplacingTheConsumerTaskChangesItsAuthorityAndPreservesPendingMessages
+	PublicRuntimeAdmission.TerminatedPublicConsumerLeavesItsUnacknowledgedMessageForReplacement
+	PublicRuntimeAdmission.SelfLoopUsesTheSamePublicTaskClaimForSendingAndProcessing
+	PublicRuntimeAdmission.SchemaPayloadAndOwnershipErrorsLeaveTheIssuedIdRetryable
+	public_runtime_performance
+
+100% tests passed, 0 tests failed out of 29
+
+Total Test time (real) =   0.58 sec

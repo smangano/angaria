@@ -1,5 +1,7 @@
 # Bounded metadata scan window measurements
 
+Raw samples and profiler payloads described below are retained in the maintainer archive, not this checkout. Reports, plots, summaries and provenance remain here. [Archive catalog and restore instructions](../README.md#restore-archived-evidence) identify snapshot `2026-11-28-332118be2291`; restore its payloads before running the verification or figure commands below.
+
 Step **4.14**, framework **0.4.16**. The [guide](../../../docs/performance-prefix-windows.md) explains the optimization and its mapped-I/O risk assessment. The [diagnostic method](../../../docs/performance-diagnostics.md) defines counters, geometry, clock domains, and incomplete outcomes.
 
 ## Provenance and populations

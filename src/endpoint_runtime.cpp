@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <utility>
 #include <variant>
-#include <unistd.h>
 
 namespace angaria::detail
 {
@@ -65,7 +64,7 @@ namespace angaria::detail
     PublicationReport send(const std::shared_ptr<QueueWriterState>& state, PublicationId publication,
                             const MessageView& message, std::span<DestinationOutcome> outcomes)
     {
-      runtime_check_messaging_owner(state ? state->_task : nullptr);
+      // Both public overloads validate ownership before allocation/local locks.
       if (outcomes.empty())
       {
         return {publication, PublicationStatus::OutcomeUnknown, state->_revision, {}, 1, ErrorCode::OutputBufferTooSmall};
@@ -123,7 +122,7 @@ namespace angaria
   {
     try
     {
-      detail::runtime_check_messaging_owner(detail::runtime_source_task(_state));
+      const auto task = detail::runtime_source_task(_state);
       return _state->_id;
     }
     catch (...)
@@ -156,6 +155,7 @@ namespace angaria
   {
     try
     {
+      detail::runtime_check_messaging_owner(_state ? _state->_task : nullptr);
       return detail::send(_state, publication, message, outcomes);
     }
     catch (...)
@@ -291,7 +291,7 @@ namespace angaria
       }
       auto state = std::make_shared<detail::SourceQueueSetState>();
       state->_task = _state;
-      state->_ownerPid = static_cast<std::uint64_t>(::getpid());
+      state->_process = _state->_process;
       state->_ownerThread = _state->_thread;
       state->_threadAffine = _state->_kind == TaskKind::Thread;
       state->_id = source;
