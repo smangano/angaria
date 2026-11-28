@@ -114,6 +114,9 @@ namespace angaria::detail::recorded
 
     Result<TaskClaim> claim() const;
     Result<PublicationId> next_publication_id();
+    // ID-only admission for a new append, without reserving or retiring the ID.
+    // Resolve accepted retries through lookup before applying this check.
+    OperationResult check_new_publication(PublicationId publication) const;
     // Direct point-to-point prepared append. Assigns record/Queue sequence and
     // records one Accepted destination. Schema/payload semantic validation and
     // ring-credit admission remain the upper layer's responsibility.

@@ -338,6 +338,13 @@ namespace angaria::detail::recorded
       require(!_inAppend, ErrorCode::InvalidState, "Producer log operation cannot reenter append");
       require(!_data._failed, ErrorCode::IoError, "Producer log requires reopening after validation failure");
     }
+
+    void check_new_publication(PublicationId publication) const
+    {
+      require(publication._producer == _actor && publication._sequence != 0 && publication._sequence <= _issued &&
+                  (_data._records.empty() || publication_key(_data._records.back()._publication) < publication_key(publication)),
+              ErrorCode::InvalidArgument, "Publication was not issued by this claim or is retired");
+    }
   };
 
   struct ProducerLogReader::State
@@ -448,6 +455,17 @@ namespace angaria::detail::recorded
     });
   }
 
+  OperationResult ProducerLog::check_new_publication(PublicationId publication) const
+  {
+    return protect<std::monostate>([&]
+    {
+      require(bool(_state), ErrorCode::InvalidState, "Producer log is empty or moved-from");
+      _state->check();
+      _state->check_new_publication(publication);
+      return std::monostate{};
+    });
+  }
+
   Result<ProducerAppendResult> ProducerLog::append(const ProducerAppendRequest& request)
   {
     bool committed{};
@@ -466,9 +484,7 @@ namespace angaria::detail::recorded
         return ProducerAppendResult{existing->_reference, existing->_ordinal, existing->_queueSequence, true};
       }
       auto& queue = queue_progress(data, request._queue, ErrorCode::InvalidArgument);
-      require(request._publication._producer == _state->_actor && request._publication._sequence <= _state->_issued &&
-                  (data._records.empty() || publication_key(data._records.back()._publication) < publication_key(request._publication)),
-              ErrorCode::InvalidArgument, "Publication was not issued by this claim or is retired");
+      _state->check_new_publication(request._publication);
       require(data._records.size() < data._header._publicationCapacity, ErrorCode::LogFull, "Producer record capacity is exhausted");
       MessageHeader header;
       header._schema = request._message._header._schema;

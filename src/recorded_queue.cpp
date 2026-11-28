@@ -423,6 +423,9 @@ namespace angaria::detail::recorded
           connection._schemaReference, connection._topologyRevision, {}};
       if (!existing)
       {
+        // Credit can delay a fresh acceptance, but cannot revive a retired ID
+        // or an unaccepted ID issued by a previous producer claim.
+        value(state._log.check_new_publication(publication));
         require(message._header._schema == connection._codec.schema(), ErrorCode::SchemaConflict,
                 "Outgoing schema differs from the frozen Queue binding");
         require(message._header._format == PayloadFormat::Binary, ErrorCode::UnsupportedPolicy,

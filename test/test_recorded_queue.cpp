@@ -212,6 +212,105 @@ TEST_F(RecordedQueueTest, FullCreditPreservesTheUnacceptedIdAndStillResolvesAcce
   EXPECT_FALSE(require_value(receiver.try_receive()));
 }
 
+TEST_F(RecordedQueueTest, RetiredPublicationIsRejectedInsteadOfWaitingForQueueCredit)
+{
+  create();
+  auto sender = producer();
+  auto receiver = consumer();
+  const auto bytes = support::recorded_queue_payload(_codec, 7);
+  const auto message = outgoing(bytes);
+  const auto retiredId = require_value(sender.next_publication_id());
+  // Accepting a later ID retires this skipped ID. Additional ring credit
+  // cannot make it eligible for a first acceptance again.
+  const auto firstId = require_value(sender.next_publication_id());
+  const auto first = require_recorded_send(sender.try_send(firstId, message));
+  const auto secondId = require_value(sender.next_publication_id());
+  require_recorded_send(sender.try_send(secondId, message));
+  const auto waitingId = require_value(sender.next_publication_id());
+  const auto logBefore = file_bytes(_options._producerPaths._log);
+  const auto ownerBefore = file_bytes(_options._producerPaths._owner);
+  const auto queueBefore = file_bytes(_options._connectionPath);
+  expect_send_error(sender.try_send(retiredId, message), ErrorCode::InvalidArgument);
+  EXPECT_FALSE(require_value(sender.lookup(retiredId)));
+  EXPECT_TRUE(std::holds_alternative<recorded::QueueCreditFull>(sender.try_send(waitingId, message)));
+  const auto duplicate = require_recorded_send(sender.try_send(firstId, message));
+  EXPECT_TRUE(duplicate._duplicate);
+  EXPECT_EQ(duplicate._reference, first._reference);
+  EXPECT_EQ(file_bytes(_options._producerPaths._log), logBefore);
+  EXPECT_EQ(file_bytes(_options._producerPaths._owner), ownerBefore);
+  EXPECT_EQ(file_bytes(_options._connectionPath), queueBefore);
+
+  ASSERT_TRUE(require_value(receiver.try_receive()));
+  const auto queueWithCredit = file_bytes(_options._connectionPath);
+  expect_send_error(sender.try_send(retiredId, message), ErrorCode::InvalidArgument);
+  EXPECT_EQ(file_bytes(_options._producerPaths._log), logBefore);
+  EXPECT_EQ(file_bytes(_options._producerPaths._owner), ownerBefore);
+  EXPECT_EQ(file_bytes(_options._connectionPath), queueWithCredit);
+  const auto accepted = require_recorded_send(sender.try_send(waitingId, message));
+  EXPECT_FALSE(accepted._duplicate);
+  EXPECT_EQ(accepted._queueSequence, 3u);
+  const auto second = require_value(receiver.try_receive());
+  ASSERT_TRUE(second);
+  EXPECT_EQ(second->_header._publication, secondId);
+  const auto third = require_value(receiver.try_receive());
+  ASSERT_TRUE(third);
+  EXPECT_EQ(third->_header._publication, waitingId);
+  EXPECT_FALSE(require_value(receiver.try_receive()));
+}
+
+TEST_F(RecordedQueueTest, PreviousClaimUnacceptedPublicationIsRejectedEvenWhenQueueIsFull)
+{
+  create();
+  auto receiver = consumer();
+  const auto bytes = support::recorded_queue_payload(_codec, 7);
+  const auto message = outgoing(bytes);
+  PublicationId firstId;
+  PublicationId abandonedId;
+  recorded::ProducerAppendResult first;
+  {
+    auto original = producer();
+    firstId = require_value(original.next_publication_id());
+    first = require_recorded_send(original.try_send(firstId, message));
+    abandonedId = require_value(original.next_publication_id());
+  }
+  // A replacement claim can resolve the old claim's accepted IDs, but cannot
+  // accept an ID that the old claim merely issued before it closed.
+  auto sender = producer();
+  const auto secondId = require_value(sender.next_publication_id());
+  ASSERT_NE(secondId._producer._incarnation, abandonedId._producer._incarnation);
+  require_recorded_send(sender.try_send(secondId, message));
+  const auto waitingId = require_value(sender.next_publication_id());
+  const auto logBefore = file_bytes(_options._producerPaths._log);
+  const auto ownerBefore = file_bytes(_options._producerPaths._owner);
+  const auto queueBefore = file_bytes(_options._connectionPath);
+  expect_send_error(sender.try_send(abandonedId, message), ErrorCode::InvalidArgument);
+  EXPECT_FALSE(require_value(sender.lookup(abandonedId)));
+  EXPECT_TRUE(std::holds_alternative<recorded::QueueCreditFull>(sender.try_send(waitingId, message)));
+  const auto duplicate = require_recorded_send(sender.try_send(firstId, message));
+  EXPECT_TRUE(duplicate._duplicate);
+  EXPECT_EQ(duplicate._reference, first._reference);
+  EXPECT_EQ(file_bytes(_options._producerPaths._log), logBefore);
+  EXPECT_EQ(file_bytes(_options._producerPaths._owner), ownerBefore);
+  EXPECT_EQ(file_bytes(_options._connectionPath), queueBefore);
+
+  ASSERT_TRUE(require_value(receiver.try_receive()));
+  const auto queueWithCredit = file_bytes(_options._connectionPath);
+  expect_send_error(sender.try_send(abandonedId, message), ErrorCode::InvalidArgument);
+  EXPECT_EQ(file_bytes(_options._producerPaths._log), logBefore);
+  EXPECT_EQ(file_bytes(_options._producerPaths._owner), ownerBefore);
+  EXPECT_EQ(file_bytes(_options._connectionPath), queueWithCredit);
+  const auto accepted = require_recorded_send(sender.try_send(waitingId, message));
+  EXPECT_FALSE(accepted._duplicate);
+  EXPECT_EQ(accepted._queueSequence, 3u);
+  const auto second = require_value(receiver.try_receive());
+  ASSERT_TRUE(second);
+  EXPECT_EQ(second->_header._publication, secondId);
+  const auto third = require_value(receiver.try_receive());
+  ASSERT_TRUE(third);
+  EXPECT_EQ(third->_header._publication, waitingId);
+  EXPECT_FALSE(require_value(receiver.try_receive()));
+}
+
 TEST_F(RecordedQueueTest, EmptyPollsDoNotChangeTheLogOrConnection)
 {
   create();
