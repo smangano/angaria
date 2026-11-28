@@ -1,0 +1,226 @@
+{
+  "method": "Median and full range of per-run results; samples are not pooled",
+  "profiles": {
+    "nanomsg": {
+      "metrics": {
+        "completed_per_second": {
+          "maximum": 895838.2941891622,
+          "median": 875974.0693711154,
+          "minimum": 845611.054630376
+        },
+        "delivery_p50_ns": {
+          "maximum": 6294,
+          "median": 5700,
+          "minimum": 5429
+        },
+        "delivery_p99_ns": {
+          "maximum": 38448,
+          "median": 17502,
+          "minimum": 16710
+        },
+        "inclusive_cpu_ns_per_publication": {
+          "maximum": 2365.6005859375,
+          "median": 2285.888671875,
+          "minimum": 2236.51123046875
+        },
+        "producer_backpressure_count": {
+          "maximum": 0,
+          "median": 0,
+          "minimum": 0
+        },
+        "producer_path_p50_ns": {
+          "maximum": 1025,
+          "median": 1017,
+          "minimum": 1007
+        },
+        "producer_path_p99_ns": {
+          "maximum": 2277,
+          "median": 1691,
+          "minimum": 1565
+        }
+      },
+      "runs": 5
+    },
+    "public-acknowledged": {
+      "metrics": {
+        "acknowledgment_p50_ns": {
+          "maximum": 17859,
+          "median": 17457,
+          "minimum": 17253
+        },
+        "acknowledgment_p99_ns": {
+          "maximum": 28378,
+          "median": 27468,
+          "minimum": 26818
+        },
+        "completed_per_second": {
+          "maximum": 493358.5549243667,
+          "median": 482636.9700390375,
+          "minimum": 478250.9931501871
+        },
+        "delivery_p50_ns": {
+          "maximum": 17071,
+          "median": 16690,
+          "minimum": 16486
+        },
+        "delivery_p99_ns": {
+          "maximum": 27551,
+          "median": 26669,
+          "minimum": 25993
+        },
+        "inclusive_cpu_ns_per_publication": {
+          "maximum": 4184.814453125,
+          "median": 4122.74169921875,
+          "minimum": 4056.640625
+        },
+        "producer_backpressure_count": {
+          "maximum": 23813,
+          "median": 23626,
+          "minimum": 22983
+        },
+        "producer_path_p50_ns": {
+          "maximum": 1810,
+          "median": 1755,
+          "minimum": 1681
+        },
+        "producer_path_p99_ns": {
+          "maximum": 3722,
+          "median": 3653,
+          "minimum": 3575
+        }
+      },
+      "runs": 5
+    },
+    "public-recorded": {
+      "metrics": {
+        "completed_per_second": {
+          "maximum": 731446.6943265782,
+          "median": 724346.5319080306,
+          "minimum": 717435.1902135955
+        },
+        "delivery_p50_ns": {
+          "maximum": 1712,
+          "median": 1691,
+          "minimum": 1680
+        },
+        "delivery_p99_ns": {
+          "maximum": 3800,
+          "median": 3487,
+          "minimum": 3349
+        },
+        "inclusive_cpu_ns_per_publication": {
+          "maximum": 2792.41943359375,
+          "median": 2766.29638671875,
+          "minimum": 2739.07470703125
+        },
+        "producer_backpressure_count": {
+          "maximum": 8,
+          "median": 0,
+          "minimum": 0
+        },
+        "producer_path_p50_ns": {
+          "maximum": 1199,
+          "median": 1183,
+          "minimum": 1172
+        },
+        "producer_path_p99_ns": {
+          "maximum": 2746,
+          "median": 2708,
+          "minimum": 2689
+        }
+      },
+      "runs": 5
+    },
+    "recorded-acknowledged-connection": {
+      "metrics": {
+        "acknowledgment_p50_ns": {
+          "maximum": 13035,
+          "median": 13024,
+          "minimum": 12944
+        },
+        "acknowledgment_p99_ns": {
+          "maximum": 23091,
+          "median": 22533,
+          "minimum": 21686
+        },
+        "completed_per_second": {
+          "maximum": 642966.3100016698,
+          "median": 641509.1000399456,
+          "minimum": 637170.8618155916
+        },
+        "delivery_p50_ns": {
+          "maximum": 12503,
+          "median": 12490,
+          "minimum": 12412
+        },
+        "delivery_p99_ns": {
+          "maximum": 22539,
+          "median": 21954,
+          "minimum": 21061
+        },
+        "inclusive_cpu_ns_per_publication": {
+          "maximum": 3142.7001953125,
+          "median": 3122.314453125,
+          "minimum": 3113.70849609375
+        },
+        "producer_backpressure_count": {
+          "maximum": 24233,
+          "median": 23856,
+          "minimum": 23135
+        },
+        "producer_path_p50_ns": {
+          "maximum": 1316,
+          "median": 1282,
+          "minimum": 1274
+        },
+        "producer_path_p99_ns": {
+          "maximum": 3186,
+          "median": 2985,
+          "minimum": 2973
+        }
+      },
+      "runs": 5
+    },
+    "recorded-connection": {
+      "metrics": {
+        "completed_per_second": {
+          "maximum": 922355.0340661677,
+          "median": 905618.910985521,
+          "minimum": 890970.9631236233
+        },
+        "delivery_p50_ns": {
+          "maximum": 1387,
+          "median": 1374,
+          "minimum": 1349
+        },
+        "delivery_p99_ns": {
+          "maximum": 8968,
+          "median": 4308,
+          "minimum": 3064
+        },
+        "inclusive_cpu_ns_per_publication": {
+          "maximum": 2250.1220703125,
+          "median": 2213.43994140625,
+          "minimum": 2173.2177734375
+        },
+        "producer_backpressure_count": {
+          "maximum": 339,
+          "median": 20,
+          "minimum": 0
+        },
+        "producer_path_p50_ns": {
+          "maximum": 938,
+          "median": 917,
+          "minimum": 897
+        },
+        "producer_path_p99_ns": {
+          "maximum": 2407,
+          "median": 2334,
+          "minimum": 2314
+        }
+      },
+      "runs": 5
+    }
+  },
+  "suite": "public-runtime-controls"
+}

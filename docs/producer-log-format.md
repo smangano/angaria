@@ -2,7 +2,7 @@
 
 Milestone 4 step **4.31**, framework **0.4.33**, implements step 2 of the [independent messaging workstream](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review): local byte codecs for producer-log headers, cross-log references and immutable Publication records. The [protocol design](independent-messaging-protocol.md) assigns ownership and commit/recovery behavior.
 
-**This is not a live format-3 runtime.** Session factories still create their currently supported format. No append, live atomic access, ring delivery, acknowledgment, recovery or new TOML option is enabled here. Those operations follow in separate steps. The private [producer_log_format.h](../src/producer_log_format.h) exposes caller-buffer encoding and borrowed decoding in `angaria::detail::recorded`; applications continue using the public API and [primer](primer.md).
+**Current status — 0.4.39:** these codecs now underlie the [public recorded runtime](public-runtime-admission.md). The private [producer_log_format.h](../src/producer_log_format.h) remains an implementation detail; applications use the public API and [primer](primer.md). A pure decoded record/reference establishes representation, not live acceptance. Producer-owned append/recovery and connection/progress protocols establish those runtime guarantees.
 
 ## Representation and boundaries
 
@@ -105,17 +105,9 @@ Malformed stored representations use `IoError`; unsupported format/encoding/capa
 
 [Functional fixtures](../test/test_producer_log_format.cpp) independently construct golden bytes, including extreme identities, signed timestamps and empty payloads. They cover malformed/truncated/reserved fields, wrong log/catalog bindings, destination consistency, overflow/bounds, untouched rejection buffers and borrowed header/payload behavior. Ordinary local snapshots may be unaligned; live atomic alignment remains a separate runtime requirement.
 
-The isolated [focused performance test](../test/test_producer_log_performance.cpp) runs in ordinary CI. For 64/256/1,024-byte payloads it:
+The isolated [focused performance test](../test/test_producer_log_performance.cpp) runs the current codec in ordinary CI. For 64/256/1,024-byte payloads it checks complete logical results, matching payload/identity checksums, a borrowed payload pointing into the caller's buffer and zero allocations over warmed encode/decode cycles. A separate positive allocation calibration proves the counter is active. Nine timed blocks report median block-mean nanoseconds/cycle, codec cycles/second and all block values; these are component checks, not per-message latency quantiles or IPC capacity.
 
-- Verifies complete logical results, matching payload/identity checksums and that the new decoded payload points into the caller's buffer.
-- Counts successful C++ allocation requests over warmed encode/decode cycles, requiring zero on the new path and a nonzero owning control to qualify the counter.
-- Alternates nine timed blocks per codec and reports median block-mean nanoseconds/cycle, codec cycles/second, allocations/cycle, all block values and encoded byte sizes.
-
-The control uses the existing format-2 owning Publication codec on the same logical message. Its layout and owning return contract differ, so this is a codec-cost comparison, not a transport/nanomsg speedup or an estimate of recording/acknowledgment cost. Samples are not per-message p50/p99 latency. Timings report observed direction without a noisy hosted wall-time failure threshold; deterministic allocation/borrow guards fail CI. Retain actual results and host/build context in the step report before integration. Full nanomsg comparisons resume when the new messaging path is runnable.
-
-Both profiles use the same allocation-hooked test executable. Capture is disabled during timing, but the allocating control still passes through the replacement hooks. The control is not the current receive path, which has separate metadata loading and mapped payload access. Ordinary CI retains `LastTest.log` in `codec-tests-*` artifacts, including the three `CODEC_PERFORMANCE` records; hosted library builds enable existing diagnostics and their observations are not pooled with the local diagnostics-OFF study.
-
-The [retained local study and plots](../benchmarks/results/milestone-4-producer-log-codecs/README.md) contain ten complete invocations. Median encode/decode block means are approximately 49/50/57 ns at 64/256/1,024 bytes versus 94/99/133 ns for the owning control, with zero versus three allocations per cycle. These are codec measurements under the explicit ownership differences above, not delivered-message latency/throughput or a nanomsg comparison.
+The [retained original codec study](../benchmarks/results/milestone-4-producer-log-codecs/README.md) compared the then-new buffered codec with the format-2 owning codec at its pinned source, before public admission. Its historical measurements and plots remain reproducible there. The current build removes that superseded codec and no longer keeps an old implementation solely as a timing control. [Public runtime qualification](public-runtime-performance.md) now measures delivered latency/throughput against nanomsg with recording and acknowledgment contracts labeled. Deterministic allocation/borrow guards fail CI; noisy wall time has no pass/fail threshold.
 
 Run the focused test with:
 
@@ -125,4 +117,4 @@ cmake --build build --target angaria_producer_log_performance --parallel 3
 ./build/angaria_producer_log_performance --gtest_output=xml:build/producer-log-performance.xml
 ```
 
-Step **4.32**, framework **0.4.34**, supplies [producer-owned mapped append, atomic acceptance and recovery/replay](producer-log.md), with separate failure and performance evidence. The byte codec alone cannot establish those guarantees. Public messaging and ring delivery remain later work.
+Step **4.32**, framework **0.4.34**, supplies [producer-owned mapped append, atomic acceptance and recovery/replay](producer-log.md), with separate failure and performance evidence. The byte codec alone cannot establish those guarantees. The [public admission contract](public-runtime-admission.md) now integrates these primitives with normal application messaging.

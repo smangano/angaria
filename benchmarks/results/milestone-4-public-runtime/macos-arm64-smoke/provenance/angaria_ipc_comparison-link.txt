@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/angaria_ipc_comparison.dir/benchmarks/ipc_comparison.cpp.o -o angaria_ipc_comparison  libangaria.a _deps/angaria_nanomsg-build/libnanomsg.a -lpthread
