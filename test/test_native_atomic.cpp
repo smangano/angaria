@@ -44,6 +44,7 @@ namespace
   using Clock = std::chrono::steady_clock;
 
   static_assert(!std::is_default_constructible_v<mapped::AtomicWord>);
+  static_assert(!std::is_default_constructible_v<mapped::AtomicReadWord>);
 
   using angaria::test_support::require_value;
 
@@ -213,6 +214,40 @@ namespace
                             {
                               return value == std::byte{0x5a};
                             }));
+  }
+
+  TEST_F(NativeAtomicTest, ReadOnlyMappingAcquiresPublicationWithoutWritableCapability)
+  {
+    // A consumer maps the producer's file read-only and binds a load-only word.
+    // It observes released values without requiring a writable mapping or cast.
+    auto file = create_file();
+    auto writable = require_value(file.map_read_write(0, 64));
+    const auto bytes = require_value(writable.writable_bytes());
+    std::fill(bytes.begin() + 8, bytes.end(), std::byte{0x5a});
+    auto publisher = require_value(mapped::AtomicWord::bind(bytes, 0));
+    publisher.store_release(0x0123456789abcdef);
+    auto readOnly = require_value(mapped::NativeFile::open_existing(_path, mapped::FileAccess::ReadOnly));
+    auto mapping = require_value(readOnly.map_read_only(0, 64));
+    const auto observed = require_value(mapping.bytes());
+    auto reader = require_value(mapped::AtomicReadWord::bind(observed, 0));
+    EXPECT_EQ(reader.load_acquire(), 0x0123456789abcdefu);
+
+    expect_error(mapped::AtomicReadWord::bind({}, 0), ErrorCode::InvalidArgument);
+    expect_error(mapped::AtomicReadWord::bind(observed.first(7), 0), ErrorCode::InvalidArgument);
+    expect_error(mapped::AtomicReadWord::bind(observed, 1), ErrorCode::InvalidArgument);
+    expect_error(mapped::AtomicReadWord::bind(observed, 57), ErrorCode::InvalidArgument);
+    expect_error(mapped::AtomicReadWord::bind(observed, std::numeric_limits<std::size_t>::max()),
+                 ErrorCode::InvalidArgument);
+    EXPECT_EQ(reader.load_acquire(), 0x0123456789abcdefu);
+    EXPECT_TRUE(std::all_of(observed.begin() + 8, observed.end(), [](std::byte value)
+    {
+      return value == std::byte{0x5a};
+    }));
+
+    // Publication through the writer remains visible through the retained
+    // read-only binding; no rebind or mapping refresh is needed.
+    publisher.store_release(0xfedcba9876543210);
+    EXPECT_EQ(reader.load_acquire(), 0xfedcba9876543210u);
   }
 
   // The worker fills ordinary body bytes, publishes a control generation, then

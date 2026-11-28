@@ -125,4 +125,4 @@ cmake --build build --target angaria_producer_log_performance --parallel 3
 ./build/angaria_producer_log_performance --gtest_output=xml:build/producer-log-performance.xml
 ```
 
-The [next step](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review) implements producer-owned mapped append, the atomic acceptance store and recovery/replay. Those mechanisms must supply their own failure tests and measured performance evidence; the codec cannot establish their guarantees.
+Step **4.32**, framework **0.4.34**, supplies [producer-owned mapped append, atomic acceptance and recovery/replay](producer-log.md), with separate failure and performance evidence. The byte codec alone cannot establish those guarantees. Public messaging and ring delivery remain later work.

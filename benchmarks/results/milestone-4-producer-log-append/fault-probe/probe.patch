@@ -1,0 +1,103 @@
+--- /Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp
++++ fault_probe.cpp
+@@ -8,6 +8,7 @@
+ #include "performance_diagnostics.h"
+ #include "performance_samples.h"
+ #include "producer_log_fixture.h"
++#include "native_file.h"
+ 
+ #include <gtest/gtest.h>
+ 
+@@ -16,6 +17,7 @@
+ #include <chrono>
+ #include <cstddef>
+ #include <cstdint>
++#include <cstdlib>
+ #include <iomanip>
+ #include <iostream>
+ #include <span>
+@@ -25,6 +27,9 @@
+ #include <utility>
+ #include <variant>
+ #include <vector>
++
++#include <sys/resource.h>
++#include <unistd.h>
+ 
+ namespace
+ {
+@@ -212,6 +217,30 @@
+       const auto seeded = append_cycles(seed, request, results, 1);
+       ASSERT_TRUE(seeded._valid);
+       ASSERT_EQ(seeded._count, historyRecords);
++    }
++
++    // Experimental physical-page warming only. This temporary mapping does
++    // not establish PTEs in the later writer mapping. Never touch accepted bytes.
++    const bool probePrefault = std::getenv("ANGARIA_PROBE_PREFAULT") != nullptr;
++    if (probePrefault)
++    {
++      auto backing = require_value(angaria::detail::mapped::NativeFile::open_existing(
++          paths._log, angaria::detail::mapped::FileAccess::ReadWrite, reserved_bytes));
++      auto warming = require_value(backing.map_read_write(0, reserved_bytes));
++      const auto warmingBytes = require_value(warming.writable_bytes());
++      const auto end = require_value(angaria::detail::mapped::AtomicReadWord::bind(
++          warmingBytes, recorded::committed_tail_offset)).load_acquire();
++      const auto page = ::sysconf(_SC_PAGESIZE);
++      if (page <= 0)
++      {
++        throw std::runtime_error("Cannot determine page size for temporary prefault probe");
++      }
++      volatile std::byte* const uncommitted = warmingBytes.data();
++      for (std::size_t offset = static_cast<std::size_t>(end); offset < warmingBytes.size();
++           offset += static_cast<std::size_t>(page))
++      {
++        uncommitted[offset] = uncommitted[offset];
++      }
+     }
+ 
+     // Recovery/open validates the retained prefix once and builds bounded local
+@@ -242,6 +271,8 @@
+     auto request = support::producer_append_request({}, payload);
+     std::array<recorded::ProducerAppendResult, sample_cycles * sample_count> accepted;
+     std::array<double, sample_count> appendTimes{};
++    std::array<long, sample_count> appendMinorFaults{};
++    std::array<long, sample_count> appendMajorFaults{};
+     std::array<double, sample_count> captureTimes{};
+     std::array<double, sample_count> replayTimes{};
+     std::array<std::size_t, sample_count> appendStartRecords{};
+@@ -256,10 +287,22 @@
+       CycleResult appended;
+       {
+         AllocationCapture allocationCapture;
++        struct rusage before{};
++        struct rusage after{};
++        if (::getrusage(RUSAGE_SELF, &before) != 0)
++        {
++          throw std::runtime_error("Cannot sample faults before append block");
++        }
+         const auto start = std::chrono::steady_clock::now();
+         appended = append_cycles(writer, request,
+             std::span{accepted}.subspan(sample * sample_cycles, sample_cycles), startRecords + 1);
+         const auto stop = std::chrono::steady_clock::now();
++        if (::getrusage(RUSAGE_SELF, &after) != 0)
++        {
++          throw std::runtime_error("Cannot sample faults after append block");
++        }
++        appendMinorFaults[sample] = after.ru_minflt - before.ru_minflt;
++        appendMajorFaults[sample] = after.ru_majflt - before.ru_majflt;
+         appendAllocations[sample] = allocationCapture.stop();
+         appendTimes[sample] = elapsed_ns(start, stop) / sample_cycles;
+       }
+@@ -396,6 +439,11 @@
+     write_samples(appendStartRecords);
+     std::cout << ",\"prepared_append_ns_samples\":";
+     write_samples(appendTimes);
++    std::cout << ",\"probe_physical_prefault\":" << (probePrefault ? "true" : "false")
++              << ",\"probe_append_minor_faults\":";
++    write_samples(appendMinorFaults);
++    std::cout << ",\"probe_append_major_faults\":";
++    write_samples(appendMajorFaults);
+     std::cout << ",\"capture_new_records_per_sample\":" << sample_cycles << ",\"capture_ns_samples\":";
+     write_samples(captureTimes);
+     std::cout << ",\"replay_record_counts\":";

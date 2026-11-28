@@ -1,0 +1,9 @@
+# Run from a checkout of source commit 7b5206e37eb8eeeb04efaa39f4e839b66bced72f.
+# Requires the normal Release archive (diagnostics OFF) and this evidence directory.
+# See the parent results README for configuring and building the normal target.
+mkdir -p /private/tmp/angaria-append-fault-probe-rerun
+cp benchmarks/results/milestone-4-producer-log-append/fault-probe/fault_probe.cpp.txt /private/tmp/angaria-append-fault-probe-rerun/fault_probe.cpp
+/usr/bin/c++ -std=gnu++20 -O3 -g -DNDEBUG -Wall -Wextra -Werror -Iinclude -Isrc -Itest -I/opt/homebrew/include /private/tmp/angaria-append-fault-probe-rerun/fault_probe.cpp build/owned-log-normal/libangaria.a /usr/local/lib/libgtest_main.a /usr/local/lib/libgtest.a -o /private/tmp/angaria-append-fault-probe-rerun/fault_probe
+env -u ANGARIA_PROBE_PREFAULT /private/tmp/angaria-append-fault-probe-rerun/fault_probe > /private/tmp/angaria-append-fault-probe-rerun/natural-1.log 2>&1
+ANGARIA_PROBE_PREFAULT=1 /private/tmp/angaria-append-fault-probe-rerun/fault_probe > /private/tmp/angaria-append-fault-probe-rerun/physical-prefault-1.log 2>&1
+env -u ANGARIA_PROBE_PREFAULT /private/tmp/angaria-append-fault-probe-rerun/fault_probe > /private/tmp/angaria-append-fault-probe-rerun/natural-2.log 2>&1

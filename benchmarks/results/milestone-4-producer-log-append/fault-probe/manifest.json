@@ -1,0 +1,86 @@
+{
+  "appends_per_block": 64,
+  "blocks_per_case": 5,
+  "cases_per_invocation": 9,
+  "compile_flags": [
+    "-std=gnu++20",
+    "-O3",
+    "-g",
+    "-DNDEBUG",
+    "-Wall",
+    "-Wextra",
+    "-Werror"
+  ],
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+  "copied_probe_source": "fault_probe.cpp.txt",
+  "copied_probe_source_sha256": "183dcbb01968170243deb5feebcab768bebbf602a1a7aa0408c9be38735f04a0",
+  "evidence_sha256": {
+    "README.md": "168bdf079ebc43a0f28f0b3995f373b3c639261e19e40771fe72104995a3b501",
+    "analysis.txt": "be0979cada7c1322f3afe31897512af4c749ee30419b6c2cfac894521b311d5d",
+    "build-command.txt": "b1a8e3615ab6523077214c44626855188f9457ac7a5cc8e247c8b1804c1aedd0",
+    "fault_probe.cpp.txt": "183dcbb01968170243deb5feebcab768bebbf602a1a7aa0408c9be38735f04a0",
+    "natural-1.log": "16be1109a663046b19d6109983e08cf65e0bbeeaeed1eb8bfa399e75a808f956",
+    "natural-2.log": "b58e24e5f1a4cb62831df7fb84564d9bd260330776e6ecea383b3decccfee490",
+    "original-build-command.txt": "c9841076a7f1f336b8b4f955e52e37192e27a0dfc646fdb3840bfa54a19a8964",
+    "parsed.json": "dbd344523a3c35e9a87441ed56a4543b44de021ea36ba0a627832fc1e06d8d1b",
+    "physical-prefault-1.log": "24f51b3a2f76f87d257ed682c2fc27a71d6018b18c63207d95c62f3bd0f4498a",
+    "probe.patch": "e39879e8c41044376dfe7b8aa168f760492472354b8050df28967a21c8bf1555",
+    "source.sha256": "d926b61cf1b3f2e9e619c62e74133a2b3b4e5686c2913e12be803fc686aae6ad"
+  },
+  "frozen_source_commit": "7b5206e37eb8eeeb04efaa39f4e839b66bced72f",
+  "include_paths": [
+    "include",
+    "src",
+    "test",
+    "/opt/homebrew/include"
+  ],
+  "limitations": [
+    "Darwin major-fault classification alone does not prove physical disk I/O.",
+    "One natural/prefault/natural diagnostic contrast; no confidence interval or pooled baseline claim.",
+    "Prefault setup is outside timing and does not establish later writer page-table entries.",
+    "Cache, scheduling and filesystem effects are not all isolated.",
+    "No public prefault policy, transport benchmark, or runtime change."
+  ],
+  "link_inputs": [
+    "build/owned-log-normal/libangaria.a",
+    "/usr/local/lib/libgtest_main.a",
+    "/usr/local/lib/libgtest.a"
+  ],
+  "native_context": {
+    "executable_architecture": "arm64",
+    "page_bytes": 16384,
+    "page_size_query": "getconf PAGESIZE",
+    "system": "Darwin"
+  },
+  "normal_library_matches_frozen_baseline": true,
+  "normal_library_rebuilt_for_probe": false,
+  "normal_static_library": "build/owned-log-normal/libangaria.a",
+  "normal_static_library_sha256_observed_at_archive": "2e8a5387e34badf39b61c63abfe41232301e778218c041f60a232d9456f59da6",
+  "original_probe_binary_sha256_not_archived": "3cb9f0cd425cf54ee8f5162d3aa624dab9ee11fc61daeeeaad1d82ddc65902f9",
+  "original_test_sha256_after_probe": "755bc877760fb98cb22ac9a4275aa4c8ee2e6aee48f1c33285247957496edb5c",
+  "original_test_sha256_before_probe": "755bc877760fb98cb22ac9a4275aa4c8ee2e6aee48f1c33285247957496edb5c",
+  "original_test_source": "test/test_producer_log_append_performance.cpp",
+  "original_test_unchanged": true,
+  "physical_prefault": "One volatile byte touch per native page from acquired committed end to reservation end, through a temporary setup mapping before writer open; no accepted bytes touched.",
+  "prefault_invocations": 1,
+  "run_order": [
+    {
+      "exit_code": 0,
+      "name": "natural-1",
+      "prefault": false
+    },
+    {
+      "exit_code": 0,
+      "name": "physical-prefault-1",
+      "prefault": true
+    },
+    {
+      "exit_code": 0,
+      "name": "natural-2",
+      "prefault": false
+    }
+  ],
+  "sampling": "getrusage(RUSAGE_SELF) immediately outside each timed append block; counts paired by sample index.",
+  "schema_version": 1,
+  "scope": "Supplemental first-touch diagnostic; independent probe, never pooled with the frozen baseline."
+}

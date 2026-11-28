@@ -1,0 +1,470 @@
+// Private producer-owned storage cost study. This exercises real prepared ID
+// issuance, append, incremental capture and borrowed replay in mapped files.
+// It is not a public send/receive or nanomsg benchmark: admission, ring wakeups,
+// cross-process scheduling and optional application acknowledgments come later.
+// Allocation/filesystem/gate guards fail CI; noisy wall times are reports only.
+
+#include "allocation_capture.h"
+#include "performance_diagnostics.h"
+#include "performance_samples.h"
+#include "producer_log_fixture.h"
+#include "native_file.h"
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <sys/resource.h>
+#include <unistd.h>
+
+namespace
+{
+  using namespace angaria;
+  namespace recorded = angaria::detail::recorded;
+  namespace diagnostics = angaria::detail::diagnostics;
+  namespace support = angaria::test_support;
+  using support::AllocationCapture;
+  using support::require_value;
+  using support::median;
+  using support::write_samples;
+
+  constexpr std::size_t sample_count = 5;
+  constexpr std::size_t sample_cycles = 64;
+  constexpr std::size_t diagnostic_cycles = 32;
+  constexpr std::uint64_t reserved_bytes = 8 * 1024 * 1024;
+  constexpr std::uint64_t publication_capacity = 2048;
+  volatile std::uint64_t observed_checksum{};
+
+  struct CycleResult
+  {
+    bool _valid{true};
+    std::size_t _count{};
+    std::uint64_t _checksum{};
+  };
+
+  // The request and output span are caller-owned. Each iteration includes the
+  // actual ID issue plus acceptance, rather than preissuing IDs outside timing.
+  CycleResult append_cycles(recorded::ProducerLog& writer, recorded::ProducerAppendRequest& request,
+                            std::span<recorded::ProducerAppendResult> results,
+                            std::uint64_t firstOrdinal)
+  {
+    CycleResult result;
+    for (auto& output : results)
+    {
+      const auto issued = writer.next_publication_id();
+      const auto* publication = std::get_if<PublicationId>(&issued);
+      if (!publication)
+      {
+        result._valid = false;
+        break;
+      }
+      request._publication = *publication;
+      const auto appended = writer.append(request);
+      const auto* accepted = std::get_if<recorded::ProducerAppendResult>(&appended);
+      if (!accepted || accepted->_duplicate || accepted->_recordOrdinal != firstOrdinal + result._count ||
+          accepted->_queueSequence != firstOrdinal + result._count)
+      {
+        result._valid = false;
+        break;
+      }
+      output = *accepted;
+      result._checksum += accepted->_recordOrdinal + accepted->_queueSequence;
+      ++result._count;
+    }
+    return result;
+  }
+
+  CycleResult replay_cycles(const recorded::ProducerLogReader& reader,
+                            recorded::ProducerReplayCursor cursor, std::size_t payloadBytes)
+  {
+    CycleResult result;
+    for (;;)
+    {
+      const auto next = reader.next(cursor);
+      const auto* record = std::get_if<std::optional<recorded::PublicationRecordView>>(&next);
+      if (!record)
+      {
+        result._valid = false;
+        break;
+      }
+      if (!*record)
+      {
+        break;
+      }
+      const auto& view = **record;
+      if (view._payload.size() != payloadBytes || view._recordOrdinal != result._count + 1)
+      {
+        result._valid = false;
+        break;
+      }
+      result._checksum += view._recordOrdinal +
+          std::to_integer<unsigned char>(view._payload[result._count % payloadBytes]);
+      ++result._count;
+    }
+    return result;
+  }
+
+  double elapsed_ns(std::chrono::steady_clock::time_point start,
+                    std::chrono::steady_clock::time_point stop)
+  {
+    return std::chrono::duration<double, std::nano>(stop - start).count();
+  }
+
+  void expect_no_hot_filesystem_or_gate_work(const diagnostics::Sample& sample)
+  {
+    EXPECT_TRUE(sample._valid);
+    EXPECT_FALSE(sample._overflow);
+    for (const auto counter : {diagnostics::Counter::NativeReadCalls, diagnostics::Counter::NativeMapCalls,
+                               diagnostics::Counter::NativeUnmapCalls, diagnostics::Counter::FileStatCalls,
+                               diagnostics::Counter::FileGrowCalls, diagnostics::Counter::GateAttempts,
+                               diagnostics::Counter::GateAcquisitions})
+    {
+      EXPECT_EQ(sample._counters[static_cast<std::size_t>(counter)], 0u)
+          << diagnostics::counter_names[static_cast<std::size_t>(counter)];
+    }
+  }
+
+  void write_counters(const diagnostics::Sample& sample)
+  {
+    std::cout << '{';
+    for (std::size_t index = 0; index != diagnostics::counter_count; ++index)
+    {
+      if (index != 0)
+      {
+        std::cout << ',';
+      }
+      std::cout << '"' << diagnostics::counter_names[index] << "\":" << sample._counters[index];
+    }
+    std::cout << '}';
+  }
+
+  // Warm a separate stream. Appending here does not turn the H=0 measured
+  // stream into an undisclosed nonempty log before its first timing block.
+  void warm_path(const support::ProducerLogDirectory& directory,
+                 const recorded::ProducerLogOptions& options, std::span<const std::byte> payload)
+  {
+    const auto paths = support::producer_log_paths(directory.path(), "warmup");
+    require_value(recorded::ProducerLog::create(paths, options));
+    auto writer = require_value(recorded::ProducerLog::open_writer(paths, options));
+    auto request = support::producer_append_request({}, payload);
+    std::array<recorded::ProducerAppendResult, 16> results;
+    const auto appended = append_cycles(writer, request, results, 1);
+    if (!appended._valid || appended._count != results.size())
+    {
+      throw std::runtime_error("Producer-log warmup append failed");
+    }
+    auto reader = require_value(recorded::ProducerLogReader::open(paths._log, options));
+    const auto replayed = replay_cycles(reader, require_value(reader.capture()), payload.size());
+    if (!replayed._valid || replayed._count != results.size())
+    {
+      throw std::runtime_error("Producer-log warmup replay failed");
+    }
+    observed_checksum = appended._checksum + replayed._checksum;
+  }
+
+  TEST(ProducerLogAppendAllocationCapture, CountsSuccessfulAllocationRequests)
+  {
+    // An explicit call checks the same replacement operator linked into this
+    // executable. It is outside every append/replay timing and allocation guard.
+    std::uint64_t allocations{};
+    {
+      AllocationCapture capture;
+      auto* control = ::operator new(16);
+      ::operator delete(control);
+      allocations = capture.stop();
+    }
+    EXPECT_EQ(allocations, 1u);
+  }
+
+  class ProducerLogAppendPerformance : public ::testing::TestWithParam<std::tuple<std::size_t, std::size_t>>
+  {
+  };
+
+  TEST_P(ProducerLogAppendPerformance, PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork)
+  {
+    const auto [historyRecords, payloadBytes] = GetParam();
+    support::ProducerLogDirectory directory;
+    auto options = support::producer_log_options(reserved_bytes, publication_capacity);
+    options._queues = {QueueId{4}};
+    std::vector<std::byte> payload(payloadBytes);
+    for (std::size_t index = 0; index != payload.size(); ++index)
+    {
+      payload[index] = static_cast<std::byte>((index * 131 + 17) & 0xff);
+    }
+    warm_path(directory, options, payload);
+    const auto paths = support::producer_log_paths(directory.path());
+    require_value(recorded::ProducerLog::create(paths, options));
+    TaskClaim historicalClaim;
+    {
+      auto seed = require_value(recorded::ProducerLog::open_writer(paths, options));
+      historicalClaim = require_value(seed.claim());
+      auto request = support::producer_append_request({}, payload);
+      std::vector<recorded::ProducerAppendResult> results(historyRecords);
+      const auto seeded = append_cycles(seed, request, results, 1);
+      ASSERT_TRUE(seeded._valid);
+      ASSERT_EQ(seeded._count, historyRecords);
+    }
+
+    // Experimental physical-page warming only. This temporary mapping does
+    // not establish PTEs in the later writer mapping. Never touch accepted bytes.
+    const bool probePrefault = std::getenv("ANGARIA_PROBE_PREFAULT") != nullptr;
+    if (probePrefault)
+    {
+      auto backing = require_value(angaria::detail::mapped::NativeFile::open_existing(
+          paths._log, angaria::detail::mapped::FileAccess::ReadWrite, reserved_bytes));
+      auto warming = require_value(backing.map_read_write(0, reserved_bytes));
+      const auto warmingBytes = require_value(warming.writable_bytes());
+      const auto end = require_value(angaria::detail::mapped::AtomicReadWord::bind(
+          warmingBytes, recorded::committed_tail_offset)).load_acquire();
+      const auto page = ::sysconf(_SC_PAGESIZE);
+      if (page <= 0)
+      {
+        throw std::runtime_error("Cannot determine page size for temporary prefault probe");
+      }
+      volatile std::byte* const uncommitted = warmingBytes.data();
+      for (std::size_t offset = static_cast<std::size_t>(end); offset < warmingBytes.size();
+           offset += static_cast<std::size_t>(page))
+      {
+        uncommitted[offset] = uncommitted[offset];
+      }
+    }
+
+    // Recovery/open validates the retained prefix once and builds bounded local
+    // indexes. Its O(H) cost is reported separately from established appends.
+    const auto writerOpenStart = std::chrono::steady_clock::now();
+    auto openedWriter = recorded::ProducerLog::open_writer(paths, options);
+    const auto writerOpenStop = std::chrono::steady_clock::now();
+    auto writer = require_value(std::move(openedWriter));
+    const auto activeClaim = require_value(writer.claim());
+    ASSERT_NE(activeClaim, historicalClaim);
+    diagnostics::Sample openSample;
+    const auto readerOpenStart = std::chrono::steady_clock::now();
+    recorded::ProducerLogReader reader;
+    {
+      diagnostics::Capture capture(openSample, diagnostics::Collection::Counts);
+      reader = require_value(recorded::ProducerLogReader::open(paths._log, options));
+    }
+    const auto readerOpenStop = std::chrono::steady_clock::now();
+    ASSERT_EQ(require_value(reader.capture()).record_count(), historyRecords);
+    if constexpr (diagnostics::instrumentation_enabled)
+    {
+      // Positive control prevents reporting zero hot counters from a build in
+      // which the tested library's instrumentation was accidentally omitted.
+      EXPECT_GT(openSample._counters[static_cast<std::size_t>(diagnostics::Counter::NativeMapCalls)], 0u);
+      EXPECT_GT(openSample._counters[static_cast<std::size_t>(diagnostics::Counter::FileStatCalls)], 0u);
+    }
+
+    auto request = support::producer_append_request({}, payload);
+    std::array<recorded::ProducerAppendResult, sample_cycles * sample_count> accepted;
+    std::array<double, sample_count> appendTimes{};
+    std::array<long, sample_count> appendMinorFaults{};
+    std::array<long, sample_count> appendMajorFaults{};
+    std::array<double, sample_count> captureTimes{};
+    std::array<double, sample_count> replayTimes{};
+    std::array<std::size_t, sample_count> appendStartRecords{};
+    std::array<std::size_t, sample_count> replayRecordCounts{};
+    std::array<std::uint64_t, sample_count> appendAllocations{};
+    std::array<std::uint64_t, sample_count> captureAllocations{};
+    std::array<std::uint64_t, sample_count> replayAllocations{};
+    for (std::size_t sample = 0; sample != sample_count; ++sample)
+    {
+      const auto startRecords = historyRecords + sample * sample_cycles;
+      appendStartRecords[sample] = startRecords;
+      CycleResult appended;
+      {
+        AllocationCapture allocationCapture;
+        struct rusage before{};
+        struct rusage after{};
+        if (::getrusage(RUSAGE_SELF, &before) != 0)
+        {
+          throw std::runtime_error("Cannot sample faults before append block");
+        }
+        const auto start = std::chrono::steady_clock::now();
+        appended = append_cycles(writer, request,
+            std::span{accepted}.subspan(sample * sample_cycles, sample_cycles), startRecords + 1);
+        const auto stop = std::chrono::steady_clock::now();
+        if (::getrusage(RUSAGE_SELF, &after) != 0)
+        {
+          throw std::runtime_error("Cannot sample faults after append block");
+        }
+        appendMinorFaults[sample] = after.ru_minflt - before.ru_minflt;
+        appendMajorFaults[sample] = after.ru_majflt - before.ru_majflt;
+        appendAllocations[sample] = allocationCapture.stop();
+        appendTimes[sample] = elapsed_ns(start, stop) / sample_cycles;
+      }
+      observed_checksum = appended._checksum;
+      ASSERT_TRUE(appended._valid);
+      ASSERT_EQ(appended._count, sample_cycles);
+      EXPECT_EQ(appendAllocations[sample], 0u);
+
+      // capture validates only this block's new suffix and freezes a cut.
+      // Iteration then replays the entire cut, including the stated history.
+      recorded::ProducerReplayCursor cursor;
+      {
+        AllocationCapture allocationCapture;
+        const auto start = std::chrono::steady_clock::now();
+        auto captured = reader.capture();
+        const auto stop = std::chrono::steady_clock::now();
+        captureAllocations[sample] = allocationCapture.stop();
+        cursor = require_value(std::move(captured));
+        captureTimes[sample] = elapsed_ns(start, stop);
+      }
+      replayRecordCounts[sample] = cursor.record_count();
+      ASSERT_EQ(cursor.record_count(), startRecords + sample_cycles);
+      EXPECT_EQ(captureAllocations[sample], 0u);
+      CycleResult replayed;
+      {
+        AllocationCapture allocationCapture;
+        const auto start = std::chrono::steady_clock::now();
+        replayed = replay_cycles(reader, cursor, payloadBytes);
+        const auto stop = std::chrono::steady_clock::now();
+        replayAllocations[sample] = allocationCapture.stop();
+        replayTimes[sample] = elapsed_ns(start, stop) / replayed._count;
+      }
+      observed_checksum = replayed._checksum;
+      ASSERT_TRUE(replayed._valid);
+      ASSERT_EQ(replayed._count, cursor.record_count());
+      EXPECT_EQ(replayAllocations[sample], 0u);
+    }
+
+    // Count filesystem and lock work in separate blocks, so diagnostic collector
+    // clocks and increments do not contaminate the latency/throughput samples.
+    std::array<recorded::ProducerAppendResult, diagnostic_cycles> diagnosticResults;
+    diagnostics::Sample appendSample;
+    CycleResult diagnosticAppend;
+    {
+      diagnostics::Capture capture(appendSample, diagnostics::Collection::Counts);
+      diagnosticAppend = append_cycles(writer, request, diagnosticResults,
+          historyRecords + accepted.size() + 1);
+    }
+    ASSERT_TRUE(diagnosticAppend._valid);
+    ASSERT_EQ(diagnosticAppend._count, diagnostic_cycles);
+    diagnostics::Sample replaySample;
+    CycleResult diagnosticReplay;
+    {
+      diagnostics::Capture capture(replaySample, diagnostics::Collection::Counts);
+      const auto cursor = reader.capture();
+      const auto* value = std::get_if<recorded::ProducerReplayCursor>(&cursor);
+      if (value)
+      {
+        diagnosticReplay = replay_cycles(reader, *value, payloadBytes);
+      }
+      else
+      {
+        diagnosticReplay._valid = false;
+      }
+    }
+    ASSERT_TRUE(diagnosticReplay._valid);
+    ASSERT_EQ(diagnosticReplay._count, historyRecords + accepted.size() + diagnostic_cycles);
+    expect_no_hot_filesystem_or_gate_work(appendSample);
+    expect_no_hot_filesystem_or_gate_work(replaySample);
+
+    // Independently verify the borrowed replay headers, every payload byte and
+    // destination after timing. The producer restart changes publication claim,
+    // while record ordinals and Queue sequences continue across that restart.
+    auto verified = require_value(reader.capture());
+    std::size_t verifiedCount{};
+    for (;;)
+    {
+      const auto next = require_value(reader.next(verified));
+      if (!next)
+      {
+        break;
+      }
+      const auto& record = *next;
+      EXPECT_EQ(record._header._schema, (SchemaId{MessageType{1}, 1}));
+      EXPECT_EQ(record._header._format, PayloadFormat::Binary);
+      EXPECT_EQ(record._header._flags, request._message._header._flags);
+      EXPECT_EQ(record._header._publishedAt, request._publishedAt);
+      EXPECT_EQ(record._header._payloadBytes, payloadBytes);
+      EXPECT_FALSE(record._header._queue.has_value());
+      EXPECT_TRUE(std::equal(record._payload.begin(), record._payload.end(), payload.begin(), payload.end()));
+      const auto historical = verifiedCount < historyRecords;
+      EXPECT_EQ(record._header._publication._producer, historical ? historicalClaim : activeClaim);
+      EXPECT_EQ(record._header._publication._sequence,
+          historical ? verifiedCount + 1 : verifiedCount - historyRecords + 1);
+      EXPECT_EQ(record._recordOrdinal, verifiedCount + 1);
+      ASSERT_EQ(record.destination_count(), 1u);
+      const auto row = require_value(record.destination_at(0));
+      EXPECT_EQ(row._queue, QueueId{4});
+      EXPECT_EQ(row._queueSequence, verifiedCount + 1);
+      EXPECT_EQ(row._status, DestinationStatus::Accepted);
+      EXPECT_EQ(row._enqueuedAt, request._publishedAt);
+      ++verifiedCount;
+    }
+    ASSERT_EQ(verifiedCount, diagnosticReplay._count);
+    for (const auto& acceptance : accepted)
+    {
+      const auto view = require_value(reader.view(acceptance._reference));
+      EXPECT_EQ(view._recordOrdinal, acceptance._recordOrdinal);
+    }
+
+    const auto appendNs = median(appendTimes);
+    const auto replayNs = median(replayTimes);
+    ASSERT_GT(appendNs, 0.0);
+    ASSERT_GT(replayNs, 0.0);
+    RecordProperty("initial_history_records", std::to_string(historyRecords));
+    RecordProperty("payload_bytes", std::to_string(payloadBytes));
+    RecordProperty("prepared_append_median_ns", std::to_string(appendNs));
+    RecordProperty("prepared_appends_per_second", std::to_string(1e9 / appendNs));
+    RecordProperty("replay_median_ns_per_record", std::to_string(replayNs));
+    std::cout << std::fixed << std::setprecision(3)
+              << "CODEC_APPEND_PERFORMANCE {\"initial_history_records\":" << historyRecords
+              << ",\"payload_bytes\":" << payloadBytes << ",\"samples\":" << sample_count
+              << ",\"cycles_per_sample\":" << sample_cycles
+              << ",\"reserved_file_bytes\":" << reserved_bytes
+              << ",\"publication_capacity\":" << publication_capacity
+              << ",\"instrumentation_enabled\":" << (diagnostics::instrumentation_enabled ? "true" : "false")
+              << ",\"writer_recovery_open_ns\":" << elapsed_ns(writerOpenStart, writerOpenStop)
+              << ",\"reader_open_with_counter_capture_ns\":" << elapsed_ns(readerOpenStart, readerOpenStop)
+              << ",\"prepared_append_median_ns\":" << appendNs
+              << ",\"prepared_appends_per_second\":" << 1e9 / appendNs
+              << ",\"replay_median_ns_per_record\":" << replayNs
+              << ",\"replay_records_per_second\":" << 1e9 / replayNs
+              << ",\"append_block_start_records\":";
+    write_samples(appendStartRecords);
+    std::cout << ",\"prepared_append_ns_samples\":";
+    write_samples(appendTimes);
+    std::cout << ",\"probe_physical_prefault\":" << (probePrefault ? "true" : "false")
+              << ",\"probe_append_minor_faults\":";
+    write_samples(appendMinorFaults);
+    std::cout << ",\"probe_append_major_faults\":";
+    write_samples(appendMajorFaults);
+    std::cout << ",\"capture_new_records_per_sample\":" << sample_cycles << ",\"capture_ns_samples\":";
+    write_samples(captureTimes);
+    std::cout << ",\"replay_record_counts\":";
+    write_samples(replayRecordCounts);
+    std::cout << ",\"replay_ns_per_record_samples\":";
+    write_samples(replayTimes);
+    std::cout << ",\"append_allocations_per_block\":";
+    write_samples(appendAllocations);
+    std::cout << ",\"capture_allocations_per_block\":";
+    write_samples(captureAllocations);
+    std::cout << ",\"replay_allocations_per_block\":";
+    write_samples(replayAllocations);
+    std::cout << ",\"diagnostic_append_records\":" << diagnostic_cycles << ",\"diagnostic_append_counters\":";
+    write_counters(appendSample);
+    std::cout << ",\"diagnostic_capture_replay_records\":" << diagnosticReplay._count
+              << ",\"diagnostic_capture_replay_counters\":";
+    write_counters(replaySample);
+    std::cout << "}\n";
+  }
+
+  INSTANTIATE_TEST_SUITE_P(HistoryAndPayload, ProducerLogAppendPerformance,
+      ::testing::Combine(::testing::Values(std::size_t{0}, std::size_t{128}, std::size_t{1024}),
+                         ::testing::Values(std::size_t{64}, std::size_t{256}, std::size_t{1024})));
+} // namespace

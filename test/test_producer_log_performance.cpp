@@ -4,6 +4,8 @@
 // and ownership contracts differ: the timing ratio is not a transport speedup.
 // Deterministic allocation/lifetime guards fail CI; noisy wall times are reports.
 
+#include "allocation_capture.h"
+#include "performance_samples.h"
 #include "producer_log_format.h"
 #include "publication_metadata.h"
 
@@ -25,138 +27,10 @@
 
 namespace
 {
-  // This executable owns its replacement operators. Keep the counter separate
-  // from optional runtime diagnostics so the guard also works in ordinary builds.
-  thread_local bool count_allocations{};
-  thread_local std::uint64_t captured_allocations{};
-
-  void* allocate(std::size_t bytes, std::size_t alignment = 0)
-  {
-    for (;;)
-    {
-      void* result{};
-      if (alignment == 0)
-      {
-        result = std::malloc(bytes == 0 ? 1 : bytes);
-      }
-      else if (::posix_memalign(&result, std::max(alignment, alignof(void*)), bytes == 0 ? 1 : bytes) != 0)
-      {
-        result = nullptr;
-      }
-      if (result)
-      {
-        if (count_allocations)
-        {
-          ++captured_allocations;
-        }
-        return result;
-      }
-      const auto handler = std::get_new_handler();
-      if (!handler)
-      {
-        throw std::bad_alloc{};
-      }
-      handler();
-    }
-  }
-
-  void* allocate_nothrow(std::size_t bytes, std::size_t alignment = 0) noexcept
-  {
-    try
-    {
-      return allocate(bytes, alignment);
-    }
-    catch (...)
-    {
-      return nullptr;
-    }
-  }
-}
-
-void* operator new(std::size_t bytes)
-{
-  return allocate(bytes);
-}
-void* operator new[](std::size_t bytes)
-{
-  return allocate(bytes);
-}
-void* operator new(std::size_t bytes, std::align_val_t alignment)
-{
-  return allocate(bytes, static_cast<std::size_t>(alignment));
-}
-void* operator new[](std::size_t bytes, std::align_val_t alignment)
-{
-  return allocate(bytes, static_cast<std::size_t>(alignment));
-}
-void* operator new(std::size_t bytes, const std::nothrow_t&) noexcept
-{
-  return allocate_nothrow(bytes);
-}
-void* operator new[](std::size_t bytes, const std::nothrow_t&) noexcept
-{
-  return allocate_nothrow(bytes);
-}
-void* operator new(std::size_t bytes, std::align_val_t alignment, const std::nothrow_t&) noexcept
-{
-  return allocate_nothrow(bytes, static_cast<std::size_t>(alignment));
-}
-void* operator new[](std::size_t bytes, std::align_val_t alignment, const std::nothrow_t&) noexcept
-{
-  return allocate_nothrow(bytes, static_cast<std::size_t>(alignment));
-}
-void operator delete(void* address) noexcept
-{
-  std::free(address);
-}
-void operator delete[](void* address) noexcept
-{
-  std::free(address);
-}
-void operator delete(void* address, std::size_t) noexcept
-{
-  std::free(address);
-}
-void operator delete[](void* address, std::size_t) noexcept
-{
-  std::free(address);
-}
-void operator delete(void* address, std::align_val_t) noexcept
-{
-  std::free(address);
-}
-void operator delete[](void* address, std::align_val_t) noexcept
-{
-  std::free(address);
-}
-void operator delete(void* address, std::size_t, std::align_val_t) noexcept
-{
-  std::free(address);
-}
-void operator delete[](void* address, std::size_t, std::align_val_t) noexcept
-{
-  std::free(address);
-}
-void operator delete(void* address, const std::nothrow_t&) noexcept
-{
-  std::free(address);
-}
-void operator delete[](void* address, const std::nothrow_t&) noexcept
-{
-  std::free(address);
-}
-void operator delete(void* address, std::align_val_t, const std::nothrow_t&) noexcept
-{
-  std::free(address);
-}
-void operator delete[](void* address, std::align_val_t, const std::nothrow_t&) noexcept
-{
-  std::free(address);
-}
-
-namespace
-{
   using namespace angaria;
+  using angaria::test_support::AllocationCapture;
+  using angaria::test_support::median;
+  using angaria::test_support::write_samples;
   namespace recorded = angaria::detail::recorded;
   namespace mapped = angaria::detail::mapped;
 
@@ -170,27 +44,6 @@ namespace
   // Each cycle contributes an observed payload byte and decoded identity. The
   // volatile publication occurs outside timing/capture and prevents dead work.
   volatile std::uint64_t observed_checksum{};
-
-  class AllocationCapture
-  {
-  public:
-    AllocationCapture()
-    {
-      captured_allocations = 0;
-      count_allocations = true;
-    }
-
-    ~AllocationCapture()
-    {
-      count_allocations = false;
-    }
-
-    std::uint64_t stop() noexcept
-    {
-      count_allocations = false;
-      return captured_allocations;
-    }
-  };
 
   struct CycleResult
   {
@@ -266,26 +119,6 @@ namespace
     observed_checksum = result._checksum;
     valid = valid && result._valid && result._checksum == expectedChecksum;
     return std::chrono::duration<double, std::nano>(stop - start).count() / sample_cycles;
-  }
-
-  double median(std::array<double, sample_count> values)
-  {
-    std::sort(values.begin(), values.end());
-    return values[values.size() / 2];
-  }
-
-  void write_samples(const std::array<double, sample_count>& values)
-  {
-    std::cout << '[';
-    for (std::size_t index = 0; index != values.size(); ++index)
-    {
-      if (index != 0)
-      {
-        std::cout << ',';
-      }
-      std::cout << values[index];
-    }
-    std::cout << ']';
   }
 
   class ProducerLogPerformance : public ::testing::TestWithParam<std::size_t>

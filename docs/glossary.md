@@ -4,12 +4,14 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 
 ## Proposed independent messaging protocol
 
-These terms belong to the [step-1 protocol design](independent-messaging-protocol.md), which is not implemented by the current Session-gated runtime.
+These terms belong to the [independent messaging protocol](independent-messaging-protocol.md). Steps 4.31–4.32 implement its private log codecs and storage primitives; the current public Session-gated runtime does not yet use that protocol.
 
 | Term | Meaning in the proposed protocol |
 | --- | --- |
 | **Producer stream** | One Task-owned append log shared by its outbound Queues, with independent allocation/commit state. |
 | **Committed tail** | The atomic end offset of that stream's immutable accepted prefix. Its publication accepts a message; reserved file length and ring hints do not. |
+| **Replay cut** | A fixed acquired committed boundary and record count, bound to one producer file identity. Iteration excludes later acceptances; step 4.32 implements this privately in [producer-log replay](producer-log.md#borrowed-and-owning-replay). |
+| **Producer owner file** | Native per-producer incarnation storage bound to the log file's identity. Its counter advances before new IDs are exposed, including after an owner accepted nothing. It is separate from immutable message records. |
 | **Publication capacity** | The configured maximum accepted publication-record count in the bounded stream. It bounds lookup storage and acknowledged destination receipt reservations. |
 | **Logical credit** | A monotonic per-Queue consumed-sequence watermark limiting producer admission independently of descriptor publication and application acknowledgment. |
 | **Sealed catalog** | The checked Registry/schema/topology snapshot fixed before the first protocol's data operations. Owner replacement changes Task incarnation, not this catalog. |

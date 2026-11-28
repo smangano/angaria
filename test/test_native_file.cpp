@@ -127,6 +127,65 @@ namespace
     EXPECT_NE(flags & FD_CLOEXEC, 0);
   }
 
+  TEST_F(NativeFileTest, PhysicalReservationPreparesTheWholeFreshFileBeforeMapping)
+  {
+    // Unlike resize(), reserve() must establish backing before any data write.
+    // Checking allocated blocks here catches an accidental sparse-only fallback;
+    // st_blocks counts 512-byte units on the qualified Linux and macOS hosts.
+    constexpr std::uint64_t reservation = 65536;
+    auto file = require_value(mapped::NativeFile::create_exclusive(_path, reservation));
+    require_value(file.reserve(reservation));
+    struct stat info{};
+    ASSERT_EQ(::fstat(require_value(file.native_handle()), &info), 0);
+    EXPECT_EQ(info.st_size, static_cast<off_t>(reservation));
+    ASSERT_GE(info.st_blocks, 0);
+    EXPECT_GE(static_cast<std::uint64_t>(info.st_blocks), reservation / 512);
+
+    // The complete reserved extent is immediately usable and zero initialized.
+    auto region = require_value(file.map_read_write(0, reservation));
+    const auto bytes = require_value(region.writable_bytes());
+    EXPECT_TRUE(std::all_of(bytes.begin(), bytes.end(), [](std::byte value)
+    {
+      return value == std::byte{};
+    }));
+    bytes.front() = std::byte{0x31};
+    bytes.back() = std::byte{0x42};
+    EXPECT_EQ(require_value(file.size()), reservation);
+    std::array<std::byte, 1> last{};
+    require_value(file.read_exact(reservation - 1, last));
+    EXPECT_EQ(last.front(), std::byte{0x42});
+  }
+
+  TEST_F(NativeFileTest, ReservationRejectsUnsuitableStateWithoutAllocatingOrChangingBytes)
+  {
+    // Reservation belongs to offline setup, before mappings or existing data.
+    // Input and access failures must not allocate even an empty file's backing.
+    auto file = require_value(mapped::NativeFile::create_exclusive(_path, 8192));
+    struct stat before{};
+    ASSERT_EQ(::fstat(require_value(file.native_handle()), &before), 0);
+    expect_error(file.reserve(0), ErrorCode::InvalidArgument);
+    expect_error(file.reserve(8193), ErrorCode::CapacityExceeded);
+    expect_error(file.reserve(std::numeric_limits<std::uint64_t>::max()), ErrorCode::CapacityExceeded);
+    auto readOnly = require_value(mapped::NativeFile::open_existing(_path, mapped::FileAccess::ReadOnly, 8192));
+    expect_error(readOnly.reserve(4096), ErrorCode::InvalidState);
+    struct stat after{};
+    ASSERT_EQ(::fstat(require_value(file.native_handle()), &after), 0);
+    EXPECT_EQ(after.st_size, before.st_size);
+    EXPECT_EQ(after.st_blocks, before.st_blocks);
+
+    require_value(file.resize(16));
+    std::array<std::byte, 16> original;
+    original.fill(std::byte{0x71});
+    require_value(file.write_exact(0, original));
+    expect_error(file.reserve(4096), ErrorCode::InvalidState);
+    auto region = require_value(file.map_read_only(0, original.size()));
+    auto alias = require_value(mapped::NativeFile::open_existing(_path, mapped::FileAccess::ReadWrite, 8192));
+    expect_error(alias.reserve(4096), ErrorCode::OwnershipBusy);
+    EXPECT_EQ(require_value(file.size()), original.size());
+    const auto retained = require_value(region.bytes());
+    EXPECT_TRUE(std::equal(original.begin(), original.end(), retained.begin()));
+  }
+
   // Reserve space with resize() before writing it. Positional I/O stays within
   // that reservation and leaves the descriptor cursor untouched, allowing
   // independent operations without interference through a shared seek position.

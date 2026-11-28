@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="10" failures="0" disabled="0" errors="0" time="0.089" timestamp="2026-11-27T20:35:02.146" name="AllTests">
+  <testsuite name="ProducerLogAppendAllocationCapture" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-27T20:35:02.146">
+    <testcase name="CountsSuccessfulAllocationRequests" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="174" status="run" result="completed" time="0." timestamp="2026-11-27T20:35:02.146" classname="ProducerLogAppendAllocationCapture" />
+  </testsuite>
+  <testsuite name="HistoryAndPayload/ProducerLogAppendPerformance" tests="9" failures="0" disabled="0" skipped="0" errors="0" time="0.089" timestamp="2026-11-27T20:35:02.146">
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/0" value_param="(0, 64)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.004" timestamp="2026-11-27T20:35:02.147" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="0"/>
+        <property name="payload_bytes" value="64"/>
+        <property name="prepared_append_median_ns" value="452.468750"/>
+        <property name="prepared_appends_per_second" value="2210097.382416"/>
+        <property name="replay_median_ns_per_record" value="42.480469"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/1" value_param="(0, 256)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.004" timestamp="2026-11-27T20:35:02.151" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="0"/>
+        <property name="payload_bytes" value="256"/>
+        <property name="prepared_append_median_ns" value="815.765625"/>
+        <property name="prepared_appends_per_second" value="1225842.287728"/>
+        <property name="replay_median_ns_per_record" value="47.307292"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/2" value_param="(0, 1024)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.005" timestamp="2026-11-27T20:35:02.155" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="0"/>
+        <property name="payload_bytes" value="1024"/>
+        <property name="prepared_append_median_ns" value="582.671875"/>
+        <property name="prepared_appends_per_second" value="1716231.798557"/>
+        <property name="replay_median_ns_per_record" value="51.421875"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/3" value_param="(128, 64)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.014" timestamp="2026-11-27T20:35:02.160" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="128"/>
+        <property name="payload_bytes" value="64"/>
+        <property name="prepared_append_median_ns" value="57.296875"/>
+        <property name="prepared_appends_per_second" value="17452958.821925"/>
+        <property name="replay_median_ns_per_record" value="44.921875"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/4" value_param="(128, 256)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.01" timestamp="2026-11-27T20:35:02.175" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="128"/>
+        <property name="payload_bytes" value="256"/>
+        <property name="prepared_append_median_ns" value="1332.031250"/>
+        <property name="prepared_appends_per_second" value="750733.137830"/>
+        <property name="replay_median_ns_per_record" value="55.013021"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/5" value_param="(128, 1024)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.015" timestamp="2026-11-27T20:35:02.185" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="128"/>
+        <property name="payload_bytes" value="1024"/>
+        <property name="prepared_append_median_ns" value="631.515625"/>
+        <property name="prepared_appends_per_second" value="1583492.094911"/>
+        <property name="replay_median_ns_per_record" value="45.574219"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/6" value_param="(1024, 64)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.01" timestamp="2026-11-27T20:35:02.200" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="1024"/>
+        <property name="payload_bytes" value="64"/>
+        <property name="prepared_append_median_ns" value="80.078125"/>
+        <property name="prepared_appends_per_second" value="12487804.878049"/>
+        <property name="replay_median_ns_per_record" value="43.688322"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/7" value_param="(1024, 256)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.013" timestamp="2026-11-27T20:35:02.210" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="1024"/>
+        <property name="payload_bytes" value="256"/>
+        <property name="prepared_append_median_ns" value="736.328125"/>
+        <property name="prepared_appends_per_second" value="1358090.185676"/>
+        <property name="replay_median_ns_per_record" value="52.889137"/>
+      </properties>
+    </testcase>
+    <testcase name="PreparedAppendAndReplayStayAllocationFreeWithoutSessionWork/8" value_param="(1024, 1024)" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_append_performance.cpp" line="192" status="run" result="completed" time="0.012" timestamp="2026-11-27T20:35:02.224" classname="HistoryAndPayload/ProducerLogAppendPerformance">
+      <properties>
+        <property name="initial_history_records" value="1024"/>
+        <property name="payload_bytes" value="1024"/>
+        <property name="prepared_append_median_ns" value="868.484375"/>
+        <property name="prepared_appends_per_second" value="1151431.192991"/>
+        <property name="replay_median_ns_per_record" value="44.888158"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

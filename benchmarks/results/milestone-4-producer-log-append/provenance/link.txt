@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wall -Wextra -Werror -g -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/angaria_producer_log_append_performance.dir/test/test_producer_log_append_performance.cpp.o -o angaria_producer_log_append_performance  libangaria.a /usr/local/lib/libgtest_main.a /usr/local/lib/libgtest.a

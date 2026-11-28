@@ -71,6 +71,9 @@ namespace angaria::detail::mapped
     Result<FileIdentity> identity() const;
     // Borrowed descriptor: callers must not close, replace, or resize it directly.
     Result<int> native_handle() const;
+    // Setup-only physical reservation for a fresh empty read-write file with
+    // no mappings. Unsupported allocation never falls back to sparse growth.
+    OperationResult reserve(std::uint64_t bytes);
     OperationResult resize(std::uint64_t bytes);
     OperationResult read_exact(std::uint64_t offset, std::span<std::byte> output) const;
     OperationResult write_exact(std::uint64_t offset, std::span<const std::byte> input);

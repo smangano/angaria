@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/build/owned-log-normal/angaria_producer_log_append_performance",
+    "--gtest_color=no",
+    "--gtest_output=xml:/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/benchmarks/results/milestone-4-producer-log-append/raw/run-07.xml"
+  ],
+  "elapsed_seconds": 0.08440620799956378,
+  "errors": [],
+  "exit_code": 0,
+  "parsed_cases": 9,
+  "run": "run-07",
+  "started_utc": "2026-11-28T01:35:02.049267+00:00",
+  "valid": true
+}

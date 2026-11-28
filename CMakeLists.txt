@@ -37,6 +37,7 @@ add_library(angaria STATIC
   src/message.cpp
   src/publication_metadata.cpp
   src/producer_log_format.cpp
+  src/producer_log.cpp
   src/publication_runtime.cpp
   src/mapped_payload.cpp
   src/delivery_state.cpp
@@ -52,8 +53,11 @@ add_library(angaria STATIC
   src/role_lock.cpp
   src/mapped_superblock.cpp
   src/native_file.cpp
+  src/native_reservation.cpp
   src/mapped_region.cpp
   src/native_atomic.cpp
+  src/coordination_descriptor.cpp
+  src/native_claim.cpp
   src/session_controller.cpp
   src/journal_format.cpp
   src/journal_validation.cpp
@@ -235,6 +239,15 @@ if(BUILD_TESTING)
   add_test(NAME producer_log_performance COMMAND angaria_producer_log_performance)
   set_tests_properties(producer_log_performance PROPERTIES TIMEOUT 30)
 
+  add_executable(angaria_producer_log_append_performance test/test_producer_log_append_performance.cpp)
+  target_include_directories(angaria_producer_log_append_performance PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_producer_log_append_performance PRIVATE angaria GTest::gtest_main)
+  if(ANGARIA_ENABLE_DIAGNOSTICS)
+    target_compile_definitions(angaria_producer_log_append_performance PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+  endif()
+  add_test(NAME producer_log_append_performance COMMAND angaria_producer_log_append_performance)
+  set_tests_properties(producer_log_append_performance PROPERTIES TIMEOUT 30)
+
   if(ANGARIA_BUILD_IPC_COMPARISON)
     add_executable(angaria_ipc_comparison_tests test/test_ipc_comparison_deadlines.cpp)
     target_include_directories(angaria_ipc_comparison_tests PRIVATE
@@ -338,6 +351,10 @@ if(BUILD_TESTING)
   add_executable(angaria_capture_diagnostic_worker test/capture_diagnostic_worker.cpp)
   target_link_libraries(angaria_capture_diagnostic_worker PRIVATE angaria)
 
+  add_executable(angaria_producer_log_worker test/producer_log_worker.cpp)
+  target_include_directories(angaria_producer_log_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_producer_log_worker PRIVATE angaria)
+
   add_executable(angaria_tests
     test/test.cpp
     test/test_performance_diagnostics.cpp
@@ -349,6 +366,7 @@ if(BUILD_TESTING)
     test/test_message.cpp
     test/test_publication_metadata.cpp
     test/test_producer_log_format.cpp
+    test/test_producer_log.cpp
     test/test_publication_api.cpp
     test/test_publication_runtime.cpp
     test/test_publication_recovery.cpp
@@ -431,11 +449,13 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_ACTIVATION_WORKER="$<TARGET_FILE:angaria_native_activation_worker>"
     ANGARIA_NATIVE_REGISTRY_WORKER="$<TARGET_FILE:angaria_native_registry_worker>"
     ANGARIA_TEST_VERSION="${PROJECT_VERSION}"
+    ANGARIA_PRODUCER_LOG_WORKER="$<TARGET_FILE:angaria_producer_log_worker>"
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
   add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_delivery_progress_worker angaria_native_publication_worker angaria_native_source_worker angaria_native_loss_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
   add_dependencies(angaria_tests angaria_native_transport_worker angaria_native_transport_io_worker)
+  add_dependencies(angaria_tests angaria_producer_log_worker)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 10)
