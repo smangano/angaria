@@ -80,11 +80,12 @@ namespace native_pipeline
           source->_descriptor._owner != tasks[index + 2] || queue->_descriptor._producer != tasks[index + 1] ||
           queue->_descriptor._sourceSet != source->_id || source->_members != std::vector{queue->_id} ||
           source->_descriptor._selection != SelectionPolicy::Strict ||
-          source->_descriptor._wait != WaitPolicy::Spin || queue->_descriptor._ringCapacity != 2 ||
+          source->_descriptor._wait != WaitPolicy::Spin ||
+          source->_descriptor._acknowledgment != AcknowledgmentMode::Required || queue->_descriptor._ringCapacity != 16 ||
           queue->_descriptor._delivery != DeliveryPolicy::RecoverFromLog)
       {
         return Error{ErrorCode::InvalidConfiguration,
-            "Each pipeline Source needs its one Active recovery Queue with ring capacity two",
+            "Each pipeline Source needs its one Active recovery Queue with ring capacity sixteen",
             "pipeline.connections"};
       }
     }
@@ -141,7 +142,7 @@ namespace native_pipeline
     std::cout << "SESSION " << text.str() << '\n'
               << "INITIALIZED tasks=" << snapshot._tasks.size() << " queues=" << snapshot._queues.size()
               << " sources=" << snapshot._sources.size() << " schemas=" << snapshot._messages.size()
-              << " ring=2\n";
+              << " ring=16\n";
     return std::monostate{};
   }
 

@@ -6,226 +6,44 @@
   <a href="assets/logos/README.md"><img src="assets/logos/A1_original_web.png" alt="Angaria — C++ messaging library" width="360"></a>
 </p>
 
-Angaria is a C++ inter-process messaging framework in development around a shared persistent Registry, Source Queue Sets, Publishing Queue Sets, and selectable policies. The [roadmap](ROADMAP.md) records the agreed architecture and ten milestones based on the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria). Milestones 1, [2](docs/milestones/milestone-2.md), and [3](docs/milestones/milestone-3.md) are complete. Milestone 3 adds general message construction, capture, and inspection through exact Registry definitions. [Milestone 4](docs/milestones/milestone-4.md) now supports direct Queue publication, acceptance lookup, and receiving through a Source with one Active Queue.
+Angaria is a C++ inter-process messaging framework built around a shared Registry, producer-owned message logs, consumer-owned Source Queue Sets, Publishing Queue Sets and selectable policies. It targets bounded cooperating processes on one machine. The [roadmap](ROADMAP.md) follows the [original design wiki](https://github.com/smangano/angaria/wiki/Angaria); milestones 1–3 are complete and milestone 4 is in performance qualification.
 
-The framework version is recorded in [VERSION](VERSION), which CMake reads and copies into the build directory. Development versions use `0.<milestone>.<build>`, with a new build number for every PR and, from milestone 3, build numbering starting at `1` for each milestone. Completing the roadmap produces `1.0.0`; see the [versioning policy](ROADMAP.md#versioning).
+Framework **0.4.39** admits the independent messaging runtime through the public API. Applications can register their Tasks, schemas and connections, then send through `QueueWriter` and receive through a `SourceQueueSet` with one Active input. Acknowledgment is enabled by default; TOML can select recorded unacknowledged delivery. Both modes retain every accepted message for inspection and replay. Established messaging uses producer/connection/consumer state without the Session administrative gate. See the [public runtime contract](docs/public-runtime-admission.md) and [latency and throughput qualification](docs/public-runtime-performance.md).
 
-The milestone-6 demo target is a [five-process trading simulation](ROADMAP.md#demonstration-application): market-data feed, strategy, risk gateway, exchange simulator, and audit consumer. Planning starts during milestones 2–3, with runnable portions introduced as mapped storage and Queue Sets become available.
+All registration and activation must finish before the first writer, Source or publication-ID issuer opens the runtime. That first admission seals the catalog. Use fresh development Sessions: the current native format is **3.0**, synchronization revision **2**, and earlier native formats are rejected. The superseded Session-gated message engine and v0 prototype have been removed; their pinned source and measurements remain available in Git history.
 
-The earlier v0 prototype remains available in the explicitly labeled legacy sections below. Use the primer for the current Registry and native Queue API.
+The current profile supports multiple outgoing Queues and exact schemas per producer Task, Process and Thread Tasks, optional acknowledgment, replacement, backlog recovery, owning Message copies and public log replay/export. Multiple-input scheduling, Publishing Queue Set execution, allowed-loss delivery, notification waiting, log reclamation and other policies follow later roadmap steps. Metadata declarations for future topology do not imply those operations are implemented.
 
 ## Build and test
 
-For the complete application interface direction, including offline log inspection and replay, see the [public interface review](docs/public-interface.md). Its isolated declarations and compile-only examples include planned methods. Framework **0.4.13** completes milestone 4's [measurements](docs/native-performance.md) and [completion audit](docs/milestones/milestone-4-completion.md) for review before integration. Implemented native delivery supports direct sends, one Active Queue per Source, acknowledgment/release, configured allowed loss, and explicit Source close. The review's status table identifies the remaining work.
-
-New to Angaria? Start with the [programmer primer](docs/primer.md). Its seventeen runnable programs progress from creating a Session to configuring connections, inspecting Registry history, exchanging captured records, and sending, receiving, copying, and acknowledging native Queue messages. The latest lesson runs a [three-process market monitor](docs/native-pipeline.md) through native Queues, including backlog, schema versions, and replacement. Each program uses public Angaria headers with visible configuration and Result/Error checks. It grows with each milestone.
-
-Step **4.12**, framework **0.4.14**, adds [detailed performance diagnostics](docs/performance-diagnostics.md) and [measured findings](docs/performance-diagnostics-findings.md). Milestone-4 integration into `main` is held for diagnosis, measured fixes, and performance/correctness qualification. Step **4.13**, framework **0.4.15**, begins [optimization through validated-prefix reuse](docs/performance-prefix-reuse.md). Step **4.14**, framework **0.4.16**, continues with [bounded metadata scan windows](docs/performance-prefix-windows.md). Step **4.15**, framework **0.4.17**, addresses polling stalls with [local gate handoff](docs/performance-gate-handoff.md). Step **4.16**, framework **0.4.18**, extends [bounded mapping reuse to runtime metadata](docs/performance-runtime-windows.md). Step **4.17**, framework **0.4.19**, [reuses history already validated under the same gate](docs/performance-operation-validation.md) for the first execution attempt. Step **4.18**, framework **0.4.20**, [reuses receive selection validation during issuance](docs/performance-receive-validation.md). Step **4.19**, framework **0.4.21**, [resolves the oldest pending delivery directly](docs/performance-delivery-lookup.md) instead of repeating a metadata search. Step **4.20**, framework **0.4.22**, [reuses checked Task and retained topology definitions](docs/performance-definition-reuse.md) within each operation. Step **4.21**, framework **0.4.23**, [shares fresh schema preparation with payload codecs](docs/performance-payload-preparation.md). Step **4.22**, framework **0.4.24**, [reuses buffers during complete-history scanning](docs/performance-prefix-buffers.md). Step **4.23**, framework **0.4.25**, [removes duplicate resource checks before native gate locking](docs/performance-gate-resources.md), retaining post-lock rejection and documenting delayed error detection under contention. Step **4.24**, framework **0.4.26**, adds [on-demand Cachegrind cycle profiling](docs/performance-cachegrind.md) with a fixed simulation model and retained source-level evidence. Step **4.25**, framework **0.4.27**, [avoids uniqueness scratch for a single Publication destination](docs/performance-single-destination.md), retaining row checks and adding matched base/head profiling. Step **4.26**, framework **0.4.28**, [validates journal manifests and commands without owning copies](docs/performance-manifest-validation.md) during history scans.
-
-Step **4.27**, framework **0.4.29**, records the [recorded unacknowledged delivery plan](docs/recorded-unacknowledged-delivery-plan.md). The next performance priority is a [side-by-side nanomsg IPC comparison](docs/nanomsg-comparison-plan.md), using end-to-end latency and delivered throughput to guide implementation. Both acknowledged and proposed unacknowledged Angaria delivery require accepted messages to remain replayable. Comparison results will state each framework's recording and acknowledgment guarantees. Step **4.28**, framework **0.4.30**, implements the [optional 1:1 comparison runner](docs/nanomsg-comparison.md) with verified payloads, retained raw attempts and on-demand hosted qualification. The recorded unacknowledged profile remains planned work.
-
-Step **4.29**, framework **0.4.31**, adds [focused stall diagnostics and an experimental recorded SPSC connection](docs/stall-study.md). It retains existing log acceptance and replay while exploring consumer delivery without the Session gate. The experiment is benchmark-only; public runtime admission remains planned.
-
-Step **4.30**, framework **0.4.32**, supplies the [independent messaging protocol design](docs/independent-messaging-protocol.md): producer-owned recording/replay and optional consumer-owned acknowledgment progress, with no Session gate in established point-to-point communication. It is a design for review, not an implemented mode. Before 1.0, breaking changes require matching programs/libraries and fresh Sessions; the replacement will not carry a backward-compatibility engine.
-
-Step **4.31**, framework **0.4.33**, implements private [producer-log format codecs](docs/producer-log-format.md): bounded headers/references and allocation-free Publication encoding with borrowed decoding. Step **4.32**, framework **0.4.34**, adds private [producer-owned mapped append, recovery and replay](docs/producer-log.md): one atomic acceptance boundary, persistent incarnation, accepted-ID retry and frozen replay cuts. Actual process-crash tests and focused append/replay latency and throughput checks qualify these storage primitives.
-
-Step **4.33**, framework **0.4.35**, adds private [recorded point-to-point delivery](docs/recorded-queue.md). Stable endpoints use producer-owned recording, bounded atomic descriptor hints and consumer-returned transport credit, without a Session gate in normal communication. Message views and owning copies preserve their complete headers and retained schema definitions. [Matched nanomsg measurements](benchmarks/results/milestone-4-recorded-connection/README.md) measure the complete new ID/send/outcome-lookup/receive path. Public admission and optional processing acknowledgments on this engine remain later steps; current public APIs still use their existing protocol and acknowledged default.
-
-On Ubuntu 24.04, install a C++20 compiler, CMake, Boost headers, GoogleTest, and Python 3.9 or later for the automated walkthrough.
+Use CMake 3.20 or later, a C++20 compiler, Boost headers, Python 3 and GoogleTest for tests. CMake fetches the pinned cpptoml TOML parser. Boost and Intel TBB may be used where warranted.
 
 ```sh
-sudo apt-get install build-essential cmake libboost-dev libgtest-dev python3
-git clone https://github.com/smangano/angaria.git
-cd angaria
-cmake -S . -B build
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-```
-
-For usage examples, start with the [test reading guide](test/README.md). Test comments explain the demonstrated scenarios and distinguish public Session usage from private fixtures, recovery checks, the protocol model, and the earlier prototype.
-
-On macOS, install the test dependencies with Homebrew and use its prefix when configuring:
-
-```sh
-brew install cmake boost googletest python
-cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel 3
 ctest --test-dir build --output-on-failure
 ```
 
-Hosted CI automatically exercises Linux x86_64, Linux ARM64, and macOS ARM64. The slower macOS x86_64 qualification runs only when requested through its manual workflow. The [native qualification contract](docs/native-storage.md#registry-qualification-and-native-profiles) defines the coverage and [manual-run instructions](docs/native-storage.md#request-macos-x86_64-qualification).
+CI runs Linux x86_64, Linux ARM64 and macOS ARM64. macOS x86_64 is available on request. Ordinary CI checks correctness and focused performance invariants without timing thresholds. The optional [public IPC comparison](docs/public-runtime-performance.md) compares both delivery modes with pinned classic nanomsg 1.3.0 using verified payloads, end-to-end latency and completed throughput.
 
-## Configuration contract
+## Learn the public API
 
-The [configuration and lifecycle contract](docs/configuration.md) defines the implemented TOML schema. `Session::create_from_file` validates configuration and creates the initial Registry; `Session::attach_from_file` validates settings against an existing Session without applying registrations or claiming Tasks. The [trading example](examples/trading.toml) describes process and thread Tasks, both Queue Set types, scalar Fields, and an immutable message schema using the supported native policy profile. Start with the [primer's TOML lesson](docs/primer.md#7-move-setup-into-a-toml-file) for a smaller runnable example.
-
-The loader uses pinned cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`, targeting TOML v0.5.0 syntax. CMake fetches those headers for library builds, including builds with testing disabled. A local checkout of that revision can be supplied for an offline build.
+Start with the [programmer primer](docs/primer.md). Its eighteen runnable lessons use public Angaria calls with explicit configuration and error handling. They progress from Session creation and registration to schemas, portable captures, process exchange, Queue messaging, acknowledgment, a three-process application, and replaying accepted messages.
 
 ```sh
-cmake -S . -B build -DFETCHCONTENT_SOURCE_DIR_CPPTOML=/absolute/path/to/cpptoml
+build/angaria_primer_15_receive /tmp/angaria-receive
+build/angaria_primer_18_log_replay /tmp/angaria-receive /tmp/angaria-capture.bin
 ```
 
-Relative Session directories resolve from the TOML file's parent directory. Creation refuses to replace an existing Session and publishes its directory only after setup succeeds. Delivery policies whose runtime behavior is not implemented still return `UnsupportedPolicy`.
+Choose fresh paths for the Session and export file. The replay lesson preserves producer and Queue order; it does not reconstruct the consumer's original execution schedule. Its flat export needs the matching retained catalog and contains no processing receipts or execution trace.
 
-## Public API contract
+A `MessageView` borrows immutable message bytes and exposes the same `MessageHeader` as an owning `Message`. `copy()` preserves that header, payload and decoding context beyond runtime-handle lifetimes. A `Delivery` adds an acknowledgment token in acknowledged mode. Returning transport credit permits another send; it does not assert that the application processed a message. Accepted destination results expose their Queue sequence, and `QueueWriter::acknowledged_sequence()` reports a conservative committed processing lower bound.
 
-The [public C++ API contract](docs/api.md) describes the identities, descriptors, results, and endpoint interfaces under milestone 1. The [trading API example](examples/trading_api.cpp) is compiled with each build as `angaria_api_contract`. Runtime definitions follow the Registry, message, and Queue Set milestones.
+Useful references:
 
-The [mapped layout and compatibility contract](docs/mapped-format.md) defines retained formats 2.0/2.1, the current core 2.2 creation/reader profile, capacity accounting, and migration rules. Public Session creation/attachment, registration and inspection of every Registry entity kind, topology updates and activation, Task claims, publication identity issuance, direct send/status, and basic Source receive/acknowledge/release/close are implemented. Multiple-Queue selection and Publishing follow their [roadmap milestones](ROADMAP.md).
+- [Public API](docs/api.md), [TOML configuration](docs/configuration.md) and [terminology](docs/glossary.md).
+- [Current storage format](docs/mapped-format.md), [producer logs](docs/producer-log.md), [recorded connections](docs/recorded-queue.md) and [acknowledgment progress](docs/recorded-acknowledged-progress.md).
+- [Public interface direction](docs/public-interface.md), whose status table distinguishes implemented methods from later proposals.
+- [Milestone 4 review history](docs/milestones/milestone-4.md) and [the independent messaging plan](docs/recorded-unacknowledged-delivery-plan.md).
 
-The [concurrency and recovery contract](docs/concurrency.md) specifies the mutation gate, Task claims, journal commit/replay, full-log delivery progress, and notification protocol. CTest runs both the bounded reference model and native storage/coordination/journal qualification tests. Native publication and basic Source delivery are implemented; eventfd notification remains milestone 7.
-
-Step 2.1 implements the format-2 backend foundation: a shared checked section planner and a portable [superblock codec](src/mapped_superblock.h), with byte-fixture, malformed-input, and compatibility tests. The [superblock](docs/mapped-format.md#superblock) is the fixed 4,096-byte session control area at the beginning of `session.ang`. Its codec encodes a provisional superblock prefix and validates immutable metadata; it does not create a usable Session or perform native file/mapping/journal recovery. Native resources, journal recovery, and Session integration are separate increments in the [milestone 2 steps](docs/milestones/milestone-2.md). Related terms are defined in the [glossary](docs/glossary.md).
-
-Step 2.2 adds private [native file and mapping owners](docs/native-storage.md): checked positional I/O, read-only/shared writable mappings, and bounded resize with process-local protection for live views across aliases. A mapping retains its backing file state. These storage primitives do not expose usable format-2 Sessions.
-
-Step 2.3 adds the shared [session controller, mutation guards, Task leases, and native atomic adapter](docs/native-storage.md#shared-controller-and-mutation-gate). Native tests exercise thread/process exclusion, claim lifetimes and process termination, and mapped-memory publication ordering.
-
-Step 2.4 adds the private [mutation journal](docs/native-storage.md#journal-transactions-and-recovery): inline fixed-state transactions, append batches with manifests, stale-plan rejection, and repeatable rollback/redo for two-plane storage. Tests terminate independent processes at real write/recovery boundaries and inject I/O failures.
-
-Step 2.5 integrates [public Session creation and attachment](docs/native-storage.md#public-session-and-task-lifetimes), persisted options/metadata, the creator Process Task, Task inspection, and fixed-state attachment/incarnation/publication-ID operations. Creation publishes a completely initialized directory exclusively; attachment validates and recovers existing state. Claim replacement, including cleanup of a dead Process Task's thread Tasks, works with no append space.
-
-Step 2.6 adds [Task registration](docs/native-storage.md#public-task-registration) through a live Task's Registry. Exact descriptors return the existing identity without writing; conflicting descriptors, exhausted capacities, and insufficient log space preserve existing registrations. Process and Thread Tasks can be registered before attachment, and each successful new registration commits one immutable definition and Registry revision. Tests cover concurrent registrars, independent discovery, and interrupted registration/recovery.
-
-Step 2.7 adds [Field and immutable message-schema registration](docs/native-storage.md#fields-and-message-schemas). Field IDs retain their full 32-bit `0xEE` prefix, schema identities use an exact message type/version, and ordered Field lists preserve repetition without a 16-bit count limit. Earlier versions remain discoverable after a new version is registered. Step 3.1 adds scalar payload encoding below, and step 3.3 adds basic logical Fields. Step 2.10 integrates TOML loading below.
-
-Step 2.8 adds [draft Queues and Queue Sets](docs/native-storage.md#draft-queues-and-queue-sets), shared typed Queue Set identities, ownership checks, and atomic Source membership registration. Independent-process tests exercise discovery, concurrent registration, and interrupted multi-record updates. Activation, ring allocation, and endpoints follow their roadmap steps.
-
-Step 2.9 adds [adoption, topology changes, and activation](docs/native-storage.md#topology-changes-and-activation). Queue activation reserves a zeroed ring atomically with its Active definition. Endpoint handles expose identities and retain Task ownership; a Source opening is exclusive within that claim. Sending, receiving, acknowledgment, and publishing follow their implementation milestones.
-
-Step 2.10 adds [TOML Session factories](docs/native-storage.md#toml-session-factories), complete semantic preflight, shared programmatic policy validation, initial registration/activation, and exact effective-setting checks on file-based attachment. The [primer](docs/primer.md#7-move-setup-into-a-toml-file) and automated examples demonstrate the public file API.
-
-Step 2.11 adds [consistent current and historical Registry snapshots](docs/api.md#current-and-historical-registry-snapshots) and mixed independent-process qualification. The [Registry walkthrough](docs/registry-walkthrough.md) shows every entity kind, concurrent registration, ownership replacement, and inspection after application shutdown:
-
-```sh
-python3 test/registry_walkthrough.py build/angaria_primer_08_registry examples/primer/configuration.toml
-```
-
-The default run uses temporary storage. To retain a Session for manual inspection, pass `--session` with a new directory path whose parent already exists. It refuses to overwrite an existing path. This walkthrough demonstrates the Registry and endpoint identities. The ninth lesson adds payload encoding; delivery follows its roadmap milestones.
-
-Step 3.1 adds the [binary scalar payload codec](docs/message-payload.md), with exact schema-version selection, explicit little-endian bytes, and owning codecs independent of Session/Task lifetime. The [ninth primer example](examples/primer/09_payload.cpp) encodes and decodes two Quote versions. Steps 3.4–3.5 add message records and capture inspection below.
-
-Step 3.2 reviewed the [basic logical Field contract](docs/logical-fields.md). Step 3.3 implements booleans, 8/16/32/64-bit Fields, closed enumerations, fixed ASCII, and signed int8, including immutable Registry metadata and TOML version 2. At step 3.3, new Sessions used format 2.1; current factories use core format 2.2. Existing 2.0 Sessions retain scalar behavior. The [tenth primer program](examples/primer/10_logical_fields.cpp) encodes logical values and demonstrates bounded caller-buffer construction with unchanged output on errors.
-
-Step 3.4, framework version **`0.3.4`**, adds [canonical message records](docs/message-record.md): an 80-byte portable header plus payload, with complete publication identity, exact schema, initial publication time, and flags. The [eleventh primer program](examples/primer/11_message_record.cpp) demonstrates bounded framing, owning/borrowed decoding, and exact Session/schema checks. Native Session formats remain unchanged; Queue publication and delivery follow later milestones.
-
-Step 3.5, framework version **`0.3.5`**, adds [bounded capture streams and generic inspection](docs/capture-inspection.md). The inspector uses retained Registry definitions to render exact scalar/logical schema versions without application-specific C++ types. The [twelfth primer program](examples/primer/12_capture.cpp) writes Quote versions, an Order, and an empty Heartbeat, then exits before the separate inspector runs:
-
-```sh
-./build/angaria_primer_12_capture build/capture-example
-./build/angaria_inspect build/capture-example/session build/capture-example/capture.angcap
-```
-
-Use a new workspace directory. Keep its native Session catalog alongside the capture; attaching that catalog requires a supported native profile and can perform recovery. The CLI closes native handles before reading the capture. Record, capture, catalog, per-record text, and aggregate output limits bound inspection; ordinary capture I/O does not establish Queue acceptance or delivery.
-
-Step 3.6, framework version **`0.3.6`**, adds [independent-process exchange qualification](docs/process-exchange.md) and the [thirteenth primer program](examples/primer/13_process_exchange.cpp). It keeps an old catalog alive across a same-sized schema addition, replaces a terminated producer after its capture is complete, and inspects every exact version after applications exit:
-
-```sh
-python3 test/process_exchange.py build/angaria_primer_13_process_exchange build/angaria_inspect
-```
-
-Pass `--workspace` with a new directory to keep the captures and native catalog for manual inspection. Framework version **`0.3.7`** integrates the completed milestone-3 staging branch into `main`. The [qualification contract](docs/process-exchange.md#compatibility-and-qualification) records native compatibility checks and the boundary between these ordinary files and future Queue delivery.
-
-Milestone 4, step 4.3, framework version **`0.4.3`**, adds [Session and delivery-history validation](docs/native-validation.md) after the checked record codecs. Core format 2.2 readers validate exact schemas, acceptance transactions, Queue history, receipts, Source pins, and ring windows; incompatible capabilities fail before recovery. At that step factories retained format 2.1; step 4.6 enables core delivery creation and direct send.
-
-Framework **`0.4.4`** consolidates repeated helpers after step 4.3. The [helper audit and header map](docs/helper-audit.md) records what is shared and why some operation-specific adapters remain. This cleanup adds no public delivery behavior or format changes.
-
-Step **4.4**, framework **`0.4.5`**, adds [private committed payload mappings and complete append planning](docs/native-storage.md#committed-payload-storage-and-append-planning). Payload addresses remain stable across append growth and rollback of later uncommitted work. Full batch sizing includes receipts, the manifest, redo, and alignment before journal image construction. Those private foundations preceded the direct send and core Session creation introduced in step 4.6 below.
-
-Step **4.5**, framework **`0.4.6`**, adds [reserved delivery progress and publication-aware claim cleanup](docs/native-progress.md). Private issuance, acknowledgment, release, and Task/Source cleanup use existing storage and can finish at a full log. Claim replay preserves historical identities and releases old Thread pins when their parent Process is replaced.
-
-Step **4.6**, framework **`0.4.8`**, implements [direct Queue publication](docs/direct-publication.md). `QueueWriter::send` accepts an explicit issued ID and a `MessageView`; `Task::publication_status` resolves that ID, including retained earlier incarnations. Identical repeats preserve the original acceptance. It introduced core format 2.2/`0x7`; legacy Sessions remain attachable without native delivery. [Lesson 14](examples/primer/14_direct_send.cpp) demonstrates sending while a consumer is offline.
-
-Step **4.7**, framework **`0.4.9`**, implements [basic Source delivery](docs/native-receive.md): stable borrowed `MessageView` payloads, complete headers, owning copies, exact acknowledgment/release tokens, finite spin waits, and explicit Source close with recoverable deferred cleanup. One Active Queue per Source is supported for fresh selection. Multiple-Queue selection and Publishing remain their later steps.
-
-Step **4.8**, framework **`0.4.10`**, enables configured `AllowLoss` delivery in both public descriptors and TOML. An idle consumer can skip stale pending messages outside the ring window and receive a `DeliveryGap`; an in-flight message stays protected. Recovery from the log remains the default. New Sessions select format **2.2/`0xf`**, while existing core Sessions remain usable without an in-place upgrade. [Lesson 16](examples/primer/16_allowed_loss.cpp) demonstrates the policy, gaps, and protected borrowing. Loss changes delivery obligations; it does not free physical log space.
-
-Step **4.9**, framework **`0.4.11`**, adds [combined failure and exhaustion qualification](docs/native-qualification.md): independent producer/consumer death, repeated recovery, wrapped rings, full logs, final counter values, and actual OS refusal to grow the file. The primer explains [interrupted operations and safe recovery](docs/primer.md#when-an-operation-is-interrupted).
-
-Step **4.10**, framework **`0.4.12`**, adds the [native multi-process primer application](docs/native-pipeline.md). Feed, Strategy, and Audit use the public API and explicit TOML to exchange exact-version Quotes and derived PriceAlerts, recover backlog after ring wrap, release/redeliver, acknowledge, and replace terminated owners. The walkthrough retains the Session and role transcripts for inspection. Step **4.11**, framework **0.4.13**, adds reproducible [transport measurements](docs/native-performance.md) and the [milestone completion audit](docs/milestones/milestone-4-completion.md).
-
-## Run the restart walkthrough
-
-This section runs the legacy v0 prototype, with its separate API and file format.
-
-The walkthrough starts a producer and consumer, kills and replaces the producer while the consumer stays attached, then kills a consumer before acknowledgment and verifies redelivery to its replacement. It acknowledges three messages and inspects their log after both endpoints exit and the live queue is removed.
-
-```sh
-python3 test/restart_demo.py build/angaria_queue_demo --session build/restart-demo
-./build/angaria_queue_demo inspect build/restart-demo/session.ang
-```
-
-Use a new session directory each time. Omitting `--session` runs the same scenario in a temporary directory and cleans it up afterward. CTest runs it as `restart_demo`, and Linux CI runs it with the rest of the suite from a fresh checkout.
-
-The demo uses one producer, one consumer, one integer message schema, and one delivery in flight. The log provides recovery from process termination on a running system. Power-loss durability requires a separate contract.
-
-## Run the queue demo
-
-This section runs the legacy v0 prototype. For native mapped Queues, start with [primer lesson 14](docs/primer.md#14-send-directly-and-look-up-acceptance).
-
-Create a session and send a `Reading` with a signed 32-bit value from the producer terminal.
-
-```sh
-./build/angaria_queue_demo create demo
-./build/angaria_queue_demo send demo 42
-```
-
-In another terminal in the same checkout, receive the message. Type `ack` and press Enter after processing it to acknowledge delivery. Leaving the process before acknowledging keeps the message available for a replacement consumer.
-
-```sh
-./build/angaria_queue_demo receive demo 1000
-# Reading sequence=1 value=42
-ack
-```
-
-The optional timeout is in milliseconds. The default is an immediate check. For a script that processes and acknowledges one message, pipe the acknowledgment into the command.
-
-```sh
-printf 'ack\n' | ./build/angaria_queue_demo receive demo
-```
-
-To keep the producer attached while restarting consumers, run the interactive producer. Enter one signed integer per line and use Ctrl-D to detach.
-
-```sh
-./build/angaria_queue_demo produce demo
-```
-
-Inspect the log after both endpoints exit. The inspector reads the recorded schema and shows the queue, sequence, timestamp, type, and value.
-
-```sh
-./build/angaria_queue_demo inspect demo/session.ang
-```
-
-Remove the live queue when you are done. This preserves the log for inspection or archiving.
-
-```sh
-./build/angaria_queue_demo remove demo
-```
-
-The FIFO holds two messages. The session log defaults to 1 MiB. Pass a byte count after `create demo` to set a different cap. A send exits with status 3 if the queue is full or status 4 if the log is full. Acknowledgment frees a queue slot. Each role has one owner, and a competing attachment exits with status 5. Each successful attachment advances that role's incarnation number. See the [session format](docs/session-format.md) for the file layout and process-crash behavior.
-
-## C++ endpoints
-
-This is the legacy v0 `angaria/session.h` API. Current applications use [the public runtime API](docs/primer.md).
-
-Keep a `Producer` and `Consumer` object alive for as long as each role is attached. Each object belongs to the process that created it and is used by one thread. Only one delivery can be in flight.
-
-```cpp
-#include "angaria/session.h"
-
-#include <chrono>
-
-void process_reading(const std::filesystem::path& session)
-{
-    angaria::Consumer consumer(session);
-    const auto delivery = consumer.receive_reading(std::chrono::seconds{1});
-    if (delivery)
-    {
-        // Apply application work before acknowledging.
-        consumer.acknowledge(delivery->_sequence);
-    }
-}
-```
-
-Repeated receive calls return the current delivery until it is acknowledged. Closing or losing the consumer before acknowledgment lets its replacement receive the same message. An external side effect can be repeated if a consumer completes it and then dies before acknowledgment, so handlers must tolerate duplicates.
+`VERSION` is the framework version source. Development uses `0.<milestone>.<build>`, with a new build number for each PR; completion of the roadmap produces **1.0.0**. Framework, configuration, schema, portable record and native format versions are distinct.

@@ -1,5 +1,7 @@
 # Recorded delivery with optional acknowledged progress
 
+**Current status — 0.4.39:** acknowledged progress is the default public delivery mode, integrated with Task claims, shared producer logs, cached schemas and Thread ownership. Public accepted outcomes expose Queue sequences; the writer exposes a conservative committed acknowledgment lower bound. See [public runtime admission](public-runtime-admission.md). The private-step descriptions below retain their historical scope.
+
 Framework **0.4.37**, milestone step **4.35**, implements workstream step 6 of the [independent messaging plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). The private [RecordedAcknowledgedConsumer](../src/recorded_queue.h) returns a `Delivery`: a borrowed `MessageView` and an exact `DeliveryToken`. Its immutable accepted messages use the same [producer-owned log](producer-log.md) as recorded/unacknowledged delivery.
 
 **Transport credit** frees a descriptor slot. **Acknowledgment** records that the application explicitly completed the delivery. Neither receiving a message nor returning credit certifies that completion. Accepting a message remains the producer log's committed-tail store; processing progress has its own consumer-owned commit point. Acknowledgment does not erase the message or reclaim log space, and all progress storage is reserved before messaging so release, acknowledgment and replacement can finish when the message log is full.

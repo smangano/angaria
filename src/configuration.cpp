@@ -374,7 +374,7 @@ namespace angaria::detail
     {
       const auto session = child_table(root, "session", "", true);
       check_keys(session, "session", {"name", "application_version", "directory", "max_log_bytes", "storage",
-                                        "segment_bytes"});
+                                        "segment_bytes", "producer_log_bytes", "producer_log_publications"});
       SessionOptions options;
       options._name = string_value(session, "name", "session");
       options._applicationVersion = string_value(session, "application_version", "session", false);
@@ -388,6 +388,10 @@ namespace angaria::detail
         options._directory = std::filesystem::absolute(file).parent_path() / options._directory;
       }
       options._maxLogBytes = unsigned_value(session, "max_log_bytes", "session", 1, mapped::max_log_bytes);
+      options._producerLogBytes = unsigned_value(session, "producer_log_bytes", "session", 4096,
+          mapped::max_log_bytes, options._producerLogBytes);
+      options._producerLogPublications = unsigned_value(session, "producer_log_publications", "session", 1,
+          mapped::max_log_bytes, options._producerLogPublications);
       options._storage = enum_value<StorageMapping>(session, "storage", "session",
           {{"two_plane", StorageMapping::TwoPlane}, {"segmented", StorageMapping::Segmented}}, StorageMapping::TwoPlane);
       if (session->contains("segment_bytes"))
@@ -455,7 +459,9 @@ namespace angaria::detail
           {{"recover_from_log", DeliveryPolicy::RecoverFromLog}, {"allow_loss", DeliveryPolicy::AllowLoss}},
           options._defaults._delivery);
       const auto source = child_table(defaults, "source_set", "defaults");
-      check_keys(source, "defaults.source_set", {"selection", "wait"});
+      check_keys(source, "defaults.source_set", {"selection", "wait", "acknowledgment"});
+      options._defaults._acknowledgment = enum_value<AcknowledgmentMode>(source, "acknowledgment", "defaults.source_set",
+          {{"required", AcknowledgmentMode::Required}, {"none", AcknowledgmentMode::None}}, options._defaults._acknowledgment);
       options._defaults._selection = enum_value<SelectionPolicy>(source, "selection", "defaults.source_set",
           {{"strict", SelectionPolicy::Strict}, {"fair", SelectionPolicy::Fair},
            {"weighted_random", SelectionPolicy::WeightedRandom}}, options._defaults._selection);
@@ -480,6 +486,10 @@ namespace angaria::detail
           if (options._storage != StorageMapping::TwoPlane)
           {
             error._path = "session.storage";
+          }
+          else if (options._defaults._delivery != DeliveryPolicy::RecoverFromLog)
+          {
+            error._path = "defaults.queue.delivery";
           }
           else if (options._defaults._selection != SelectionPolicy::Strict)
           {
@@ -997,7 +1007,7 @@ namespace angaria::detail
         {
           const auto& table = tables[index];
           const auto path = indexed_path("source_sets", index);
-          check_keys(table, path, {"name", "owner", "selection", "wait", "random_seed", "doc"});
+          check_keys(table, path, {"name", "owner", "selection", "wait", "random_seed", "doc", "acknowledgment"});
           SourceQueueSetDescriptor descriptor;
           descriptor._name = string_value(table, "name", path);
           descriptor._doc = string_value(table, "doc", path, false);
@@ -1005,6 +1015,11 @@ namespace angaria::detail
           if (!_setNames.insert(descriptor._name).second)
           {
             invalid(path + ".name", "Duplicate Queue Set name '" + descriptor._name + "'");
+          }
+          if (table->contains("acknowledgment"))
+          {
+            descriptor._acknowledgment = enum_value<AcknowledgmentMode>(table, "acknowledgment", path,
+                {{"required", AcknowledgmentMode::Required}, {"none", AcknowledgmentMode::None}}, AcknowledgmentMode::Required);
           }
           if (table->contains("selection"))
           {
@@ -1044,6 +1059,7 @@ namespace angaria::detail
           // Give unsupported Source choices their actual TOML key, rather than
           // the shared validator's combined programmatic policy path.
           descriptor._selection = policy._selection;
+          descriptor._acknowledgment = policy._acknowledgment;
           descriptor._wait = policy._wait;
           const auto id = static_cast<SourceQueueSetId>(index + 1);
           _sources.emplace(descriptor._name, SourceReference{id, policy._selection});

@@ -127,6 +127,7 @@ namespace
     put_integer(bytes, 64, 9, 2);
     put_integer(bytes, 66, 3, 2);
     put_integer(bytes, 68, 2, 2);
+    put_integer(bytes, 70, 1, 2);
     put_integer(bytes, 72, 0x0102030405060708ull, 8);
     put_integer(bytes, 80, 8352, 8);
     put_integer(bytes, 88, 2, 8);
@@ -482,7 +483,7 @@ namespace
       put_integer(body, offset, 1, 1);
       expect_error(mapped::decode_queue_definition(body, record_offset), ErrorCode::IoError);
       body = golden_source();
-      put_integer(body, offset, 1, 1);
+      put_integer(body, 70, 3, 2); // Unknown acknowledgment code, not a reserved word.
       expect_error(mapped::decode_source_definition(body, record_offset), ErrorCode::IoError);
     }
     for (const auto offset : {68u, 69u, 70u, 71u})

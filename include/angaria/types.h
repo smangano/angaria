@@ -100,12 +100,6 @@ namespace angaria
     static constexpr EFieldBase value = EFieldBase::BASE_FLOAT64;
   };
 
-  struct RegistryTask;
-  struct RegistryQueue;
-  struct RegistryQueueSet;
-  struct RegistryMessage;
-  struct RegistryMessageDef;
-  struct RegistryField;
   class Registry;
   struct Message;
 

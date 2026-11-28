@@ -118,7 +118,7 @@ Source activation requires complete nonempty membership; Queue activation requir
 
 Task opening methods return Queue writer, Source, and Publishing identity/ownership handles. They retain claims across moves and closure of the original Task; a Source opening is exclusive within the claim. Task replacement remains possible with valid unused rings at LogFull. No delivery method is substituted with placeholder behavior: send/receive/publication/pin cleanup remain for their owning milestones.
 
-The [public activation examples](../../test/test_topology_activation.cpp), [endpoint examples](../../test/test_endpoint_runtime.cpp), and [process qualification](../../test/test_activation_recovery.cpp) cover activation order, ownership, atomic resource allocation, exact/one-byte-short budgets, retained history, corruption/no-write rejection, concurrency, SIGKILL, repeated recovery, and uncertain I/O outcomes. See the [native contract](../native-storage.md#topology-changes-and-activation).
+The [public activation examples](../../test/test_topology_activation.cpp), [endpoint examples](https://github.com/smangano/angaria/blob/b4ec8ae/test/test_endpoint_runtime.cpp), and [process qualification](../../test/test_activation_recovery.cpp) cover activation order, ownership, atomic resource allocation, exact/one-byte-short budgets, retained history, corruption/no-write rejection, concurrency, SIGKILL, repeated recovery, and uncertain I/O outcomes. See the [native contract](../native-storage.md#topology-changes-and-activation).
 
 ## Step 2.10 TOML configuration and file-based factories
 

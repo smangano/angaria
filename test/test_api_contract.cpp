@@ -3,7 +3,6 @@
 // behavior is covered as each implementation milestone becomes available.
 
 #include "angaria/runtime.h"
-#include "angaria/session.h"
 
 #include <gtest/gtest.h>
 

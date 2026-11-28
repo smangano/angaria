@@ -111,9 +111,16 @@ namespace angaria::detail::recorded
     // Offline bootstrap, with existing parent directories. Do not race opens
     // against creation; the eventual Session bootstrap publishes these resources.
     static OperationResult create(const ProducerLogPaths& paths, const ProducerLogOptions& options);
+    // An authoritative actor is supplied only by a caller retaining that live
+    // Task claim and serializing its shared writer. It disables this primitive's
+    // standalone thread affinity; public Thread ownership stays in TaskState.
+    // Retain one log owner for the claim's entire ID-issuance lifetime. Reopening
+    // the same actor supports failed setup before an owner escapes, rather than
+    // promising persistence of issued-but-unaccepted IDs between log objects.
     static Result<ProducerLog> open_writer(const ProducerLogPaths& paths,
                                            const ProducerLogOptions& options,
-                                           ProducerLogObserver* observer = nullptr);
+                                           ProducerLogObserver* observer = nullptr,
+                                           std::optional<TaskClaim> actor = {});
 
     Result<TaskClaim> claim() const;
     Result<PublicationId> next_publication_id();
@@ -149,8 +156,10 @@ namespace angaria::detail::recorded
     ProducerLogReader(const ProducerLogReader&) = delete;
     ProducerLogReader& operator=(const ProducerLogReader&) = delete;
 
+    // Unbound thread affinity requires external serialization (public Task or
+    // archive cursor); process/fork ownership is still checked in both modes.
     static Result<ProducerLogReader> open(const std::filesystem::path& logPath,
-                                          const ProducerLogOptions& options);
+                                          const ProducerLogOptions& options, bool threadBound = true);
     // Validate only newly acquired committed ranges and freeze an explicit cut.
     Result<ProducerReplayCursor> capture();
     Result<std::optional<PublicationRecordView>> next(ProducerReplayCursor& cursor) const;
@@ -163,6 +172,10 @@ namespace angaria::detail::recorded
     Result<OwnedPublicationRecord> copy_record(const LogReference& reference,
                                                std::uint64_t maxPayloadBytes) const;
     Result<std::uint64_t> committed_end() const;
+
+    // Cached accepted progress for one Queue in this producer's shared log.
+    // Capture/poll validation advances it; this query does not scan storage.
+    Result<std::uint64_t> queue_sequence(QueueId queue) const;
 
   private:
     struct State;

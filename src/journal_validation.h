@@ -34,7 +34,7 @@ namespace angaria::detail::mapped
   }
 
   // The caller validates the full record against its owning file. This local
-  // body copy need contain only the fixed kind-specific prefix (at most 128
+  // body copy need contain only the fixed kind-specific prefix (at most 144
   // bytes); variable immutable bytes are not interpreted by this layer.
   Result<JournalRecordRange> validate_journal_record(
       std::uint64_t offset, const RecordEnvelope& envelope,

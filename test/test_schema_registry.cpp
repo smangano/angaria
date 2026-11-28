@@ -1094,7 +1094,7 @@ namespace
   // The fixed layout and scalar definition bytes are shared with 2.0. Assemble
   // a predecessor-profile fixture only while all native owners are closed;
   // this is private compatibility setup, never an in-place upgrade API.
-  TEST_F(SchemaRegistryTest, LegacyScalarSessionStillAcceptsScalarsButRejectsNewRepresentations)
+  TEST_F(SchemaRegistryTest, MissingRecordedCapabilityRejectsBeforeAnyRecoveryOrRegistryWrites)
   {
     {
       auto created = create();
@@ -1102,28 +1102,18 @@ namespace
     }
     {
       auto file = require_value(mapped::NativeFile::open_existing(_directory / "session.ang", mapped::FileAccess::ReadWrite));
-      const std::array<std::byte, 2> minor{};
-      const std::array<std::byte, 8> features{std::byte{1}};
-      require_value(file.write_exact(10, minor));
+      // Format 3's metadata-only framing profile is valid for codec fixtures,
+      // but cannot be admitted as an operational public Session.
+      const std::array<std::byte, 8> features{std::byte{3}};
       require_value(file.write_exact(56, features));
     }
-    auto attached = require_value(Session::attach(_directory));
-    auto owner = require_value(attached.attach_task(TaskId{1}));
-    auto registry = owner.registry();
-    const auto old = require_value(registry.find_field("Price"));
-    EXPECT_EQ(require_value(registry.register_field(field())), old);
-    require_value(registry.register_field(field(0xee000002, "Quantity", EFieldBase::BASE_UINT64, 8)));
-    auto logical = field(0xee000003, "Enabled", EFieldBase::BASE_BYTE, 1);
-    logical._logical._kind = FieldLogicalKind::Boolean;
-    const auto before = observe();
-    expect_error(registry.register_field(logical), ErrorCode::UnsupportedPolicy);
-    expect_error(registry.register_field(field(0xee000004, "Small", EFieldBase::BASE_INT8, 1)), ErrorCode::UnsupportedPolicy);
-    EXPECT_EQ(observe(), before);
-    EXPECT_EQ(state()->_controller->configuration()._formatMinor, 0u);
+    const auto before = read_image();
+    expect_error(Session::attach(_directory), ErrorCode::UnsupportedPolicy);
+    EXPECT_EQ(read_image(), before);
   }
 
-  // A Session containing required logical data cannot be relabeled as 2.0.
-  // The capable reader validates each stored Field against the recorded profile.
+  // Invalid feature masks cannot bypass the current schema/profile contract;
+  // attaching fails before any mutable access.
   TEST_F(SchemaRegistryTest, LogicalDefinitionInLegacyProfileIsRejected)
   {
     {

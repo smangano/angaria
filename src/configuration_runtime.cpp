@@ -214,6 +214,9 @@ namespace angaria::detail
     match(defaults._selection == effective._selection, "defaults.source_set.selection");
     match(defaults._wait == effective._wait, "defaults.source_set.wait");
     match(defaults._acceptance == effective._acceptance, "defaults.publishing_set.acceptance");
+    match(defaults._acknowledgment == effective._acknowledgment, "defaults.source_set.acknowledgment");
+    match(requested._producerLogBytes == recorded._producerLogBytes, "session.producer_log_bytes");
+    match(requested._producerLogPublications == recorded._producerLogPublications, "session.producer_log_publications");
     // The file locates the actual directory. Its old persisted spelling remains
     // diagnostic, so moving a complete Session does not invalidate attachment.
   }

@@ -120,6 +120,19 @@ class EndToEndCoordinator(unittest.TestCase):
             self.assertEqual((case["messages"], case["warmup_messages"]),
                              (16, 0) if name.startswith("short-control-") else (40, 8))
 
+    def test_public_plan_uses_only_current_public_modes_and_nanomsg(self):
+        # Admission retires the superseded engine. Retained legacy evidence is
+        # reconstructed with its original plan, rather than rerun as an alias.
+        for smoke, expected in ((False, (12, 207)), (True, (4, 12))):
+            with self.subTest(smoke=smoke):
+                cases, attempts = coordinator.plan(smoke, "public")
+                self.assertEqual((len(cases), len(attempts)), expected)
+                self.assertFalse(any(name.startswith("short-control-") for name in cases))
+                self.assertEqual({row["profile"] for row in attempts}, set(coordinator.PUBLIC_PROFILES))
+                self.assertEqual([row["attempt"] for row in attempts], list(range(1, len(attempts)+1)))
+        with self.assertRaises(RuntimeError):
+            coordinator.plan(False, "unknown")
+
     def test_duplicate_and_nonfinite_json_evidence_is_rejected(self):
         for encoded in ('{"x":1,"x":2}', '{"x":NaN}', '{"x":Infinity}'):
             with self.subTest(encoded=encoded):

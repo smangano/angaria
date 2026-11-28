@@ -25,6 +25,11 @@
 
 namespace angaria::detail
 {
+  namespace recorded
+  {
+    class ProducerLog;
+  }
+  struct RecordedSessionResources;
   struct SourceReservation;
   struct RuntimeFailure
   {
@@ -48,6 +53,7 @@ namespace angaria::detail
   public:
     std::shared_ptr<mapped::SessionController> _controller;
     std::filesystem::path _directory;
+    std::shared_ptr<const RecordedSessionResources> _recordedResources;
   };
 
   class TaskState
@@ -61,6 +67,12 @@ namespace angaria::detail
     TaskKind _kind{TaskKind::Process};
     std::thread::id _thread;
     std::atomic<bool> _attached{false};
+    std::uint64_t _ownerPid{};
+    // A Task is the producer serialization domain. Its writers share one log
+    // and issuer; unrelated Tasks and consumer handles have independent locks.
+    std::mutex _producerMutex;
+    std::shared_ptr<recorded::ProducerLog> _producerLog;
+    std::shared_ptr<const RecordedSessionResources> _recordedResources;
     std::mutex _endpointMutex;
     std::map<SourceQueueSetId, std::shared_ptr<SourceReservation>> _openSources;
   };
@@ -175,6 +187,7 @@ namespace angaria::detail
   void runtime_validate_options(const SessionOptions& options, ErrorCode invalidCode);
   void runtime_check_task(const std::shared_ptr<TaskState>& task);
   void runtime_check_task_owner(const std::shared_ptr<TaskState>& task);
+  void runtime_check_messaging_owner(const std::shared_ptr<TaskState>& task);
   void runtime_check_task(RuntimeAccess& access, const std::shared_ptr<TaskState>& task);
 
   // Private qualification seam. The public attachment path has no observer;

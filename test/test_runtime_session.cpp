@@ -1,4 +1,4 @@
-// Public format-2 Session examples: start with creation below, then follow
+// Public format-3 Session examples: start with creation below, then follow
 // attachment, Registry inspection, and retained Task lifetimes. Private storage
 // helpers only prepare boundary/failure fixtures; normal applications use the
 // public API in angaria/runtime.h. See docs/api.md and docs/native-storage.md.
@@ -861,7 +861,7 @@ namespace
   }
 
   // Moving a handle transfers its owner; the moved-from wrapper cannot be used.
-  // The exec worker also forks to check rejection of inherited format-2 handles.
+  // The exec worker also forks to check rejection of inherited native handles.
   // That rejection check is not permission for general library use after fork.
   TEST_F(RuntimeSessionTest, MovesAndForkRejectionPreserveNativeClaimOwnership)
   {
@@ -967,7 +967,7 @@ namespace
   // A killed Process Task can leave recorded child attachments behind. Use 24
   // children at the exact log cap to demonstrate compact, replayable cleanup that
   // needs neither append space nor an inline journal command for every child.
-  TEST_F(RuntimeSessionTest, ReplacingADeadParentClearsManyChildrenAtTheFullLogLimit)
+  TEST_F(RuntimeSessionTest, ReplacingADeadParentInvalidatesChildLivenessWithoutRewritingHistoricalFlags)
   {
     constexpr unsigned child_count = 24;
     auto configured = options();
@@ -1000,12 +1000,19 @@ namespace
     auto parent = require_value(session.attach_task(TaskId{1}));
     EXPECT_EQ(parent.claim()._incarnation, parent_incarnation + 1);
     EXPECT_EQ(fs::file_size(_directory / "session.ang"), required);
+    // Native child leases disappeared with the process, and their retained
+    // parent incarnation does not describe the replacement. Stored attached
+    // flags alone are diagnostic history, never proof that a Thread Task lives.
+    for (unsigned child = 0; child != child_count; ++child)
+    {
+      EXPECT_FALSE(require_value(session.registry().task_status(static_cast<TaskId>(child + 2)))._attached);
+    }
     RuntimeFile access(_directory);
     const auto state = access.section(mapped::SectionKind::TaskState);
     for (unsigned child = 0; child != child_count; ++child)
     {
       const auto row = state + (child + 1) * mapped::task_state_bytes;
-      EXPECT_EQ(access.word(row + 48) & 1, 0u);
+      EXPECT_EQ(access.word(row + 48) & 1, 1u);
       EXPECT_EQ(access.word(row + 56), parent_incarnation);
     }
     const auto snapshot = require_value(access._journal.snapshot(access._guard));
@@ -1013,29 +1020,38 @@ namespace
     EXPECT_EQ(snapshot._accounted, required);
   }
 
-  // The private fixture places counters at their representable maximum, which
-  // would be impractical to reach through normal calls. Public operations must
-  // report CapacityExceeded before preparing an intent or wrapping an identity.
-  TEST_F(RuntimeSessionTest, ExhaustedIssuanceAndAttachmentCountersChangeNoStoredBytes)
+  // Publication issuance is producer-owned after admission, independent of
+  // the administrative allocation limit and gate.
+  TEST_F(RuntimeSessionTest, EstablishedPublicationIssuanceDoesNotMutateTheAdministrativeSession)
+  {
+    auto created = create();
+    const auto first = require_value(created._creator.next_publication_id());
+    const auto claim = created._creator.claim();
+    // The first issue admits the catalog. Hold the real administrative gate
+    // while subsequent IDs advance only the Task-owned producer-log issuer.
+    RuntimeFile access(_directory);
+    const auto before = access.image();
+    for (std::uint64_t sequence = 2; sequence <= 33; ++sequence)
+    {
+      const auto publication = require_value(created._creator.next_publication_id());
+      EXPECT_EQ(publication._producer, claim);
+      EXPECT_EQ(publication._sequence, sequence);
+    }
+    EXPECT_EQ(first._sequence, 1u);
+    EXPECT_EQ(access.image(), before);
+  }
+
+  // Deliberately saturate administrative incarnation/restart counters.
+  // Attachment must reject before preparing an intent or wrapping an identity.
+  TEST_F(RuntimeSessionTest, ExhaustedAttachmentCountersChangeNoStoredBytes)
   {
     auto created = create();
     auto session = std::move(created._session);
     std::uint64_t row{};
-    {
-      RuntimeFile access(_directory);
-      row = access.section(mapped::SectionKind::TaskState);
-      access.set_word(row + 8, std::numeric_limits<std::uint64_t>::max());
-    }
     std::vector<std::byte> before;
     {
       RuntimeFile access(_directory);
-      before = access.image();
-    }
-    expect_error(created._creator.next_publication_id(), ErrorCode::CapacityExceeded);
-    {
-      RuntimeFile access(_directory);
-      EXPECT_EQ(access.image(), before);
-      access.set_word(row + 8, 0);
+      row = access.section(mapped::SectionKind::TaskState);
     }
     {
       auto closing = std::move(created._creator);

@@ -102,7 +102,7 @@ Framework **0.4.10** enables `DeliveryPolicy::AllowLoss` through public descript
 
 An idle Source reports the inclusive overwritten pending prefix as a DeliveryGap before offering the retained window. Already Issued messages remain protected until release, close, or claim cleanup ends the pin. Compact LoseRange plus absolute Queue progress uses 80 reserved journal bytes, streams receipt updates without payload reads, preserves actual acknowledgment context, and finishes at a full log without reclaiming history. Complete validation precedes mutation; interrupted replay repairs every partial word using the captured loss timestamp. A committed gap not returned before a crash is not emitted again.
 
-The [sixteenth primer lesson](../../examples/primer/16_allowed_loss.cpp) uses explicit TOML and public Result/Error checks to demonstrate gaps, pin protection, and the unchanged recovery default. Public policy, metadata/capability, malformed-redo, full-log, and independent process-death tests qualify these rules. Portable record encoding and the synchronization protocol remain unchanged. Multiple-Queue selection and Publishing retain their roadmap milestones.
+The [sixteenth primer lesson](https://github.com/smangano/angaria/blob/b4ec8ae/examples/primer/16_allowed_loss.cpp) uses explicit TOML and public Result/Error checks to demonstrate gaps, pin protection, and the unchanged recovery default. Public policy, metadata/capability, malformed-redo, full-log, and independent process-death tests qualify these rules. Portable record encoding and the synchronization protocol remain unchanged. Multiple-Queue selection and Publishing retain their roadmap milestones.
 
 ## Step 4.9 Failure and exhaustion qualification
 
@@ -232,3 +232,13 @@ Independent byte fixtures and actual process interruption qualify selected-only 
 ## Step 4.36 End-to-end performance qualification
 
 Framework **0.4.38** adds [longer finite-stream qualification](../end-to-end-qualification.md) for both recorded modes and nanomsg on the same host and build. Live warmup is excluded from measured latency, throughput and resource windows. Balanced order, payload/history/credit variations, fixed offered load, slow and paused consumers, long streams and separate legacy controls broaden the prior short-cohort evidence. Every published quantile and completion rate reconstructs from retained binary samples and bounded process/control transcripts. Native smoke runs check the extended adapters; timings remain evidence rather than flaky CI thresholds. Public admission and the primer's API switch remain the next workstream step.
+
+## Step 4.37 — public runtime admission (0.4.39)
+
+[Workstream step 8](../public-runtime-admission.md) makes the producer-owned log and consumer-owned optional progress the one public message runtime. It integrates authoritative Process/Thread claims, shared outgoing writers, all exact schemas, setup sealing, bounded TOML producer reservations and required/none acknowledgment selection. `MessageHeader` survives both receive modes and owning copies. Established IDs, send/status, receive, acknowledgment/release and committed-progress lookup avoid the Session administrative gate.
+
+The obsolete Session-gated message engine, old message journal records/compacts, v0 prototype and their engine-specific tests/build targets are removed. Administrative Registry journal qualification remains. Native format 3.0, synchronization revision 2 and capability mask 0x7 reject earlier development Sessions before recovery or writes. Endpoint admission rejects unsupported policy/topology combinations before creating message resources or sealing setup.
+
+Public `LogArchive` freezes one accepted-prefix cut per producer and supplies bounded owning iteration, exact-schema inspection and flat capture export without claiming Tasks or acknowledging work. It preserves producer and Queue order, not a global execution schedule. Standalone catalog/receipt bundles, receipt snapshots and execution traces remain later APIs. The primer's eighteenth lesson demonstrates replay; the sixteenth now demonstrates recorded unacknowledged delivery.
+
+[Public runtime performance qualification](../public-runtime-performance.md) combines allocation/native-work/Session-gate guards with actual public API latency and verified throughput against nanomsg. Its results retain all attempts, uncertainty/reconstruction checks and the differing recording/processing guarantees. Per-Queue processing lower bounds are observable separately from transport credit.

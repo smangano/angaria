@@ -48,10 +48,10 @@ namespace
   mapped::SuperblockConfiguration fixture_configuration()
   {
     mapped::SuperblockConfiguration configuration;
-    // Keep the independently authored 2.0 fixture unchanged. Framing defaults
-    // remain 2.1; public factories explicitly select the 2.2 core profile.
+    // Format 3.0 keeps administrative metadata separate from producer logs.
+    // This fixture exercises metadata framing without a live runtime.
     configuration._formatMinor = 0;
-    configuration._requiredFeatures = mapped::journal_feature;
+    configuration._requiredFeatures = mapped::journal_feature | mapped::basic_fields_feature;
     configuration._session._high = 0x0807060504030201;
     configuration._session._low = 0x8877665544332211;
     configuration._maxLogBytes = 0x0000000203040506;
@@ -78,16 +78,16 @@ namespace
     {
       bytes[i] = static_cast<std::byte>(magic[i]);
     }
-    put_integer(bytes, 8, 2, 2);
+    put_integer(bytes, 8, 3, 2);
     put_integer(bytes, 12, 4096, 4);
     put_integer(bytes, 16, 0x0807060504030201, 8);
     put_integer(bytes, 24, 0x8877665544332211, 8);
     put_integer(bytes, 32, 0x0000000203040506, 8);
     put_integer(bytes, 40, fixture_arena, 8);
     put_integer(bytes, 48, 1, 2);
-    put_integer(bytes, 50, 1, 2);
+    put_integer(bytes, 50, 2, 2);
     put_integer(bytes, 52, fixture_profile, 4);
-    put_integer(bytes, 56, 1, 8);
+    put_integer(bytes, 56, 3, 8);
     put_integer(bytes, 64, 0x1020304050607080, 8);
     put_integer(bytes, 88, fixture_arena, 8);
     put_integer(bytes, 104, 13, 4);
@@ -125,6 +125,7 @@ namespace
   }
 
   using angaria::test_support::expect_error;
+  using angaria::test_support::require_value;
 
   mapped::LiveCompatibility fixture_support()
   {
@@ -154,9 +155,9 @@ namespace
     EXPECT_EQ(configuration._session._low, 0x8877665544332211u);
     EXPECT_EQ(configuration._maxLogBytes, 0x0000000203040506u);
     EXPECT_EQ(configuration._storage, StorageMapping::TwoPlane);
-    EXPECT_EQ(configuration._synchronizationVersion, 1u);
+    EXPECT_EQ(configuration._synchronizationVersion, 2u);
     EXPECT_EQ(configuration._liveAbiProfile, fixture_profile);
-    EXPECT_EQ(configuration._requiredFeatures, 1u);
+    EXPECT_EQ(configuration._requiredFeatures, 3u);
     EXPECT_EQ(configuration._optionalFeatures, 0x1020304050607080u);
     EXPECT_EQ(configuration._limits._tasks, 1u);
     EXPECT_EQ(configuration._limits._queues, 2u);
@@ -283,7 +284,7 @@ namespace
       std::size_t _width;
     };
     const std::array<Mutation, 17> mutations{{
-        {0, 0, 1}, {8, 1, 2}, {8, 3, 2}, {10, 1, 2}, {12, 4095, 4},
+        {0, 0, 1}, {8, 1, 2}, {8, 2, 2}, {10, 1, 2}, {12, 4095, 4},
         {32, 0, 8}, {32, max_unsigned, 8}, {32, fixture_arena - 1, 8},
         {40, fixture_arena + 64, 8}, {48, 3, 2}, {50, 0, 2}, {52, 0, 4},
         {104, 12, 4}, {108, 32, 1}, {109, 2, 1}, {110, 4, 1}, {160, max_unsigned, 8},
@@ -308,7 +309,7 @@ namespace
   // storage. Unexpected values cannot be interpreted safely by this format reader.
   TEST(MappedSuperblock, ReservedHeaderAndDirectoryFlagsMustBeZero)
   {
-    for (const auto offset : {111u, 184u, 255u, 258u, 2720u, 4095u})
+    for (const auto offset : {111u, 192u, 255u, 258u, 2720u, 4095u})
     {
       SCOPED_TRACE(offset);
       auto bytes = golden_superblock();
@@ -425,13 +426,13 @@ namespace
     auto bytes = golden_superblock();
     put_integer(bytes, 50, 9, 2);
     put_integer(bytes, 52, 0xfedcba98, 4);
-    put_integer(bytes, 56, 0x8000000000000001, 8);
+    put_integer(bytes, 56, 0x8000000000000003, 8);
     const auto decoded = mapped::decode_superblock(bytes);
     ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
     const auto& configuration = std::get<mapped::SuperblockConfiguration>(decoded);
     EXPECT_EQ(configuration._synchronizationVersion, 9u);
     EXPECT_EQ(configuration._liveAbiProfile, 0xfedcba98u);
-    EXPECT_EQ(configuration._requiredFeatures, 0x8000000000000001u);
+    EXPECT_EQ(configuration._requiredFeatures, 0x8000000000000003u);
     EXPECT_EQ(configuration._optionalFeatures, 0x1020304050607080u);
     expect_error(mapped::check_live_compatibility(configuration, fixture_support()), ErrorCode::IoError);
   }
@@ -448,7 +449,7 @@ namespace
     supported._liveAbiProfile ^= 1;
     expect_error(mapped::check_live_compatibility(configuration, supported), ErrorCode::IoError);
     supported = fixture_support();
-    supported._synchronizationVersion = 2;
+    supported._synchronizationVersion = 1;
     expect_error(mapped::check_live_compatibility(configuration, supported), ErrorCode::IoError);
     supported = fixture_support();
     configuration._requiredFeatures |= std::uint64_t{1} << 63;
@@ -513,100 +514,52 @@ namespace
   }
 
   // The new profile advertises logical metadata before its first Field exists.
-  // A reader limited to 2.0 or lacking the feature must reject that Session.
-  TEST(MappedSuperblock, BasicFieldsProfileIsExplicitAndNegotiated)
+  // Recorded delivery has one current profile; old formats are not reinterpreted.
+  TEST(MappedSuperblock, RecordedFormatHasOneCurrentVersionAndSynchronizationProtocol)
   {
-    auto current = fixture_configuration();
-    current._formatMinor = 1;
-    current._requiredFeatures = 3;
-    const auto encoded = mapped::encode_initial_superblock(current);
-    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(encoded));
-    const auto& bytes = std::get<mapped::SuperblockBytes>(encoded);
-    EXPECT_EQ(get_integer(bytes, 10, 2), 1u);
-    EXPECT_EQ(get_integer(bytes, 56, 8), 3u);
-    const auto decoded = mapped::decode_superblock(bytes);
-    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
-    EXPECT_EQ(std::get<mapped::SuperblockConfiguration>(decoded)._formatMinor, 1u);
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(
-        mapped::check_live_compatibility(current, fixture_support())));
-
-    auto legacy = fixture_support();
-    legacy._maxFormatMinor = 0;
-    legacy._supportedRequiredFeatures = 1;
-    expect_error(mapped::check_live_compatibility(current, legacy), ErrorCode::IoError);
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(
-        mapped::check_live_compatibility(fixture_configuration(), legacy)));
-    legacy._maxFormatMinor = 1;
-    expect_error(mapped::check_live_compatibility(current, legacy), ErrorCode::IoError);
-  }
-
-  // A feature flag alone cannot reinterpret 2.0, and a 2.1 header cannot omit
-  // required logical semantics. These are malformed profiles, not optional data.
-  TEST(MappedSuperblock, FormatAndBasicFieldFeatureCannotDisagree)
-  {
-    auto bytes = golden_superblock();
-    for (const auto [minor, features] :
-         {std::pair{0u, 3u}, std::pair{1u, 1u}, std::pair{1u, 2u}, std::pair{2u, 3u}})
-    {
-      SCOPED_TRACE(minor);
-      SCOPED_TRACE(features);
-      auto changed = bytes;
-      put_integer(changed, 10, minor, 2);
-      put_integer(changed, 56, features, 8);
-      expect_error(mapped::decode_superblock(changed), ErrorCode::IoError);
-    }
     auto configuration = fixture_configuration();
-    configuration._requiredFeatures = 3;
-    expect_error(mapped::encode_initial_superblock(configuration), ErrorCode::InvalidConfiguration);
-    configuration._formatMinor = 1;
-    configuration._requiredFeatures = 1;
-    expect_error(mapped::encode_initial_superblock(configuration), ErrorCode::InvalidConfiguration);
-  }
-  // Read support can advance before public factories create the new profile.
-  // The two 2.2 representations share geometry, but loss needs a separate bit.
-  TEST(MappedSuperblock, DeliveryProfilesMatchIndependentHeaderBytes)
-  {
-    for (const auto features : {std::uint64_t{7}, std::uint64_t{15}})
-    {
-      auto configuration = fixture_configuration();
-      configuration._formatMinor = 2;
-      configuration._requiredFeatures = features;
-      auto golden = golden_superblock();
-      put_integer(golden, 10, 2, 2);
-      put_integer(golden, 56, features, 8);
-      const auto encoded = mapped::encode_initial_superblock(configuration);
-      ASSERT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(encoded));
-      EXPECT_EQ(std::get<mapped::SuperblockBytes>(encoded), golden);
-      const auto decoded = mapped::decode_superblock(golden);
-      ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
-      EXPECT_EQ(std::get<mapped::SuperblockConfiguration>(decoded)._formatMinor, 2u);
-      EXPECT_EQ(std::get<mapped::SuperblockConfiguration>(decoded)._requiredFeatures, features);
-    }
+    configuration._requiredFeatures = 7;
+    auto golden = golden_superblock();
+    put_integer(golden, 56, 7, 8);
+    EXPECT_EQ(require_value(mapped::encode_initial_superblock(configuration)), golden);
+    EXPECT_EQ(get_integer(golden, 8, 2), 3u);
+    EXPECT_EQ(get_integer(golden, 10, 2), 0u);
+    EXPECT_EQ(get_integer(golden, 50, 2), 2u);
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(configuration, fixture_support())));
+    configuration._synchronizationVersion = 1;
+    expect_error(mapped::check_live_compatibility(configuration, fixture_support()), ErrorCode::IoError);
   }
 
-  TEST(MappedSuperblock, EveryKnownRequiredFeatureCombinationHasOneCanonicalMinor)
+  TEST(MappedSuperblock, PreviousMajorAndEveryUnsupportedMinorAreRejectedBeforeMutableAccess)
   {
-    // A known bit cannot be disguised as an optional interpretation of an older
-    // minor. Loss without core delivery is invalid even if a reader knows loss.
+    for (const auto major : {0u, 1u, 2u, 4u})
+    {
+      auto bytes = golden_superblock();
+      put_integer(bytes, 8, major, 2);
+      expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
+    }
+    auto bytes = golden_superblock();
+    put_integer(bytes, 10, 1, 2);
+    expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
+  }
+
+  TEST(MappedSuperblock, KnownRequiredFeaturesOnlyAdmitMetadataAndRecordedDelivery)
+  {
     for (std::uint16_t minor = 0; minor <= 2; ++minor)
     {
       for (std::uint64_t features = 0; features < 16; ++features)
       {
         SCOPED_TRACE(minor);
         SCOPED_TRACE(features);
-        const auto valid = (minor == 0 && features == 1) ||
-                           (minor == 1 && features == 3) ||
-                           (minor == 2 && (features == 7 || features == 15));
         auto configuration = fixture_configuration();
         configuration._formatMinor = minor;
         configuration._requiredFeatures = features;
         auto bytes = golden_superblock();
         put_integer(bytes, 10, minor, 2);
         put_integer(bytes, 56, features, 8);
-        if (valid)
+        if (minor == 0 && (features == 3 || features == 7))
         {
-          EXPECT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(
-              mapped::encode_initial_superblock(configuration)));
+          EXPECT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(mapped::encode_initial_superblock(configuration)));
           EXPECT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(mapped::decode_superblock(bytes)));
         }
         else
@@ -618,54 +571,21 @@ namespace
     }
   }
 
-  TEST(MappedSuperblock, DeliveryRecognitionDoesNotChangeProvisionalCreationDefaults)
-  {
-    auto configuration = fixture_configuration();
-    const mapped::SuperblockConfiguration defaults;
-    configuration._formatMinor = defaults._formatMinor;
-    configuration._requiredFeatures = defaults._requiredFeatures;
-    const auto encoded = mapped::encode_initial_superblock(configuration);
-    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockBytes>(encoded));
-    const auto& bytes = std::get<mapped::SuperblockBytes>(encoded);
-    EXPECT_EQ(get_integer(bytes, 10, 2), 1u);
-    EXPECT_EQ(get_integer(bytes, 56, 8), 3u);
-  }
-
-  TEST(MappedSuperblock, AllowedLossReaderRetainsCoreCompatibilityAndOlderReadersRejectLoss)
-  {
-    auto core = fixture_configuration();
-    core._formatMinor = 2;
-    core._requiredFeatures = 7;
-    const auto current = fixture_support();
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(core, current)));
-
-    auto older = current;
-    older._maxFormatMinor = 1;
-    older._supportedRequiredFeatures = 3;
-    expect_error(mapped::check_live_compatibility(core, older), ErrorCode::IoError);
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(
-        mapped::check_live_compatibility(fixture_configuration(), older)));
-
-    auto loss = core;
-    loss._requiredFeatures = 15;
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(loss, current)));
-    auto coreReader = current;
-    coreReader._supportedRequiredFeatures = 7;
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(mapped::check_live_compatibility(core, coreReader)));
-    expect_error(mapped::check_live_compatibility(loss, coreReader), ErrorCode::IoError);
-  }
-
-  TEST(MappedSuperblock, UnknownDeliveryRequirementsRemainInspectableButCannotAttachLive)
+  TEST(MappedSuperblock, CatalogSealIsMutableWhileAdjacentHeaderBytesRemainReserved)
   {
     auto bytes = golden_superblock();
-    put_integer(bytes, 10, 2, 2);
+    put_integer(bytes, 184, 123, 8);
+    EXPECT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(mapped::decode_superblock(bytes)));
+    bytes[192] = std::byte{1};
+    expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
+  }
+
+  TEST(MappedSuperblock, UnknownRequirementsRemainInspectableButCannotAttachLive)
+  {
+    auto bytes = golden_superblock();
     put_integer(bytes, 56, (std::uint64_t{1} << 63) | 7, 8);
-    const auto decoded = mapped::decode_superblock(bytes);
-    ASSERT_TRUE(std::holds_alternative<mapped::SuperblockConfiguration>(decoded));
-    const auto& configuration = std::get<mapped::SuperblockConfiguration>(decoded);
+    const auto configuration = require_value(mapped::decode_superblock(bytes));
     EXPECT_EQ(configuration._requiredFeatures, (std::uint64_t{1} << 63) | 7);
     expect_error(mapped::check_live_compatibility(configuration, fixture_support()), ErrorCode::IoError);
-    put_integer(bytes, 10, 3, 2);
-    expect_error(mapped::decode_superblock(bytes), ErrorCode::IoError);
   }
 } // namespace

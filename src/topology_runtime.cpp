@@ -1,7 +1,6 @@
 #include "topology_state.h"
 
 #include "angaria/detail/byte_operations.h"
-#include "delivery_runtime.h"
 #include "registry_access.h"
 #include "performance_diagnostics.h"
 
@@ -23,12 +22,6 @@ namespace angaria::detail
 {
   namespace
   {
-    bool has_native_delivery(RuntimeAccess& access)
-    {
-      return (access._session->_controller->configuration()._requiredFeatures &
-              mapped::native_delivery_feature) != 0;
-    }
-
     template <typename Definition>
     struct History
     {
@@ -55,6 +48,11 @@ namespace angaria::detail
     void check_policy(RuntimeAccess&, const mapped::SourceDefinition& definition)
     {
       const auto& descriptor = definition._descriptor;
+      if (!descriptor._acknowledgment ||
+          (*descriptor._acknowledgment != AcknowledgmentMode::Required && *descriptor._acknowledgment != AcknowledgmentMode::None))
+      {
+        runtime_fail(ErrorCode::IoError, "source_set.acknowledgment", "Source acknowledgment mode is not resolved");
+      }
       if (descriptor._selection != SelectionPolicy::Strict || descriptor._wait != WaitPolicy::Spin)
       {
         runtime_fail(ErrorCode::UnsupportedPolicy, "source_set.policy", "Source policy is not implemented by this native profile");
@@ -90,6 +88,7 @@ namespace angaria::detail
            old._descriptor._owner != definition._descriptor._owner ||
            old._descriptor._selection != definition._descriptor._selection ||
            old._descriptor._wait != definition._descriptor._wait ||
+           old._descriptor._acknowledgment != definition._descriptor._acknowledgment ||
            old._descriptor._randomSeed != definition._descriptor._randomSeed))
       {
         runtime_fail(ErrorCode::IoError, "source_set.history", "An active Source changed its fixed ownership or policy");
@@ -224,10 +223,8 @@ namespace angaria::detail
           }
           else
           {
-            const bool delivery = has_native_delivery(access);
             if (state[2] == 0 || state[3] != latest._definition._descriptor._ringCapacity ||
-                (delivery ? state[7] != 0 || !all_zero(state.subspan(12)) :
-                 state[0] != 0 || state[1] != 0 || !all_zero(state.subspan(4))))
+                state[0] != 0 || state[1] != 0 || !all_zero(state.subspan(4)))
             {
               runtime_fail(ErrorCode::IoError, "queue.state", "Active Queue has invalid ring geometry or unsupported delivery state");
             }
@@ -236,12 +233,9 @@ namespace angaria::detail
         }
         else
         {
-          // Core delivery assigns only the first eight Source words. Strict/Spin
-          // scheduling and the recovery reservation stay zero. Draft Sources
-          // and legacy profiles retain the previous all-zero requirement.
-          const bool delivery = has_native_delivery(access) &&
-                                latest._definition._state == EntityState::Active;
-          if (!all_zero(delivery ? state.subspan(8) : state))
+          // Processing progress now belongs to each connection's separate
+          // consumer-owned file; administrative Source state stays zero.
+          if (!all_zero(state))
           {
             runtime_fail(ErrorCode::IoError, "source_set.state", "Source contains unsupported endpoint or scheduling state");
           }
@@ -551,12 +545,6 @@ namespace angaria::detail
         {
           runtime_fail(ErrorCode::IoError, "queue.ring", "Active Queue ring ownership, geometry, or activation revision is inconsistent");
         }
-        if (has_native_delivery(access))
-        {
-          // The delivery validator checks each occupied slot against committed
-          // Queue history and also verifies allocation padding atomically.
-          continue;
-        }
         // Ring slots and allocation padding are mutable words. Read bounded
         // batches atomically under the gate, without a mapping per word.
         const auto words = (envelope._totalBytes - mapped::record_envelope_bytes) / 8;
@@ -594,7 +582,7 @@ namespace angaria::detail
     const auto sources = read_history<mapped::SourceDefinition>(access, 4, mapped::decode_source_definition, tasks);
     const auto publishing = read_history<mapped::PublishingDefinition>(access, 5, mapped::decode_publishing_definition, tasks);
     const auto& limits = access._session->_controller->configuration()._limits;
-    if ((!has_native_delivery(access) && !access.record_references(9).empty()) ||
+    if (!access.record_references(9).empty() ||
         !access.record_references(10).empty())
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "topology.delivery", "Publication and retry delivery state are not implemented by this native profile");
@@ -704,10 +692,6 @@ namespace angaria::detail
       {
         runtime_fail(ErrorCode::IoError, "queue.source_set", "Queue assignment has no matching Source membership");
       }
-    }
-    if (has_native_delivery(access))
-    {
-      runtime_validate_delivery(access, topology, queues._records, sources._records);
     }
     return topology;
   }

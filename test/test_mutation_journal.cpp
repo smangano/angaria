@@ -114,25 +114,31 @@ namespace
     return plan;
   }
 
-  // Synthetic two-step replacement: a partial application can leave incarnation
-  // 9 while the first ReleaseClaim still expects 7 or 8. Public attachment emits
-  // only one release; the journal must reject this broader command stream.
-  mapped::TransactionPlan chained_claim_plan(const mapped::JournalSnapshot& base,
-                                             const mapped::SuperblockConfiguration& configuration)
+  mapped::RedoCommand unsupported_compact(mapped::RedoOpcode opcode, std::uint64_t target,
+                                            std::uint64_t reference)
   {
-    mapped::TransactionPlan plan;
-    plan._base = base;
-    plan._newRevision = base._revision;
-    const auto state = section_offset(configuration, mapped::SectionKind::TaskState);
-    for (const auto ending : {std::uint64_t{7}, std::uint64_t{8}})
+    mapped::RedoCommand command{opcode, target, {}};
+    if (opcode == mapped::RedoOpcode::ResetBudgets)
     {
-      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, state, std::vector<std::byte>(16)};
-      put_integer(release._payload, 0, ending);
-      put_integer(release._payload, 8, 200 + ending);
-      plan._commands.push_back(std::move(release));
-      plan._commands.push_back(write_word(state, ending + 1));
+      command._payload.resize(24);
+      put_integer(command._payload, 0, 1, 2);
+      put_integer(command._payload, 8, reference);
+      put_integer(command._payload, 16, 1);
     }
-    return plan;
+    else if (opcode == mapped::RedoOpcode::LoseRange)
+    {
+      command._payload.resize(32);
+      put_integer(command._payload, 0, 1);
+      put_integer(command._payload, 8, 2);
+      put_integer(command._payload, 24, 1, 2);
+    }
+    else
+    {
+      command._payload.resize(16);
+      put_integer(command._payload, 0, 7);
+      put_integer(command._payload, 8, 200);
+    }
+    return command;
   }
 
   using angaria::test_support::make_publication_plan;
@@ -473,66 +479,12 @@ namespace
       EXPECT_EQ(access.image(), before);
     }
 
-    void assert_publication_recovered(const fs::path& directory, const mapped::JournalSnapshot& base)
-    {
-      Access access(directory);
-      const auto snapshot = require_value(access._journal.snapshot(access._guard));
-      EXPECT_EQ(snapshot._generation, base._generation + 1);
-      EXPECT_EQ(snapshot._revision, base._revision);
-      EXPECT_EQ(snapshot._accounted, snapshot._tail);
-      EXPECT_EQ(snapshot._fileBytes, snapshot._tail);
-      EXPECT_GT(snapshot._manifest, base._tail);
-      EXPECT_EQ(access.word(mapped::journal_offset), 0u);
-      const auto plan = make_publication_plan(base);
-      const auto receipts = base._tail + 64 + plan._records[0]._immutable.size();
-      auto expected = plan._records[0]._mutable;
-      put_integer(expected, 0, 2);
-      put_integer(expected, 8, 0x0000000100010002);
-      put_integer(expected, 16, 7);
-      put_integer(expected, 24, 13);
-      put_integer(expected, 32, 1002);
-      const auto image = access.image();
-      ASSERT_GE(image.size(), base._tail + 576);
-      const auto envelope = require_value(mapped::decode_record_envelope(
-          std::span{image}.subspan(base._tail, 64)));
-      EXPECT_EQ(envelope._kind, 9u);
-      EXPECT_EQ(envelope._readiness, 2u);
-      EXPECT_EQ(envelope._generation, base._generation + 1);
-      EXPECT_EQ(envelope._registryRevision, base._revision);
-      EXPECT_EQ(envelope._immutableBytes, 232u);
-      EXPECT_EQ(envelope._totalBytes, 576u);
-      ASSERT_GE(envelope._totalBytes, 64u + 232u + expected.size());
-      ASSERT_LE(base._tail + envelope._totalBytes, image.size());
-      EXPECT_TRUE(std::equal(plan._records[0]._immutable.begin(), plan._records[0]._immutable.end(),
-                             image.begin() + base._tail + 64));
-      EXPECT_TRUE(std::equal(expected.begin(), expected.end(), image.begin() + receipts));
-      EXPECT_TRUE(std::all_of(image.begin() + receipts + expected.size(),
-                              image.begin() + base._tail + envelope._totalBytes,
-                              [](std::byte value)
-                              {
-                                return value == std::byte{};
-                              }));
-      EXPECT_EQ(access.word(receipts + 128), 1u); // Untouched initialized receipt survives.
-      const auto manifest_envelope = require_value(mapped::decode_record_envelope(
-          std::span{image}.subspan(snapshot._manifest, 64)));
-      EXPECT_EQ(manifest_envelope._readiness, 2u);
-      const auto manifest = require_value(mapped::decode_manifest_body(
-          std::span{image}.subspan(snapshot._manifest + 64, manifest_envelope._immutableBytes), snapshot._manifest));
-      EXPECT_EQ(manifest._subtype, mapped::TransactionSubtype::Publication);
-      EXPECT_EQ(manifest._records, (std::vector<std::uint64_t>{base._tail}));
-      EXPECT_EQ(manifest._commands, plan._commands);
-      EXPECT_EQ(manifest._baseRevision, base._revision);
-      EXPECT_EQ(manifest._newRevision, base._revision);
-      require_value(access._journal.recover(access._guard));
-      EXPECT_EQ(access.image(), image);
-    }
-
     fs::path _root;
     mapped::SuperblockConfiguration _configuration;
   };
 
   // Reserve no append headroom, then compare a successful fixed-state update with a rejected Append.
-  // Claim/issuance progress must not depend on allocating history; a known LogFull rejection changes no bytes.
+  // Administrative ownership changes need no append headroom; known LogFull rejection changes no bytes.
   TEST_F(MutationJournalTest, FixedStateUsesReservedJournalEvenAtTheExactLogLimit)
   {
     const auto directory = make_session("full", true);
@@ -927,103 +879,58 @@ namespace
     EXPECT_EQ(access.word(task_state() + 8), 44u);
   }
 
-  // Publication storage includes preallocated mutable receipt slots as well as immutable bytes.
-  // Initial receipt state and its redo must both survive reopening; this is storage coverage, not send semantics.
-  TEST_F(MutationJournalTest, PublicationAppendMaterializesItsInitializedMutableReceipts)
-  {
-    const auto directory = make_session();
-    mapped::JournalSnapshot base;
-    {
-      Access access(directory);
-      base = require_value(access._journal.snapshot(access._guard));
-      const auto result = require_value(access._journal.execute(access._guard, make_publication_plan(base)));
-      ASSERT_EQ(result._records.size(), 1u);
-      EXPECT_EQ(result._records[0], base._tail);
-      EXPECT_GT(result._manifest, base._tail);
-    }
-    assert_publication_recovered(directory, base);
-  }
-
-  // Receipt count, allocated suffix, and reserved bytes must agree before preparing an Append.
-  // These deliberately malformed drafts show that input rejection leaves both storage and the base snapshot intact.
-  TEST_F(MutationJournalTest, InvalidPublicationReceiptStorageAndReservedBytesLeaveTheFileUnchanged)
+  TEST_F(MutationJournalTest, PublicationAndRetryTransactionsRejectBeforeAnyJournalOrFileWrites)
   {
     Access access(make_session());
     const auto base = require_value(access._journal.snapshot(access._guard));
     const auto before = access.image();
-    for (unsigned invalid = 0; invalid != 7; ++invalid)
+    for (const auto subtype : {mapped::TransactionSubtype::Publication, mapped::TransactionSubtype::Retry})
     {
-      SCOPED_TRACE(invalid);
       auto plan = make_publication_plan(base);
-      auto& record = plan._records[0];
-      switch (invalid)
-      {
-      case 0:
-        record._mutable.resize(128);
-        break;
-      case 1:
-        record._mutable.resize(384);
-        break;
-      case 2:
-        record._mutable.clear();
-        break;
-      case 3:
-        put_integer(record._immutable, 104, 1);
-        break;
-      case 4:
-        put_integer(record._immutable, 104, std::numeric_limits<std::uint64_t>::max());
-        break;
-      case 5:
-        put_integer(record._immutable, 104, 0);
-        break;
-      case 6:
-        record._immutable.resize(127);
-        break;
-      }
-      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
-      EXPECT_EQ(access.image(), before);
-      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
-    }
-    for (const auto reserved : {56u, 64u, 127u, 184u, 192u, 255u})
-    {
-      SCOPED_TRACE(reserved);
-      auto plan = make_publication_plan(base);
-      plan._records[0]._mutable[reserved] = std::byte{1};
-      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
+      plan._subtype = subtype;
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::UnsupportedPolicy);
       EXPECT_EQ(access.image(), before);
       EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
     }
   }
 
-  // Kill an accepted publication writer and then kill two successive recovery processes.
-  // Eventually recovering must preserve the untouched pending receipt and finish the partially issued receipt.
-  TEST_F(MutationJournalTest, PublicationReceiptInitializationSurvivesRepeatedInterruptedRecovery)
+  TEST_F(MutationJournalTest, MessageRecordKindsCannotBeDisguisedAsAdministrativeAppends)
   {
-    const std::array<std::pair<mapped::JournalCheckpoint, std::uint64_t>, 3> cuts{{
-        {mapped::JournalCheckpoint::Committed, 0},
-        {mapped::JournalCheckpoint::RedoWord, 0},
-        {mapped::JournalCheckpoint::RedoWord, 2},
-    }};
-    for (std::size_t position = 0; position != cuts.size(); ++position)
+    Access access(make_session());
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    const auto before = access.image();
+    for (const auto kind : {9u, 10u})
     {
-      SCOPED_TRACE(position);
-      const auto directory = make_session("publication-cut-" + std::to_string(position));
-      mapped::JournalSnapshot base;
-      {
-        Access access(directory);
-        base = require_value(access._journal.snapshot(access._guard));
-      }
-      CrashWorker writer(directory, "publication", cuts[position].first, cuts[position].second);
+      auto plan = make_plan(base, _configuration, true);
+      plan._records.front()._kind = static_cast<std::uint16_t>(kind);
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::UnsupportedPolicy);
+      EXPECT_EQ(access.image(), before);
+      EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
+    }
+  }
+
+  TEST_F(MutationJournalTest, UnsupportedCommittedMessageRecordsRetainEvidenceBeforeFurtherRedo)
+  {
+    // A private corruption probe changes a materialized administrative record
+    // into a message/retry record. Accepted and partly applied evidence must be
+    // retained without applying any further redo under this protocol.
+    for (unsigned variant = 0; variant < 4; ++variant)
+    {
+      const auto directory = make_session("unsupported-message-" + std::to_string(variant));
+      CrashWorker writer(directory, "append", variant < 2 ? mapped::JournalCheckpoint::Committed : mapped::JournalCheckpoint::RedoWord);
       writer.kill_at_checkpoint();
-      {
-        Access access(directory);
-        EXPECT_EQ(access.word(base._tail + 64 + 232 + 128), 1u);
-      }
-      CrashWorker partial_redo(directory, "recover", mapped::JournalCheckpoint::RedoWord, 1);
-      partial_redo.kill_at_checkpoint();
-      CrashWorker partial_records(directory, "recover", mapped::JournalCheckpoint::RecordCommitted, 0);
-      partial_records.kill_at_checkpoint();
-      assert_publication_recovered(directory, base);
+      Access access(directory);
+      const auto image = access.image();
+      const auto header = require_value(mapped::decode_journal_header(
+          std::span{image}.subspan(mapped::journal_offset, mapped::journal_header_bytes)));
+      std::array<std::byte, 2> unsupportedKind{};
+      put_integer(unsupportedKind, 0, 9 + variant % 2, 2);
+      require_value(access.file().write_exact(header._firstRecord, unsupportedKind));
+      const auto evidence = access.image();
+      expect_error(access._journal.recover(access._guard), ErrorCode::IoError);
+      EXPECT_EQ(access.image(), evidence);
+      EXPECT_EQ(access.word(task_state()), variant < 2 ? 0u : 11u);
+      EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Committed));
     }
   }
 
@@ -1109,7 +1016,7 @@ namespace
     compact._commands[0]._opcode = mapped::RedoOpcode::ReleaseClaim;
     compact._commands[0]._payload.resize(16);
     put_integer(compact._commands[0]._payload, 0, 1);
-    expect_error(access._journal.execute(access._guard, compact), ErrorCode::InvalidArgument);
+    expect_error(access._journal.execute(access._guard, compact), ErrorCode::UnsupportedPolicy);
     EXPECT_EQ(access.image(), before);
   }
 
@@ -1444,106 +1351,82 @@ namespace
     EXPECT_EQ(require_value(access._journal.snapshot(access._guard))._manifest, accepted._manifest);
   }
 
-  // One transaction may release each Task at most once, and every incarnation
-  // write must remain in that release's ending/immediate-successor window. A
-  // transient jump outside it is unsafe even when another write later restores
-  // a valid value: a crash between those writes must still be replayable.
-  TEST_F(MutationJournalTest, RepeatedOrSkippedClaimIncarnationsRejectBeforePreparingAnyIntent)
+  // Current administrative redo has one representation: absolute WriteRange.
+  // Valid compact encodings from the retired engine remain rejected as an
+  // entire stream, including when an earlier ordinary write would be valid.
+  TEST_F(MutationJournalTest, SupersededCompactCommandsRejectWholeStreamsBeforeAnyWrites)
   {
-    for (unsigned variant = 0; variant != 5; ++variant)
+    Access access(make_session());
+    require_value(access._journal.execute(access._guard, registered_claim_plan(
+        require_value(access._journal.snapshot(access._guard)), _configuration)));
+    const auto base = require_value(access._journal.snapshot(access._guard));
+    const auto before = access.image();
+    for (const auto opcode : {mapped::RedoOpcode::ResetBudgets, mapped::RedoOpcode::LoseRange, mapped::RedoOpcode::ReleaseClaim})
     {
-      SCOPED_TRACE(variant);
-      const auto incarnation = variant == 4 ? std::numeric_limits<std::uint64_t>::max() : 7;
-      Access access(make_session("unsafe-release-" + std::to_string(variant)));
-      require_value(access._journal.execute(access._guard, registered_claim_plan(
-          require_value(access._journal.snapshot(access._guard)), _configuration, incarnation)));
-      const auto base = require_value(access._journal.snapshot(access._guard));
-      auto plan = chained_claim_plan(base, _configuration);
-      const auto release = plan._commands.front();
-      if (variant == 0)
-      {
-        plan._commands = {release, release};
-      }
-      else if (variant == 2 || variant == 3)
-      {
-        plan._commands = {release, write_word(task_state(), 9)};
-        if (variant == 3)
-        {
-          plan._commands.push_back(write_word(task_state(), 8));
-        }
-      }
-      else if (variant == 4)
-      {
-        // The greatest incarnation has no successor; adding one must not wrap.
-        auto last_release = release;
-        put_integer(last_release._payload, 0, incarnation);
-        plan._commands = {std::move(last_release), write_word(task_state(), 0)};
-      }
-      const auto before = access.image();
-      expect_error(access._journal.execute(access._guard, plan), ErrorCode::InvalidArgument);
+      mapped::TransactionPlan plan;
+      plan._base = base;
+      plan._newRevision = base._revision;
+      // The first write is valid. Reject the later compact before that earlier
+      // write or any journal preparation can change current administrative data.
+      plan._commands = {write_word(task_state() + 8, 99), unsupported_compact(opcode, task_state(), base._tail)};
+      expect_error(access._journal.execute(access._guard, plan), ErrorCode::UnsupportedPolicy);
       EXPECT_EQ(access.image(), before);
       EXPECT_EQ(require_value(access._journal.snapshot(access._guard)), base);
-      EXPECT_EQ(access.word(task_state()), incarnation);
+      EXPECT_EQ(access.word(task_state()), 7u);
       EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(mapped::JournalControl::Idle));
     }
   }
 
-  // Deliberately install unsupported repeated/jumping streams as stored intent,
-  // bypassing the public preflight that now prevents it. Prepared recovery must
-  // not discard the evidence, and Committed recovery must reject the whole stream
-  // before writing even its first valid release, including after partial apply.
-  TEST_F(MutationJournalTest, PersistedUnsafeClaimTransitionsPreserveEvidenceBeforeAnyRecoveryWrites)
+  TEST_F(MutationJournalTest, PersistedCompactsRetainPreparedCommittedAndPartialEvidenceWithoutFurtherWrites)
   {
-    for (unsigned variant = 0; variant != 6; ++variant)
+    for (unsigned variant = 0; variant < 9; ++variant)
     {
       SCOPED_TRACE(variant);
       const auto stage = variant % 3;
-      Access access(make_session("persisted-releases-" + std::to_string(variant)));
+      const auto opcode = std::array{mapped::RedoOpcode::ResetBudgets, mapped::RedoOpcode::LoseRange,
+                                    mapped::RedoOpcode::ReleaseClaim}[variant / 3];
+      Access access(make_session("unsupported-compact-" + std::to_string(variant)));
       require_value(access._journal.execute(access._guard, registered_claim_plan(
           require_value(access._journal.snapshot(access._guard)), _configuration)));
       const auto base = require_value(access._journal.snapshot(access._guard));
-      auto plan = chained_claim_plan(base, _configuration);
-      if (variant >= 3)
-      {
-        const auto release = plan._commands.front();
-        plan._commands = {release, write_word(task_state(), 9)};
-      }
-      const auto commands = require_value(mapped::encode_commands(plan._commands));
+      const std::array commands{
+          write_word(task_state() + 8, 99), unsupported_compact(opcode, task_state(), base._tail)};
+      const auto bytes = require_value(mapped::encode_commands(commands));
       mapped::JournalHeader header;
       header._control = stage == 0 ? mapped::JournalControl::Prepared : mapped::JournalControl::Committed;
       header._generation = base._generation + 1;
       header._baseTail = header._newTail = base._tail;
       header._baseAccounted = header._newAccounted = base._accounted;
-      header._inlineBytes = static_cast<std::uint32_t>(commands.size());
+      header._inlineBytes = static_cast<std::uint32_t>(bytes.size());
       header._originalFileBytes = header._newFileBytes = base._fileBytes;
       header._baseRevision = header._newRevision = base._revision;
+      header._actor = TaskId{1};
+      header._actorIncarnation = 7;
       const auto encoded = require_value(mapped::encode_journal_header(header));
       std::array<std::byte, mapped::journal_bytes> body{};
       std::copy(encoded.begin(), encoded.end(), body.begin());
-      std::copy(commands.begin(), commands.end(), body.begin() + mapped::journal_header_bytes);
+      std::copy(bytes.begin(), bytes.end(), body.begin() + mapped::journal_header_bytes);
       require_value(access.file().write_exact(mapped::journal_offset + 8, std::span{body}.subspan(8)));
       if (stage == 2)
       {
-        // Reproduce a crash after both successor incarnation words were stored.
-        access.set_word(task_state(), 9);
+        access.set_word(task_state() + 8, 99); // Simulated earlier partial application.
       }
       access.set_word(mapped::journal_offset, static_cast<std::uint64_t>(header._control));
       const auto evidence = access.image();
       expect_error(access._journal.recover(access._guard), ErrorCode::IoError);
       EXPECT_EQ(access.image(), evidence);
-      EXPECT_EQ(access.word(task_state()), stage == 2 ? 9u : 7u);
+      EXPECT_EQ(access.word(task_state()), 7u);
+      EXPECT_EQ(access.word(task_state() + 8), stage == 2 ? 99u : 0u);
       EXPECT_EQ(access.word(mapped::journal_offset), static_cast<std::uint64_t>(header._control));
     }
   }
 
-  // A replacement ends the previous Process claim and its Thread claims before installing the successor.
-  // Interrupt every absolute write to show compact cleanup is repeatable, preserves child discovery tags,
-  // and needs no new records even while issuance and retirement-floor words are temporarily mixed.
-  TEST_F(MutationJournalTest, TaskReplacementReplaysEveryCleanupAndAttachmentWord)
+  // Replacement updates one fixed ten-word administrative row. Native leases
+  // and parent incarnation determine child liveness; their stored flags remain
+  // diagnostic history. Interrupt every replacement word to qualify replay.
+  TEST_F(MutationJournalTest, TaskReplacementReplaysEveryFixedAttachmentWordWithoutRewritingChildren)
   {
-    // Two detach words per old claim, then ten absolute replacement words.
-    // In particular, stop after resetting issuance but before its retired floor.
-    for (std::uint64_t cut = 0; cut != 14; ++cut)
+    for (std::uint64_t cut = 0; cut != 10; ++cut)
     {
       SCOPED_TRACE(cut);
       FailingInjector injector(mapped::JournalCheckpoint::RedoWord, false, cut);
@@ -1580,8 +1463,8 @@ namespace
         offset = *next;
         registration._records.push_back(std::move(record));
       }
-      const std::array<std::uint64_t, 10> process{7, 20, 3, 111, 42, 100, 7, 0, 10, 50};
-      const std::array<std::uint64_t, 10> thread{2, 10, 1, 111, 43, 120, 3, 7, 3, 0};
+      const std::array<std::uint64_t, 10> process{7, 0, 3, 111, 42, 100, 7, 0, 0, 50};
+      const std::array<std::uint64_t, 10> thread{2, 0, 1, 111, 43, 120, 3, 7, 0, 0};
       for (const auto& [target, values] : std::array{
                std::pair{task_state(), process}, std::pair{task_state() + 256, thread}})
       {
@@ -1598,10 +1481,6 @@ namespace
       mapped::TransactionPlan replacement;
       replacement._base = before;
       replacement._newRevision = before._revision;
-      mapped::RedoCommand release{mapped::RedoOpcode::ReleaseClaim, task_state(), std::vector<std::byte>(16)};
-      put_integer(release._payload, 0, 7);
-      put_integer(release._payload, 8, 200);
-      replacement._commands.push_back(std::move(release));
       auto attached = write_word(task_state(), 0);
       attached._payload.resize(80);
       const std::array<std::uint64_t, 10> successor{8, 0, 4, 222, 44, 200, 7, 0, 0, 200};
@@ -1617,9 +1496,9 @@ namespace
       {
         EXPECT_EQ(access.word(task_state() + word * 8), successor[word]);
       }
-      EXPECT_EQ(access.word(task_state() + 256 + 48), 6u);
+      EXPECT_EQ(access.word(task_state() + 256 + 48), 3u);
       EXPECT_EQ(access.word(task_state() + 256 + 56), 7u);
-      EXPECT_EQ(access.word(task_state() + 256 + 72), 200u);
+      EXPECT_EQ(access.word(task_state() + 256 + 72), 0u);
       const auto after = require_value(access._journal.snapshot(access._guard));
       EXPECT_EQ(after._tail, before._tail);
       EXPECT_EQ(after._accounted, before._accounted);

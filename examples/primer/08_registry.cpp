@@ -306,54 +306,22 @@ namespace
 
   OperationResult run_owner(const std::filesystem::path& directory, bool hold)
   {
-    auto attach_result_3 = Session::attach(directory);
-    if (const auto* error = std::get_if<angaria::Error>(&attach_result_3))
+    auto attached = Session::attach(directory);
+    if (const auto* error = std::get_if<Error>(&attached))
     {
       return *error;
     }
-    auto session = std::get<angaria::Session>(std::move(attach_result_3));
-    auto registry = session.registry();
-    std::optional<QueueWriter> writer;
-    std::optional<PublishingQueueSet> publishing;
-    std::uint64_t incarnation{};
+    auto session = std::get<Session>(std::move(attached));
+    auto claimed = session.attach_task("Feed");
+    if (const auto* error = std::get_if<Error>(&claimed))
     {
-      auto find_task_result_4 = registry.find_task("Feed");
-      if (const auto* error = std::get_if<angaria::Error>(&find_task_result_4))
-      {
-        return *error;
-      }
-      auto attach_task_result_2 = session.attach_task(std::get<angaria::TaskId>(std::move(find_task_result_4)));
-      if (const auto* error = std::get_if<angaria::Error>(&attach_task_result_2))
-      {
-        return *error;
-      }
-      auto task = std::get<angaria::Task>(std::move(attach_task_result_2));
-      incarnation = task.claim()._incarnation;
-      auto find_queue_result = registry.find_queue("FeedToConsumer");
-      if (const auto* error = std::get_if<angaria::Error>(&find_queue_result))
-      {
-        return *error;
-      }
-      auto open_writer_result = task.open_writer(std::get<angaria::QueueId>(std::move(find_queue_result)));
-      if (const auto* error = std::get_if<angaria::Error>(&open_writer_result))
-      {
-        return *error;
-      }
-      writer.emplace(std::get<angaria::QueueWriter>(std::move(open_writer_result)));
-      auto find_publishing_set_result = registry.find_publishing_set("FeedUpdates");
-      if (const auto* error = std::get_if<angaria::Error>(&find_publishing_set_result))
-      {
-        return *error;
-      }
-      auto open_publishing_set_result = task.open_publishing_set(std::get<angaria::PublishingQueueSetId>(std::move(find_publishing_set_result)));
-      if (const auto* error = std::get_if<angaria::Error>(&open_publishing_set_result))
-      {
-        return *error;
-      }
-      publishing.emplace(std::get<angaria::PublishingQueueSet>(std::move(open_publishing_set_result)));
+      return *error;
     }
-    // Endpoint handles keep Feed claimed after the Task variable has ended.
-    std::cout << "READY owner incarnation=" << incarnation << std::endl;
+    auto task = std::get<Task>(std::move(claimed));
+    // This Registry lesson holds the Task itself. Its multi-input topology is
+    // metadata for later milestones, so it opens no messaging endpoint and
+    // does not seal the catalog before the routing-change demonstration.
+    std::cout << "READY owner incarnation=" << task.claim()._incarnation << std::endl;
     if (hold)
     {
       std::string line;

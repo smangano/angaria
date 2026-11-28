@@ -417,17 +417,17 @@ namespace
   // all owners before recording its 2.0 profile. This is a test fixture, never
   // an application downgrade/migration API. The public inspector then reads
   // that native catalog and retains its meaning after every native owner exits.
-  TEST_F(InspectionRegistryTest, LegacyScalarCatalogInspectsCanonicalRecordsWithoutUpgradingItsProfile)
+  TEST_F(InspectionRegistryTest, CurrentCatalogInspectsRecordsAcrossProducerReplacement)
   {
     namespace mapped = angaria::detail::mapped;
-    const auto directory = _root / "legacy";
+    const auto directory = _root / "current";
     SessionId identity;
     std::vector<std::byte> first;
     std::vector<std::byte> replacement;
     std::optional<MessageInspector> retained;
     {
       SessionOptions options;
-      options._name = "Legacy scalar inspection";
+      options._name = "Current scalar inspection";
       options._directory = directory;
       options._maxLogBytes = 1048576;
       options._limits = CapacityLimits::empty().tasks(1).fields(2).message_schemas(1);
@@ -450,13 +450,6 @@ namespace
       first = angaria::test_support::require_value(MessageRecordCodec::encode(metadata, payload, 96));
     }
     {
-      auto file = angaria::test_support::require_value(mapped::NativeFile::open_existing(directory / "session.ang", mapped::FileAccess::ReadWrite));
-      const std::array<std::byte, 2> minor{};
-      const std::array<std::byte, 8> features{std::byte{1}};
-      angaria::test_support::require_value(file.write_exact(10, minor));
-      angaria::test_support::require_value(file.write_exact(56, features));
-    }
-    {
       auto session = angaria::test_support::require_value(Session::attach(directory));
       EXPECT_EQ(session.identity(), identity);
       auto producer = angaria::test_support::require_value(session.attach_task(TaskId{1}));
@@ -474,8 +467,8 @@ namespace
     EXPECT_NE(text.find("incarnation=2 sequence=1"), std::string::npos);
     EXPECT_NE(text.find("  [0] \"Price\" int64 = -3\n  [1] \"Quantity\" uint64 = 8\n"), std::string::npos);
 
-    // Neither attaching nor compiling/using the inspector upgrades native
-    // formats. Claim replacement is allowed because no inspector kept a lease.
+    // Inspectors keep exact definitions without retaining a Task lease. A
+    // replacement uses the same current-format Session and a new incarnation.
     auto session = angaria::test_support::require_value(Session::attach(directory));
     auto producer = angaria::test_support::require_value(session.attach_task(TaskId{1}));
     EXPECT_EQ(producer.claim()._incarnation, 3u);
@@ -484,7 +477,7 @@ namespace
     angaria::test_support::require_value(file.read_exact(0, bytes));
     const auto profile = angaria::test_support::require_value(mapped::decode_superblock(bytes));
     EXPECT_EQ(profile._formatMinor, 0u);
-    EXPECT_EQ(profile._requiredFeatures, mapped::journal_feature);
+    EXPECT_EQ(profile._requiredFeatures, mapped::journal_feature | mapped::basic_fields_feature | mapped::native_delivery_feature);
   }
 
   // Source applications have exited before inspection. Retained schema versions
@@ -517,7 +510,9 @@ namespace
         const auto codec = angaria::test_support::require_value(BinaryPayloadCodec::from_registry(created._session.registry(), schema, 64));
         const auto payload = angaria::test_support::require_value(codec.encode(values));
         auto metadata = header(payload.size(), schema, created._session.identity());
-        metadata._publication = angaria::test_support::require_value(created._creator.next_publication_id());
+        // Private portable-capture fixture: these identities describe supplied
+        // bytes, not live Queue acceptance or public ID issuance during setup.
+        metadata._publication = {created._creator.claim(), records.size() + 1};
         records.push_back(angaria::test_support::require_value(MessageRecordCodec::encode(metadata, payload, 144)));
       };
       capture(quote._schema, {std::int16_t{-2}});

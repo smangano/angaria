@@ -2,7 +2,7 @@
 
 This walkthrough completes milestone 2's public Registry example. It uses the [eighth primer program](../examples/primer/08_registry.cpp), the [primer TOML file](../examples/primer/configuration.toml), and an [automated walkthrough](../test/registry_walkthrough.py). Start with the [programmer primer](primer.md) if Sessions, Tasks, or Queue Sets are new to you.
 
-Several processes will add definitions to the same Session. Another process will inspect one consistent Registry revision, including earlier definitions after the topology changes. A producer process will hold its endpoints, exit, and be replaced. These operations configure and inspect communication; this milestone does not send messages.
+Several processes will add definitions to the same Session. Another process will inspect one consistent Registry revision, including earlier definitions after the topology changes. A producer process will hold its Task claim, exit, and be replaced. These operations configure and inspect communication; this milestone does not send messages.
 
 ## Run the complete check
 
@@ -125,7 +125,7 @@ In terminal A, open `Feed`'s writer and Publishing set:
 ./build/angaria_primer_08_registry owner "$session_directory" --hold
 ```
 
-On a fresh walkthrough this prints `READY owner incarnation=1`. The original Task variable has already closed. Its endpoint handles keep the claim alive while the program waits for Enter.
+On a fresh walkthrough this prints `READY owner incarnation=1`. The Task variable keeps its claim alive while the program waits for Enter. This metadata lesson opens no messaging endpoint, so it does not seal the catalog before the later routing changes. The configured multiple-input Source and Publishing set describe later runtime features.
 
 In terminal C, attempt another owner:
 

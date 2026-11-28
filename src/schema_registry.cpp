@@ -1,3 +1,4 @@
+#include "public_runtime_storage.h"
 #include "runtime_state.h"
 
 #include "angaria/detail/identity_helpers.h"
@@ -170,6 +171,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       runtime_value(mapped::validate_field_descriptor(descriptor));
       runtime_validate_field_policy(descriptor, ErrorCode::InvalidArgument);
       if (mapped::field_requires_basic_fields(descriptor) &&
@@ -218,6 +220,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       runtime_value(mapped::validate_message_descriptor(descriptor));
       const auto fields = runtime_fields(access);
       const auto schemas = runtime_schemas(access, fields);

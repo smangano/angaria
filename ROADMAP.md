@@ -97,6 +97,8 @@ Step **4.35**, framework **0.4.37**, implements workstream step 6's private [opt
 
 Step **4.36**, framework **0.4.38**, adds [end-to-end qualification](docs/end-to-end-qualification.md) for both private delivery modes against nanomsg on each measured host. Live warmup, longer finite streams, balanced execution order, offered load, retained history, credit pressure, consumer delays and legacy controls expose latency, completed throughput and CPU cost. Binary samples and control transcripts independently reconstruct every published run; ordinary CI checks correctness without timing thresholds. Public runtime admission remains workstream step 8.
 
+Step **4.37**, framework **0.4.39**, implements workstream step 8's [public runtime admission](docs/public-runtime-admission.md). One producer-owned log is shared across a Task's writers and exact schemas; Process/Thread claims, frozen setup, TOML acknowledgment selection and the public Message/MessageView/Delivery interface are integrated. Established messaging acquires no Session administrative gate. Accepted Queue sequences and an acknowledged processing lower bound distinguish acceptance, credit and processing. Public `LogArchive` captures per-producer replay cuts and exports flat message captures. Native format 3.0/synchronization 2 replaces the old message engine and requires fresh Sessions. The [public performance qualification](docs/public-runtime-performance.md) includes deterministic hot-path guards and matched end-to-end latency/throughput comparisons with nanomsg. The primer now has eighteen runnable lessons. Earlier step reports below retain their historical behavior; this admission contract describes the current runtime.
+
 ## 1 Core architecture and policy contracts
 
 Completed through [PR #7](https://github.com/smangano/angaria/pull/7). The [milestone 1 review plan and core contracts](docs/milestones/milestone-1.md) divided this work into five reviewed step PRs targeting `milestone-1`.
@@ -213,12 +215,8 @@ Completion requires round-trip encoding, schema-driven inspection, pool-referenc
 
 Completion requires a reproducible application walkthrough, documented guarantees and configuration limits, and a release with the supported policy/platform matrix and performance results.
 
-## Existing prototype
+## Earlier prototype
 
-The completed v0 demo provides a CMake build, Linux CI, a bounded filesystem queue, one recorded integer schema, role locks, explicit acknowledgment, and process-restart tests. Its file format and runtime describe the current prototype.
-
-The build infrastructure, encoding patterns, inspector fixtures, ownership mechanisms, and failure tests provide reusable foundations. The milestones above replace the prototype with the shared Registry, general messages, native mapped direct delivery, and configured recovery/loss. Multiple-input selection, Publishing fan-out, and the remaining policy implementations retain their later milestones.
-
-The [README](README.md) documents the runnable prototype, and the [session format](docs/session-format.md) describes its existing files. The [restart walkthrough](test/restart_demo.py) exercises its process and acknowledgment behavior.
+The v0 demo and Session-gated native message engine were superseded by public runtime admission in step 4.37. Their source, tests and measurements remain reproducible from their pinned commits. The current build contains one message engine and rejects older native formats before recovery or mutation. See the [README](README.md) for current runnable programs and [mapped format](docs/mapped-format.md) for current files.
 
 [Original design wiki](https://github.com/smangano/angaria/wiki/Angaria)

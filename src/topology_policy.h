@@ -16,6 +16,7 @@ namespace angaria::detail
   {
     SelectionPolicy _selection{};
     WaitPolicy _wait{};
+    AcknowledgmentMode _acknowledgment{AcknowledgmentMode::Required};
   };
 
   // Registration and file preflight share effective policy resolution and the

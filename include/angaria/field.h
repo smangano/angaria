@@ -1,6 +1,5 @@
 #pragma once
 
-#include "angaria/registry.h"
 #include "angaria/types.h"
 #include <compare>
 #include <cstdint>
@@ -8,7 +7,6 @@
 #include <ostream>
 #include <string>
 #include <type_traits>
-#include <utility>
 
 namespace angaria
 {
@@ -110,10 +108,6 @@ namespace angaria
       }
     }
 
-    void register_field(Registry& registry, std::string name, std::string doc = "") const
-    {
-      static_cast<const FLD*>(this)->register_field_impl(registry, std::move(name), std::move(doc));
-    }
   };
 
   template <EFieldType FT, typename T>
@@ -233,11 +227,6 @@ namespace angaria
       {
         _value = value;
       }
-    }
-
-    void register_field_impl(Registry& registry, std::string name, std::string doc = "") const
-    {
-      registry.register_field(FT, std::move(name), sizeof(T), TypeToBase<T>::value, std::move(doc));
     }
 
   private:

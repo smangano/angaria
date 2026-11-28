@@ -6,6 +6,8 @@ name = "Native market monitor"
 application_version = "Primer-17"
 directory = "market-session"
 max_log_bytes = 4194304
+producer_log_bytes = 4194304
+producer_log_publications = 2048
 
 [limits]
 tasks = 4
@@ -19,10 +21,11 @@ symbols = 0
 string_pool_bytes = 0
 
 [defaults.queue]
-ring_capacity = 2
+ring_capacity = 16
 delivery = "recover_from_log"
 
 [defaults.source_set]
+acknowledgment = "required"
 selection = "strict"
 wait = "spin"
 

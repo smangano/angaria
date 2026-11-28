@@ -22,10 +22,11 @@ from types import SimpleNamespace
 sys.dont_write_bytecode = True
 import run_ipc_comparison as ipc
 from end_to_end_validation import validate_attempt, validate_case
-from recorded_connection_study import build_snapshot, cache_values, source_snapshot
+from recorded_connection_study import build_snapshot, source_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ("recorded-connection", "recorded-acknowledged-connection", "nanomsg")
+PUBLIC_PROFILES = (*ipc.PUBLIC_PROFILES, "nanomsg")
 CONTROLS = (*PROFILES, "angaria", "recorded-spsc")
 FLAGS = ("qualification", "warmup_messages", "processing_delay_ns", "pause_at", "pause_ns", "pacing_spin")
 SCRIPT_INPUTS = ("benchmarks/run_end_to_end.py", "benchmarks/end_to_end_validation.py",
@@ -49,8 +50,10 @@ def load_json(text):
                       parse_constant=lambda value: ipc.check(False, "Nonfinite JSON: " + value))
 
 
-def plan(smoke=False):
+def plan(smoke=False, runtime="private"):
     """Balanced orders are fixed before measurements; counts never pooled."""
+    ipc.check(runtime in ("private", "public"), "Unknown qualification runtime")
+    profiles = PUBLIC_PROFILES if runtime == "public" else PROFILES
     base = dict(messages=20480, warmup_messages=4096, history=8192, payload_bytes=64,
                 interval_ns=0, socket_buffer_bytes=131072, budget_ms=60000, ring_slots=8,
                 qualification=1, processing_delay_ns=0, pause_at=0, pause_ns=0,
@@ -70,12 +73,14 @@ def plan(smoke=False):
     cases, orders = {}, []
     for name, changes in definitions:
         cases[name] = dict(base, **changes)
-        permutations = [PROFILES] if smoke else list(itertools.permutations(PROFILES))
+        permutations = [profiles] if smoke else list(itertools.permutations(profiles))
         orders.extend((name, list(order)) for order in permutations)
     if not smoke:
         cases["long-64"] = dict(base, messages=139264, warmup_messages=8192)
-        orders.extend(("long-64", list(PROFILES[i:] + PROFILES[:i])) for i in range(3))
-    for history in (0, 128):
+        orders.extend(("long-64", list(profiles[i:] + profiles[:i])) for i in range(3))
+    # Superseded public engines stay reproducible from pinned historical source;
+    # admission does not maintain a second engine merely to run old controls.
+    for history in (() if runtime == "public" else (0, 128)):
         name = "short-control-H" + str(history)
         cases[name] = dict(base, messages=16, warmup_messages=0, history=history)
         rotations = range(1) if smoke else range(len(CONTROLS))
@@ -275,7 +280,7 @@ def reconstruct(output):
     output = Path(output)
     manifest = load_json((output / "manifest.json").read_text())
     ipc.check(manifest["format"] == 1 and manifest["complete"] is True, "Incomplete qualification; failures remain retained")
-    cases, attempts = plan(manifest["smoke"])
+    cases, attempts = plan(manifest["smoke"], manifest.get("runtime", "private"))
     ipc.check(manifest["cases"] == cases and manifest["attempts"] == attempts, "Qualification matrix changed")
     published = [load_json(line) for line in (output / "reports.jsonl").read_text().splitlines()]
     ipc.check(len(published) == len(attempts), "Missing or extra published attempts")
@@ -303,13 +308,13 @@ def collect(options):
     (output / "raw").mkdir()
     source = frozen_source(options.source_commit)
     files, build = build_snapshot(executable, output)
-    settings = cache_values(executable.parent / "CMakeCache.txt")
-    ipc.check(settings.get("ANGARIA_BUILD_STALL_STUDY") == "ON", "Legacy experiment controls require STALL_STUDY=ON")
+    ipc.check(options.runtime == "public", "Historical engines must be measured from their pinned source")
+    profiles = PUBLIC_PROFILES if options.runtime == "public" else PROFILES
     metadata_options = SimpleNamespace(host_label=options.host_label, smoke=options.smoke,
-                                      timeout=options.timeout, repetitions=6, angaria_profile=PROFILES[0])
+                                      timeout=options.timeout, repetitions=6, angaria_profile=profiles[0])
     host, _, _ = ipc.comparison_metadata(executable, metadata_options)
-    cases, attempts = plan(options.smoke)
-    manifest = dict(format=1, complete=False, smoke=options.smoke, source=source, build=build, host=host,
+    cases, attempts = plan(options.smoke, options.runtime)
+    manifest = dict(format=1, complete=False, smoke=options.smoke, runtime=options.runtime, source=source, build=build, host=host,
                     host_label=options.host_label, dependency=ipc.pinned_dependency(),
                     cases=cases, attempts=attempts, raw_sha256={}, failures=[],
                     methodology="All permutations for core cases; cyclic rotations for long and legacy controls. No discarded attempts.")
@@ -355,6 +360,8 @@ def main():
     collecting.add_argument("--source-commit", required=True)
     collecting.add_argument("--host-label", required=True)
     collecting.add_argument("--smoke", action="store_true")
+    collecting.add_argument("--runtime", choices=("public",), default="public",
+                            help="Public admission uses public API profiles and omits obsolete legacy controls")
     collecting.add_argument("--no-plots", action="store_true")
     collecting.add_argument("--timeout", type=int, default=90)
     collecting.add_argument("--start-lead-ms", type=int, default=100)

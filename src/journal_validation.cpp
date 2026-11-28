@@ -34,7 +34,7 @@ namespace angaria::detail::mapped
 
     WordAccess fixed_word_access(const FixedLayout& layout, std::uint64_t target)
     {
-      if (target == 72 || target == 112)
+      if (target == 72 || target == 112 || target == catalog_seal_offset)
       {
         return {true, false};
       }
@@ -86,12 +86,6 @@ namespace angaria::detail::mapped
         if (target >= record._mutableBegin &&
             contains_range(record._mutableBytes, target - record._mutableBegin, 8))
         {
-          if (record._envelope._kind == 9)
-          {
-            // Each receipt exposes seven state words. Its final word and
-            // second 64-byte half remain reserved recovery storage.
-            return (target - record._mutableBegin) % 128 < 56;
-          }
           return record._envelope._kind == 8;
         }
       }
@@ -127,7 +121,7 @@ namespace angaria::detail::mapped
     switch (envelope._kind)
     {
     case 1:
-      fixedBytes = 128;
+      fixedBytes = 144;
       break;
     case 2:
       fixedBytes = 72;
@@ -146,9 +140,8 @@ namespace angaria::detail::mapped
     case 8:
       break;
     case 9:
-      fixedBytes = 128;
-      break;
     case 10:
+      return framing_error(unsupported_code(errorCode), "Format 3 messages belong to producer-owned logs");
     case 11:
       fixedBytes = 64;
       break;
@@ -172,20 +165,6 @@ namespace angaria::detail::mapped
       }
       result._mutableBegin = offset + record_envelope_bytes;
       result._mutableBytes = suffixBytes;
-    }
-    else if (envelope._kind == 9)
-    {
-      const auto receiptBegin = read_unsigned_le<std::uint64_t>(immutableBody, 96);
-      const auto receiptCount = read_unsigned_le<std::uint64_t>(immutableBody, 104);
-      const auto receiptBytes = checked_multiply(receiptCount, 128);
-      const auto mutableBegin = offset + record_envelope_bytes + envelope._immutableBytes;
-      if (receiptBegin != mutableBegin || receiptCount == 0 || !receiptBytes ||
-          *receiptBytes > suffixBytes || suffixBytes - *receiptBytes >= section_alignment)
-      {
-        return framing_error(errorCode, "Publication receipt slice does not match its mutable suffix");
-      }
-      result._mutableBegin = receiptBegin;
-      result._mutableBytes = *receiptBytes;
     }
     else if (suffixBytes != 0)
     {

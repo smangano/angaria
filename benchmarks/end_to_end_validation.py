@@ -14,7 +14,7 @@ import sys
 
 sys.dont_write_bytecode = True
 from run_ipc_comparison import (ACKNOWLEDGED_PROFILES, IDENTITY_PROFILES,
-                                RECORDED_PROFILES, check, common_identity,
+                                RECORDED_PROFILES, PUBLIC_PROFILES, LOOKUP_PROFILES, check, common_identity,
                                 integer, payload_hash, sha256)
 
 
@@ -157,13 +157,20 @@ def _report(report, role, profile, case, t0, expected_version, dependency):
                        "completed": 0 if is_producer else case["messages"], "unexpected_messages": 0}
     for key, expected in expected_counts.items():
         check(type(report.get(key)) is int and report[key] == expected, "Wrong exact completion count: " + key)
-    if profile in RECORDED_PROFILES:
-        check(report.get("producer_path_scope") == "ID issuance, try_send retries and ordinary lookup" and
+    if profile in LOOKUP_PROFILES:
+        public = profile in PUBLIC_PROFILES
+        expected_path = ("public ID issuance, send retries and publication_status" if public else
+                         "ID issuance, try_send retries and ordinary lookup")
+        check(report.get("producer_path_scope") == expected_path and
               report.get("lookup_observation_category") == "send", "Recorded producer omitted ordinary outcome lookup")
-        expected_scope = ("reserved producer log, owner, connection and progress; catalog reported separately"
+        expected_scope = ("all reserved public messaging resources; catalog reported separately" if public else
+                          "reserved producer log, owner, connection and progress; catalog reported separately"
                           if profile in ACKNOWLEDGED_PROFILES else
                           "reserved producer log, owner and connection; catalog reported separately")
         check(report.get("file_byte_scope") == expected_scope, "Wrong recorded-resource accounting scope")
+        if public:
+            check(report.get("runtime_surface") == "Session/Task/QueueWriter/SourceQueueSet",
+                  "Public qualification used an unspecified runtime surface")
         check(0 < report["file_bytes_before"] == report["file_bytes_after"] and
               0 < report["catalog_bytes_before"] == report["catalog_bytes_after"],
               "Reserved recorded resources or sealed catalog changed during communication")
@@ -247,7 +254,7 @@ def validate_attempt(directory, profile, case, t0, producer_report, consumer_rep
             check(previous_consumer_end <= consumer_report["pause_start_ns"] <=
                   consumer_report["pause_end_ns"] <= arrived, "Consumer paused at a different stream position")
         producer_end = send_end
-        if profile in RECORDED_PROFILES:
+        if profile in LOOKUP_PROFILES:
             check(send_end <= lookup_end <= producer_report["data_end_ns"], "Recorded outcome lookup is missing or out of order")
             producer_end = lookup_end
         else:

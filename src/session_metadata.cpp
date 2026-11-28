@@ -211,6 +211,12 @@ namespace angaria::detail::mapped
     {
       const auto& options = definition._options;
       const auto& metadata = definition._metadata;
+      codec_require(options._producerLogBytes >= 4096 + 192 && options._producerLogBytes <= max_log_bytes &&
+                    options._producerLogBytes % 64 == 0 && options._producerLogPublications != 0 &&
+                    options._producerLogPublications <= (options._producerLogBytes - 4096) / 192,
+                    code, "session.producer_log", "Invalid per-Task recording reservations");
+      codec_require(wire::encode(options._defaults._acknowledgment, wire::acknowledgment_modes).has_value(),
+                    code, "session.defaults.acknowledgment", "Unknown acknowledgment mode");
       codec_require(metadata._session != SessionId{}, code, "session.identity", "Session identity is zero");
       codec_require(metadata._createdBy != TaskId::Invalid &&
                   static_cast<std::uint16_t>(metadata._createdBy) <= options._limits._tasks,
@@ -313,17 +319,21 @@ namespace angaria::detail::mapped
       const std::array<std::string_view, 5> strings{
           definition._options._name, definition._metadata._angariaVersion,
           definition._metadata._applicationVersion, definition._metadata._creatorUser, directory};
-      auto bytes = encode_strings(128, 48, strings, recordOffset, "session.definition");
+      auto bytes = encode_strings(144, 48, strings, recordOffset, "session.definition");
       write_unsigned_le<std::uint16_t>(bytes, 0, static_cast<std::uint16_t>(definition._metadata._createdBy));
       write_unsigned_le<std::uint16_t>(bytes, 2, storage_code(definition._options._storage, ErrorCode::InvalidArgument));
       write_unsigned_le<std::uint16_t>(bytes, 4, delivery_code(definition._options._defaults._delivery, ErrorCode::InvalidArgument));
       write_unsigned_le<std::uint16_t>(bytes, 6, selection_code(definition._options._defaults._selection, ErrorCode::InvalidArgument));
       write_unsigned_le<std::uint16_t>(bytes, 8, wait_code(definition._options._defaults._wait, ErrorCode::InvalidArgument));
       write_unsigned_le<std::uint16_t>(bytes, 10, acceptance_code(definition._options._defaults._acceptance, ErrorCode::InvalidArgument));
+      write_unsigned_le<std::uint16_t>(bytes, 12,
+          *wire::encode(definition._options._defaults._acknowledgment, wire::acknowledgment_modes));
       write_unsigned_le<std::uint64_t>(bytes, 16, static_cast<std::uint64_t>(definition._metadata._createdAt.time_since_epoch().count()));
       write_unsigned_le<std::uint64_t>(bytes, 24, definition._options._defaults._ringCapacity);
       write_unsigned_le<std::uint64_t>(bytes, 32, definition._options._segmentBytes.value_or(0));
       write_unsigned_le<std::uint64_t>(bytes, 40, definition._policyFeatures);
+      write_unsigned_le<std::uint64_t>(bytes, 128, definition._options._producerLogBytes);
+      write_unsigned_le<std::uint64_t>(bytes, 136, definition._options._producerLogPublications);
       return bytes;
     }
     catch (const CodecFailure& failure)
@@ -342,8 +352,8 @@ namespace angaria::detail::mapped
   {
     try
     {
-      const auto strings = decode_strings<5>(immutableBody, 128, 48, recordOffset, "session.definition");
-      codec_require(all_zero(immutableBody.subspan(12, 4)), ErrorCode::IoError, "session.definition", "Reserved Session bytes are nonzero");
+      const auto strings = decode_strings<5>(immutableBody, 144, 48, recordOffset, "session.definition");
+      codec_require(all_zero(immutableBody.subspan(14, 2)), ErrorCode::IoError, "session.definition", "Reserved Session bytes are nonzero");
       SessionDefinition definition;
       definition._metadata._session = configuration._session;
       definition._metadata._createdBy = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(immutableBody, 0));
@@ -382,6 +392,10 @@ namespace angaria::detail::mapped
           wire::wait_policies, "session.defaults.wait");
       definition._options._defaults._acceptance = decode_policy(read_unsigned_le<std::uint16_t>(immutableBody, 10),
           wire::acceptance_policies, "session.defaults.acceptance");
+      definition._options._defaults._acknowledgment = decode_policy(read_unsigned_le<std::uint16_t>(immutableBody, 12),
+          wire::acknowledgment_modes, "session.defaults.acknowledgment");
+      definition._options._producerLogBytes = read_unsigned_le<std::uint64_t>(immutableBody, 128);
+      definition._options._producerLogPublications = read_unsigned_le<std::uint64_t>(immutableBody, 136);
       definition._options._defaults._ringCapacity = read_unsigned_le<std::uint64_t>(immutableBody, 24);
       definition._policyFeatures = read_unsigned_le<std::uint64_t>(immutableBody, 40);
       check_session(definition, ErrorCode::IoError);

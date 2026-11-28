@@ -41,7 +41,7 @@ namespace angaria::detail::mapped
     {
       if (configuration._formatMinor > delivery_format_minor)
       {
-        return failure(code, "superblock.format", "Unsupported format version; expected 2.0, 2.1, or 2.2");
+        return failure(code, "superblock.format", "Unsupported format version; expected 3.0");
       }
       // Unknown required bits remain available to portable metadata inspection;
       // live admission rejects them unless its adapter explicitly supports them.
@@ -49,14 +49,11 @@ namespace angaria::detail::mapped
       constexpr auto known = journal_feature | basic_fields_feature |
                              native_delivery_feature | allow_loss_feature;
       const auto features = configuration._requiredFeatures & known;
-      const auto expected = configuration._formatMinor == 0 ? journal_feature :
-          configuration._formatMinor == 1 ? journal_feature | basic_fields_feature :
-          journal_feature | basic_fields_feature | native_delivery_feature;
-      if (features != expected &&
-          !(configuration._formatMinor == delivery_format_minor && features == (expected | allow_loss_feature)))
+      const auto expected = journal_feature | basic_fields_feature;
+      if (features != expected && features != (expected | native_delivery_feature))
       {
         return failure(code, "superblock.required_features",
-                       "Known required features must match the 2.0, 2.1, or 2.2 delivery profile");
+                       "Known required features must match the format-3 metadata or recorded-delivery profile");
       }
       if (configuration._session == SessionId{})
       {
@@ -176,7 +173,7 @@ namespace angaria::detail::mapped
     if (read_unsigned_le<std::uint16_t>(bytes, 8) != format_major ||
         read_unsigned_le<std::uint16_t>(bytes, 10) > delivery_format_minor)
     {
-      return malformed("superblock.format", "Unsupported format version; expected 2.0, 2.1, or 2.2");
+      return malformed("superblock.format", "Unsupported format version; expected 3.0");
     }
     if (read_unsigned_le<std::uint32_t>(bytes, 12) != superblock_bytes)
     {
@@ -190,7 +187,7 @@ namespace angaria::detail::mapped
     {
       return malformed("superblock.representation", "Unsupported address width, byte order, or atomic width");
     }
-    if (bytes[111] != std::byte{0} || !all_zero(bytes.subspan(184, 72)) || !all_zero(bytes.subspan(2720, 1376)))
+    if (bytes[111] != std::byte{0} || !all_zero(bytes.subspan(192, 64)) || !all_zero(bytes.subspan(2720, 1376)))
     {
       return malformed("superblock.reserved", "Nonzero reserved header bytes");
     }

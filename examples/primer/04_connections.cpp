@@ -1,6 +1,6 @@
-// Register one producer-to-consumer connection and activate its endpoints.
-// Two logical Process Tasks run in this one program for a small first example;
-// 06_processes.cpp opens their counterparts in independent OS processes.
+// Register and activate a producer-to-consumer connection in the Registry.
+// Message schemas and actual messaging endpoint openings follow in lesson 14;
+// 06_processes.cpp first demonstrates Task claims in independent OS processes.
 
 #include "angaria/runtime.h"
 
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
     const auto publishing_id = std::get<angaria::PublishingQueueSetId>(std::move(publishing_id_result));
 
     // Registration creates Draft entities. Activate in dependency order:
-    // Source, then Queue (which allocates its ring), then Publishing set.
+    // Source, then Queue, then Publishing set.
     // OperationResult has no success data to extract; checking Error is enough.
     auto source_activation_result = registry.activate_source_set(source_id);
     if (const auto* error = std::get_if<angaria::Error>(&source_activation_result))
@@ -118,38 +118,8 @@ int main(int argc, char** argv)
       return 1;
     }
 
-    auto writer_result = created._creator.open_writer(queue_id);
-    if (const auto* error = std::get_if<angaria::Error>(&writer_result))
-    {
-      std::cerr << "Opening QueueWriter failed: " << error->_message << " at " << error->_path
-                << " (code " << static_cast<int>(error->_code) << ")" << '\n';
-      return 1;
-    }
-    auto writer = std::get<angaria::QueueWriter>(std::move(writer_result));
-    auto publisher_result = created._creator.open_publishing_set(publishing_id);
-    if (const auto* error = std::get_if<angaria::Error>(&publisher_result))
-    {
-      std::cerr << "Opening FeedUpdates failed: " << error->_message << " at " << error->_path
-                << " (code " << static_cast<int>(error->_code) << ")" << '\n';
-      return 1;
-    }
-    auto publisher = std::get<angaria::PublishingQueueSet>(std::move(publisher_result));
-    auto running_consumer_result = created._session.attach_task(consumer_id);
-    if (const auto* error = std::get_if<angaria::Error>(&running_consumer_result))
-    {
-      std::cerr << "Attaching Consumer failed: " << error->_message << " at " << error->_path
-                << " (code " << static_cast<int>(error->_code) << ")" << '\n';
-      return 1;
-    }
-    auto running_consumer = std::get<angaria::Task>(std::move(running_consumer_result));
-    auto source_result = running_consumer.open_source_set(source_id);
-    if (const auto* error = std::get_if<angaria::Error>(&source_result))
-    {
-      std::cerr << "Opening ConsumerInputs failed: " << error->_message << " at " << error->_path
-                << " (code " << static_cast<int>(error->_code) << ")" << '\n';
-      return 1;
-    }
-    auto source = std::get<angaria::SourceQueueSet>(std::move(source_result));
+    // These are catalog identities, not messaging handles. Complete schema
+    // registration before opening endpoints as demonstrated in lesson 14.
     auto members_result = registry.source_members(source_id);
     if (const auto* error = std::get_if<angaria::Error>(&members_result))
     {
@@ -158,9 +128,9 @@ int main(int argc, char** argv)
       return 1;
     }
     const auto members = std::get<std::vector<angaria::QueueId>>(std::move(members_result));
-    std::cout << "Active Queue: FeedToConsumer (ID " << static_cast<unsigned>(writer.id()) << ")\n"
-              << "Active Source: ConsumerInputs (ID " << static_cast<unsigned>(source.id()) << ")\n"
-              << "Active Publishing set: FeedUpdates (ID " << static_cast<unsigned>(publisher.id()) << ")\n"
+    std::cout << "Active Queue: FeedToConsumer (ID " << static_cast<unsigned>(queue_id) << ")\n"
+              << "Active Source: ConsumerInputs (ID " << static_cast<unsigned>(source_id) << ")\n"
+              << "Active Publishing set: FeedUpdates (ID " << static_cast<unsigned>(publishing_id) << ")\n"
               << "Source member count: " << members.size() << '\n'
               << "Setup only: no messages sent. Lesson 14 demonstrates direct send.\n";
     return 0;

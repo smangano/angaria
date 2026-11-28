@@ -1,5 +1,7 @@
 # Allocation, commits, and process recovery
 
+> Historical implementation note: this page describes the superseded runtime or its original qualification. Current format 3.0 and public messaging are documented in [public runtime admission](public-runtime-admission.md) and [the current format](mapped-format.md). Historical source and measurements remain pinned to their recorded revisions.
+
 Step 1.5 completes the protocol plan for [format 2.0](mapped-format.md). It preserves the [public API](api.md) and [configuration contracts](configuration.md). The initial runtime uses **blocking, serialized mutation**, with one crash-released session gate and separate Task lifetime claims. Single-producer ownership simplifies queue order; it does not make shared allocation, fan-out, receive, or acknowledgment lock-free.
 
 This is an implementation contract. Step 2.3 implements private [native gate/claim ownership and atomic access](native-storage.md#shared-controller-and-mutation-gate). Step 2.4 implements the separate [mutation journal](native-storage.md#journal-transactions-and-recovery), with inline FixedState and manifest-backed Append operations, repeatable recovery, and native process-termination/I/O-failure tests. Later steps implement public Session/Registry operations and the native delivery paths described below. The [executable reference model](../test/protocol_model.py) remains a separate check of logical crash boundaries and replay invariants.

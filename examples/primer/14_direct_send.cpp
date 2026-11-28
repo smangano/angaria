@@ -1,4 +1,4 @@
-// Publish into a Queue while its consumer is offline, then inspect the durable
+// Publish into a Queue while its consumer is offline, then inspect the recorded
 // acceptance. Receiving and acknowledging arrive in the next primer lesson.
 #include "angaria/runtime.h"
 #include "angaria/payload.h"

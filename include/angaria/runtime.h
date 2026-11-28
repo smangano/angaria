@@ -25,7 +25,9 @@ namespace angaria
 
   struct CreatedSession;
 
-  using ReceiveResult = std::variant<Delivery, DeliveryGap, ReceiveTimeout, Error>;
+  // Acknowledged Sources return Delivery; acknowledgment-free Sources return a
+  // borrowed MessageView. Both expose the same MessageHeader and owning copy.
+  using ReceiveResult = std::variant<Delivery, MessageView, DeliveryGap, ReceiveTimeout, Error>;
 
   class QueueWriter
   {
@@ -36,6 +38,9 @@ namespace angaria
     QueueWriter& operator=(const QueueWriter&) = delete;
 
     QueueId id() const;
+    // A committed processing lower bound for this Queue. It may lag after a
+    // consumer interruption; unacknowledged Sources return UnsupportedPolicy.
+    Result<std::uint64_t> acknowledged_sequence() const;
     // Reads schema/format/payloadBytes/flags and borrowed bytes. Explicit ID
     // and runtime clocks establish stored provenance; input header is unchanged.
     Result<PublicationOutcome> send(PublicationId publication, MessageView message);
@@ -140,6 +145,7 @@ namespace angaria
     Result<Task> attach_task(std::string_view task);
 
   private:
+    friend class LogArchive;
     static Result<CreatedSession> create_configured(const SessionOptions& options,
                                                      const TaskDescriptor& creator,
                                                      const detail::ConfigurationPlan* configuration);

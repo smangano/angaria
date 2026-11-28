@@ -1,6 +1,8 @@
 # Process exchange and retained schema qualification
 
-Milestone 3, step 3.6, framework version `0.3.6`, qualifies the [canonical message record](message-record.md) and [capture/inspection APIs](capture-inspection.md) through independent processes. The [thirteenth primer program](../examples/primer/13_process_exchange.cpp) is an application example; its [Python walkthrough](../test/process_exchange.py) coordinates processes and checks their observable results. Neither needs private native storage APIs.
+Originally introduced in milestone 3, step 3.6, this workflow qualifies the [canonical message record](message-record.md) and [capture/inspection APIs](capture-inspection.md) through independent processes. The [thirteenth primer program](../examples/primer/13_process_exchange.cpp) is an application example; its [Python walkthrough](../test/process_exchange.py) coordinates processes and checks their observable results. Neither needs private native storage APIs.
+
+**Current admission boundary — 0.4.39:** these are manually constructed portable captures with application-chosen, capture-local identities. The example never invokes the native publication-ID issuer or opens messaging endpoints, so its Registry remains unsealed while schema versions are added. Real messaging requires the complete catalog before the first valid endpoint opening or `Task::next_publication_id()` call; see [public runtime admission](public-runtime-admission.md).
 
 ## Run the walkthrough
 
@@ -37,13 +39,13 @@ Workspace and phase directories are created exclusively. Reusing them returns `C
 
 The retained reader constructs `MessageInspector::from_session` before another process registers v2. The inspector owns only definitions and source Session identity. It retains no native handle or Task claim. Its successful v1 reads and expected v2 `NotFound` establish that a newer same-sized layout neither rewrites old definitions nor refreshes an existing inspector implicitly.
 
-Feed keeps Task ID 2. In a fresh walkthrough, its three independent attachments have incarnations 1, 2, and 3, and each issues publication sequences 1 and 2. Inspection preserves those original identities after claim replacement. Sequence reuse in a different incarnation does not identify the same publication. The script checks exact rendered headers and ordered values against the identity reported by initialization.
+Feed keeps Task ID 2. In a fresh walkthrough, its three independent attachments have incarnations 1, 2, and 3. Each capture writer chooses local record sequences 1 and 2 with `PublicationId{feed.claim(), writer.records_written() + 1}`. Inspection preserves those original claims and record numbers after replacement. These identities do not come from the producer-log issuer, certify no Queue acceptance and must not be mixed with native issuance/deduplication. The script checks exact rendered headers and ordered values against the identity reported by initialization.
 
 After the application and retained reader exit, separately launched `angaria_inspect` processes attach to the healthy native catalog, close their handles, and render all captures. Their fresh catalogs contain v1 and v2. Earlier capture bytes remain unchanged throughout version additions, replacement, and repeated inspection.
 
 ## Compatibility and qualification
 
-This step changes framework version only. Native mapped formats 2.0/2.1, required features, TOML versions 1/2, synchronization protocol, and portable record encoding version 1 retain their existing contracts.
+The original 0.3.6 step changed framework version only. The following table records that milestone's historical qualification; predecessor-format tests are not claims of current attachment support. The current checkout uses native Session format 3.0 and synchronization revision 2, rejects earlier native formats, and retains portable record encoding version 1. Capture-local numbering does not change that portable encoding.
 
 | Boundary | Qualification evidence |
 | --- | --- |
@@ -61,6 +63,6 @@ The [inspection tests](../test/test_inspection.cpp), [schema tests](../test/test
 
 Applications exchange completed ordinary files after constructing records in memory. Captures preserve framing, values, exact schemas, and publication identities; they do not establish Queue admission, delivery, acknowledgment, log replay, or power-loss durability. Termination occurs only after a producer finishes its capture, so this scenario qualifies claim replacement rather than recovery of torn capture writes.
 
-The native catalog still requires a qualified matching ABI and normal `Session::attach` recovery access. Physically read-only/foreign-profile native readers and catalog export remain later tooling. Native mapped Queue payload operations follow milestone 4; Source and Publishing Queue Set behavior follow milestones 5–6. Integration release `0.3.7` brings the completed milestone from `milestone-3` into `main`.
+The native catalog still requires a qualified matching ABI and normal `Session::attach` recovery access. Physically read-only/foreign-profile native readers and portable catalog bundles remain later tooling. [Current public messaging and accepted-log replay](public-runtime-admission.md) are demonstrated separately in primer lessons 14–18; multi-input selection and Publishing execution retain their later milestone boundaries.
 
 [Primer lesson 13](primer.md#13-exchange-captures-across-processes-and-schema-changes) · [Milestone 3 plan](milestones/milestone-3.md) · [Roadmap](../ROADMAP.md)

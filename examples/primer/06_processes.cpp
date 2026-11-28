@@ -6,7 +6,6 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -194,40 +193,17 @@ namespace
       return *error;
     }
     const auto updates = std::get<angaria::PublishingQueueSetId>(std::move(find_publishing_set_result));
-    std::optional<QueueWriter> writer;
-    std::optional<PublishingQueueSet> publisher;
-    std::uint64_t incarnation{};
+    auto attach_task_result = session.attach_task(feed);
+    if (const auto* error = std::get_if<angaria::Error>(&attach_task_result))
     {
-      auto attach_task_result = session.attach_task(feed);
-      if (const auto* error = std::get_if<angaria::Error>(&attach_task_result))
-      {
-        return *error;
-      }
-      auto task = std::get<angaria::Task>(std::move(attach_task_result));
-      incarnation = task.claim()._incarnation;
-      auto open_writer_result = task.open_writer(quotes);
-      if (const auto* error = std::get_if<angaria::Error>(&open_writer_result))
-      {
-        return *error;
-      }
-      writer.emplace(std::get<angaria::QueueWriter>(std::move(open_writer_result)));
-      auto open_publishing_set_result = task.open_publishing_set(updates);
-      if (const auto* error = std::get_if<angaria::Error>(&open_publishing_set_result))
-      {
-        return *error;
-      }
-      publisher.emplace(std::get<angaria::PublishingQueueSet>(std::move(open_publishing_set_result)));
-      auto next_publication_id_result = task.next_publication_id();
-      if (const auto* error = std::get_if<angaria::Error>(&next_publication_id_result))
-      {
-        return *error;
-      }
-      const auto publication = std::get<angaria::PublicationId>(std::move(next_publication_id_result));
-      std::cout << "Reserved publication sequence=" << publication._sequence << " (not sent).\n";
+      return *error;
     }
-    // The Task variable has ended, but the endpoint handles retain its claim.
-    std::cout << "Writer=" << static_cast<unsigned>(writer->id())
-              << ", publisher=" << static_cast<unsigned>(publisher->id()) << '\n';
+    auto task = std::get<angaria::Task>(std::move(attach_task_result));
+    const auto incarnation = task.claim()._incarnation;
+    // Hold the actual public Task claim. This metadata-only lesson does not
+    // open messaging or seal a catalog before later lessons register schemas.
+    std::cout << "Registered Queue=" << static_cast<unsigned>(quotes)
+              << ", Publishing set=" << static_cast<unsigned>(updates) << '\n';
     std::cout << "READY producer incarnation=" << incarnation << std::endl;
     wait_if_requested(hold);
     return std::monostate{};
@@ -254,24 +230,14 @@ namespace
       return *error;
     }
     const auto inputs = std::get<angaria::SourceQueueSetId>(std::move(find_source_set_result_2));
-    std::optional<SourceQueueSet> source;
-    std::uint64_t incarnation{};
+    auto attach_task_result = session.attach_task(strategy);
+    if (const auto* error = std::get_if<angaria::Error>(&attach_task_result))
     {
-      auto attach_task_result_2 = session.attach_task(strategy);
-      if (const auto* error = std::get_if<angaria::Error>(&attach_task_result_2))
-      {
-        return *error;
-      }
-      auto task = std::get<angaria::Task>(std::move(attach_task_result_2));
-      incarnation = task.claim()._incarnation;
-      auto open_source_set_result = task.open_source_set(inputs);
-      if (const auto* error = std::get_if<angaria::Error>(&open_source_set_result))
-      {
-        return *error;
-      }
-      source.emplace(std::get<angaria::SourceQueueSet>(std::move(open_source_set_result)));
+      return *error;
     }
-    std::cout << "Source=" << static_cast<unsigned>(source->id()) << '\n';
+    auto task = std::get<angaria::Task>(std::move(attach_task_result));
+    const auto incarnation = task.claim()._incarnation;
+    std::cout << "Registered Source=" << static_cast<unsigned>(inputs) << '\n';
     std::cout << "READY consumer incarnation=" << incarnation << std::endl;
     wait_if_requested(hold);
     return std::monostate{};

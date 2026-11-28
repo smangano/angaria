@@ -18,8 +18,9 @@ namespace angaria::detail::mapped
   static_assert(sizeof(std::uint32_t) == 4);
   static_assert(sizeof(std::uint64_t) == 8);
 
-  inline constexpr std::uint16_t format_major = 2;
-  inline constexpr std::uint16_t format_minor = 1;
+  inline constexpr std::uint16_t format_major = 3;
+  inline constexpr std::uint16_t format_minor = 0;
+  inline constexpr std::uint64_t catalog_seal_offset = 184;
   inline constexpr std::uint64_t superblock_bytes = 4096;
   inline constexpr std::uint64_t extent_header_bytes = 4096;
   inline constexpr std::uint64_t section_alignment = 64;

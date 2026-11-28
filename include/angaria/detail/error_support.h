@@ -65,6 +65,7 @@ namespace angaria::detail
     case ErrorCode::HistoryUnavailable: return "HistoryUnavailable";
     case ErrorCode::IoError: return "IoError";
     case ErrorCode::OutcomeUnknown: return "OutcomeUnknown";
+    case ErrorCode::QueueFull: return "QueueFull";
     }
     return "UnknownError";
   }

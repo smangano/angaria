@@ -350,13 +350,14 @@ namespace angaria::detail::recorded
     ProgressSnapshot _current;
     ProgressObserver* _observer{};
     std::thread::id _thread{std::this_thread::get_id()};
+    bool _threadBound{true};
     bool _failed{};
     bool _busy{};
 
     void check(bool allowFailed = false) const
     {
       value(_claim.check_owner());
-      require(_thread == std::this_thread::get_id(), ErrorCode::WrongOwner, "Progress owner belongs to another thread");
+      require(!_threadBound || _thread == std::this_thread::get_id(), ErrorCode::WrongOwner, "Progress owner belongs to another thread");
       require(!_busy, ErrorCode::InvalidState, "Progress operation cannot reenter");
       require(allowFailed || !_failed, ErrorCode::IoError, "Progress requires settlement after an interrupted commit");
     }
@@ -465,12 +466,13 @@ namespace angaria::detail::recorded
     });
   }
 
-  Result<ProgressStore> ProgressStore::open(const ProgressOptions& options, ProgressObserver* observer)
+  Result<ProgressStore> ProgressStore::open(const ProgressOptions& options, ProgressObserver* observer, bool threadBound)
   {
     return protect<ProgressStore>([&]
     {
       const auto size = checked_size(options);
       auto state = std::make_unique<State>();
+      state->_threadBound = threadBound;
       state->_options = options;
       state->_claim = value(mapped::NativeClaim::acquire_existing(options._path));
       state->_file = value(mapped::NativeFile::open_existing(options._path, mapped::FileAccess::ReadWrite, size));

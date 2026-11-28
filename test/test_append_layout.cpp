@@ -1,19 +1,24 @@
 // Private allocation examples, not public Queue send calls. These size-only
-// plans include every record, mutable receipt, manifest reference, redo frame,
-// and alignment byte without constructing payload or receipt buffers.
+// plans cover administrative records/manifests independently of the producer
+// message record, whose receipts live in a separate consumer-owned file.
 
 #include "angaria/detail/append_layout.h"
-#include "publication_metadata.h"
+#include "producer_log_format.h"
 #include "result_helpers.h"
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <variant>
 
 namespace
 {
+  using namespace angaria;
   namespace mapped = angaria::detail::mapped;
+  namespace recorded = angaria::detail::recorded;
   using angaria::test_support::require_value;
 
   TEST(AppendLayoutTest, ImmutableAndMutableSuffixesUseTheJournalEnvelopeGeometry)
@@ -30,22 +35,41 @@ namespace
     EXPECT_EQ(mutableSuffix->_mutableOffset, 72u);
   }
 
-  TEST(AppendLayoutTest, PublicationBudgetIncludesReceiptsAndTheFinalManifest)
+  TEST(AppendLayoutTest, ProducerRecordBudgetHasNoAdministrativeManifestOrProcessingReceiptSuffix)
   {
-    // One destination and three application bytes require 384 stored bytes.
-    // Its manifest needs another 192 bytes: fixed64, reference8, redo24,
-    // envelope64, and final alignment. The last application byte is not the cap.
-    const auto publication = require_value(mapped::plan_publication_layout(8192, 1, 3, 384));
-    mapped::AppendLayoutPlanner planner(8192);
-    ASSERT_TRUE(planner.add_record(publication._immutableBytes, 128));
-    const auto layout = planner.finish(24, 8768);
-    ASSERT_TRUE(layout);
-    EXPECT_EQ(layout->_manifestOffset, 8576u);
-    EXPECT_EQ(layout->_manifestBodyBytes, 96u);
-    EXPECT_EQ(layout->_manifestBytes, 192u);
-    EXPECT_EQ(layout->_tail, 8768u);
-    EXPECT_FALSE(planner.finish(24, 8767));
-    EXPECT_FALSE(planner.finish(24, 8576));
+    // Independently: header128 + destination32 + payload3 rounds to192 bytes.
+    // The producer's accepted message record is independent of both the Session
+    // administrative manifest and the consumer's processing-progress storage.
+    recorded::ProducerLogHeader header{{1, 2}, TaskId{3}, 1, 4288, 1, 0x20002};
+    const std::array payload{std::byte{1}, std::byte{2}, std::byte{3}};
+    const std::array destinations{recorded::DestinationRecord{
+        QueueId{4}, DestinationStatus::Accepted, ErrorCode::None, 1, UtcTimestamp{}}};
+    recorded::PublicationRecordInput publication;
+    publication._header._schema = {MessageType{1}, 1};
+    publication._header._format = PayloadFormat::Binary;
+    publication._header._publication = {{header._session, header._producer, 1}, 1};
+    publication._header._publishedAt = UtcTimestamp{};
+    publication._header._payloadBytes = payload.size();
+    publication._recordOrdinal = 1;
+    publication._schemaReference = 8192;
+    publication._topologyRevision = 1;
+    publication._destinations = destinations;
+    publication._payload = payload;
+    const auto layout = require_value(recorded::plan_publication_record(publication, header, 4096));
+    EXPECT_EQ(layout._bytes, 192u);
+    EXPECT_EQ(layout._end, 4288u);
+    EXPECT_EQ(layout._payloadOffset, 160u);
+    header._fileBytes = 4287;
+    EXPECT_TRUE(std::holds_alternative<Error>(recorded::plan_publication_record(publication, header, 4096)));
+    header._fileBytes = 4288;
+    const std::array<std::byte, 65> largerPayload{};
+    publication._payload = largerPayload;
+    publication._header._payloadBytes = largerPayload.size();
+    EXPECT_TRUE(std::holds_alternative<Error>(recorded::plan_publication_record(publication, header, 4096)));
+    header._fileBytes = 4352;
+    const auto larger = require_value(recorded::plan_publication_record(publication, header, 4096));
+    EXPECT_EQ(larger._bytes, 256u);
+    EXPECT_EQ(larger._end, 4352u);
   }
 
   TEST(AppendLayoutTest, EveryRecordContributesItsOwnEnvelopePaddingAndManifestReference)
@@ -62,18 +86,16 @@ namespace
     EXPECT_FALSE(planner.finish(40, 8639));
   }
 
-  TEST(AppendLayoutTest, LargeLogicalPayloadPlanningDoesNotAllocateItsDeclaredCapacity)
+  TEST(AppendLayoutTest, LargeAdministrativeDefinitionPlanningDoesNotAllocateItsDeclaredCapacity)
   {
-    constexpr std::uint64_t payloadBytes = std::uint64_t{1} << 40;
-    const auto publication = require_value(mapped::plan_publication_layout(
-        8192, 2, payloadBytes, mapped::max_log_bytes));
+    constexpr std::uint64_t definitionBytes = std::uint64_t{1} << 40;
     mapped::AppendLayoutPlanner planner(8192);
-    ASSERT_TRUE(planner.add_record(publication._immutableBytes, 256));
+    ASSERT_TRUE(planner.add_record(definitionBytes));
     const auto layout = planner.finish(48);
     ASSERT_TRUE(layout);
-    EXPECT_EQ(layout->_manifestOffset, 8192 + payloadBytes + 576);
+    EXPECT_EQ(layout->_manifestOffset, 8192 + definitionBytes + 64);
     EXPECT_EQ(layout->_manifestBytes, 192u);
-    EXPECT_EQ(layout->_tail, 8192 + payloadBytes + 768);
+    EXPECT_EQ(layout->_tail, 8192 + definitionBytes + 256);
   }
 
   TEST(AppendLayoutTest, FormatCeilingAndArithmeticOverflowRejectWithoutWrappedSizes)

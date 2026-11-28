@@ -362,6 +362,9 @@ namespace angaria::detail
   void runtime_validate_options(const SessionOptions& options, ErrorCode invalidCode)
   {
     if (!mapped::valid_log_limit(options._maxLogBytes) || !mapped::valid_capacities(options._limits) ||
+        options._producerLogBytes < 4096 + 192 || options._producerLogBytes % 64 != 0 ||
+        !mapped::valid_log_limit(options._producerLogBytes) || options._producerLogPublications == 0 ||
+        options._producerLogPublications > (options._producerLogBytes - 4096) / 192 ||
         options._limits._tasks == 0 || !mapped::make_fixed_layout(options._limits) ||
         !mapped::ring_storage_bytes(options._defaults._ringCapacity))
     {
@@ -380,12 +383,14 @@ namespace angaria::detail
          defaults._selection != SelectionPolicy::WeightedRandom) ||
         (defaults._wait != WaitPolicy::Spin && defaults._wait != WaitPolicy::EventFd) ||
         (defaults._delivery != DeliveryPolicy::RecoverFromLog && defaults._delivery != DeliveryPolicy::AllowLoss) ||
+        (defaults._acknowledgment != AcknowledgmentMode::Required && defaults._acknowledgment != AcknowledgmentMode::None) ||
         (defaults._acceptance != AcceptancePolicy::AllDestinations && defaults._acceptance != AcceptancePolicy::Partial))
     {
       runtime_fail(invalidCode, "session.defaults", "Unknown default policy code");
     }
     if (options._storage != StorageMapping::TwoPlane || defaults._selection != SelectionPolicy::Strict ||
         defaults._wait != WaitPolicy::Spin ||
+        defaults._delivery != DeliveryPolicy::RecoverFromLog ||
         defaults._acceptance != AcceptancePolicy::AllDestinations)
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "session.defaults", "Requested native policy is not implemented yet");

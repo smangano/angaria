@@ -308,7 +308,7 @@ def walkthrough(example, fixture, workspace):
     try:
         initialized = run.command("init", "init", configuration)
         matched = re.fullmatch(
-            r"SESSION ([0-9a-f]{32})\nINITIALIZED tasks=4 queues=2 sources=2 schemas=3 ring=2\n",
+            r"SESSION ([0-9a-f]{32})\nINITIALIZED tasks=4 queues=2 sources=2 schemas=3 ring=16\n",
             initialized.stdout)
         check(matched is not None and matched.group(1) != "0" * 32,
               f"Unexpected initialization: {initialized.stdout!r}")
@@ -359,7 +359,7 @@ def walkthrough(example, fixture, workspace):
         borrowed = records(strategy_prefix, "BORROW ", BORROW)
         check(len(borrowed) == 1, "Original Strategy did not hold exactly one borrow")
         expect_fields(borrowed[0], {"queue_sequence": 1, "source_task": 2, **provenance(1),
-                                  **quote_fields(1), "issuance": 1}, "wrapped backlog")
+                                  **quote_fields(1), "issuance": 1}, "retained backlog")
         first_headers = records(strategy_prefix, "HEADER ", HEADER)
         check(len(first_headers) == 1, "Original Strategy omitted its copied header")
         check(first_headers[0]["publication_ns"] == first_headers[0]["enqueue_ns"],
@@ -435,7 +435,7 @@ def walkthrough(example, fixture, workspace):
                           "cold acceptance lookup")
         workspace_refusals(example, fixture, workspace, session_file)
         hold_eof_control(example, fixture, workspace / "eof-control")
-        print("Recovered six quotes across ring wrap and Feed/Strategy replacement.")
+        print("Recovered six recorded quotes across Feed/Strategy replacement.")
         print("Decoded exact Quote v1/v2 layouts and audited six linked alerts.")
         print("Release/redelivery rejected the old token; cold lookups preserved acceptance.")
         print("Initialization, ownership, CLI, and workspace conflicts preserved existing data.")

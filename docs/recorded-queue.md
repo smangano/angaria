@@ -1,5 +1,7 @@
 # Recorded point-to-point delivery
 
+**Current status — 0.4.39:** these connections now serve the public runtime. Shared Task log ownership, cached exact schemas, authoritative Process/Thread claims and TOML selection are implemented. The public profile remains fixed-topology with one Queue per Source. See [public runtime admission](public-runtime-admission.md). The earlier private-step scope descriptions below record their original qualification boundaries.
+
 Framework **0.4.35**, milestone step **4.33**, implements workstream step 4 of the [independent messaging plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). The private [RecordedProducer and RecordedConsumer](../src/recorded_queue.h) endpoints connect the [producer-owned log](producer-log.md) to a bounded descriptor ring. **Recorded/unacknowledged** means every accepted message remains in the log, while receiving it creates no application-processing acknowledgment obligation.
 
 Step **4.34**, framework **0.4.36**, qualifies workstream step 5's process restart, log catch-up and connection independence. The [restart and independence section](#restart-and-connection-independence) describes the tested boundaries and the limits of this private profile.

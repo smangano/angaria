@@ -1,5 +1,7 @@
 # Native two-plane transport contract
 
+> Historical implementation note: this page describes the superseded runtime or its original qualification. Current format 3.0 and public messaging are documented in [public runtime admission](public-runtime-admission.md) and [the current format](mapped-format.md). Historical source and measurements remain pinned to their recorded revisions.
+
 **Step 4.8, framework version `0.4.10`, enables configured allowed loss and delivery gaps**, building on [Source receive, acknowledgment/release, owning copies, and explicit close](native-receive.md) and [direct Queue publication and outcome lookup](direct-publication.md). The foundation includes [reserved progress and claim cleanup](native-progress.md), [committed payload mappings and complete append sizing](native-storage.md#committed-payload-storage-and-append-planning), the [local delivery codecs](mapped-format.md#local-delivery-codecs), and [Session/history validation](native-validation.md). This document specifies the complete milestone-4 contract. The seventeen [primer lessons](primer.md), including the [native multi-process application](native-pipeline.md), distinguish runnable features from later steps.
 
 The [mapped format](mapped-format.md) defines stored representations, and the [concurrency contract](concurrency.md) defines journal commits and process recovery. This contract fills their native-delivery details without changing the agreed one-producer-per-Queue model or the blocking session mutation gate.

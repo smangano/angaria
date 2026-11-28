@@ -1,13 +1,11 @@
-// Private codec cost study, not a live append, messaging or nanomsg benchmark.
-// The same logical publication is encoded/decoded through the new caller-buffer
-// and borrowed-view API and the current format-2 owning API. Their byte layouts
-// and ownership contracts differ: the timing ratio is not a transport speedup.
-// Deterministic allocation/lifetime guards fail CI; noisy wall times are reports.
+// Current-format codec cost study, not live append or transport performance.
+// Caller-buffer encoding and borrowed decoding retain zero-allocation guards;
+// explicit allocation calibration proves the counter is active. Historical
+// format comparisons remain reproducible from their pinned source revisions.
 
 #include "allocation_capture.h"
 #include "performance_samples.h"
 #include "producer_log_format.h"
-#include "publication_metadata.h"
 
 #include <gtest/gtest.h>
 
@@ -32,10 +30,8 @@ namespace
   using angaria::test_support::median;
   using angaria::test_support::write_samples;
   namespace recorded = angaria::detail::recorded;
-  namespace mapped = angaria::detail::mapped;
 
   constexpr std::uint64_t owned_offset = 4096;
-  constexpr std::uint64_t legacy_offset = 8192;
   constexpr std::uint64_t record_limit = 1048576;
   constexpr std::size_t allocation_cycles = 128;
   constexpr std::size_t sample_cycles = 2048;
@@ -81,31 +77,6 @@ namespace
       }
       result._checksum += std::to_integer<unsigned char>(message->_payload[index % message->_payload.size()]) +
                           message->_header._publication._sequence + row->_queueSequence;
-    }
-    return result;
-  }
-
-  CycleResult legacy_cycles(const mapped::PublicationDefinition& publication, std::size_t count)
-  {
-    CycleResult result;
-    for (std::size_t index = 0; index != count; ++index)
-    {
-      const auto encoded = mapped::encode_publication_body(publication, legacy_offset, record_limit);
-      const auto* bytes = std::get_if<std::vector<std::byte>>(&encoded);
-      if (!bytes)
-      {
-        result._valid = false;
-        break;
-      }
-      const auto decoded = mapped::decode_publication_body(*bytes, legacy_offset, record_limit);
-      const auto* message = std::get_if<mapped::PublicationDefinition>(&decoded);
-      if (!message || message->_payload.size() != publication._payload.size() || message->_destinations.size() != 1)
-      {
-        result._valid = false;
-        break;
-      }
-      result._checksum += std::to_integer<unsigned char>(message->_payload[index % message->_payload.size()]) +
-                          message->_publicationSequence + message->_destinations.front()._queueSequence;
     }
     return result;
   }
@@ -163,29 +134,8 @@ namespace
     const auto layout = std::get<recorded::PublicationRecordLayout>(planned);
     std::vector<std::byte> buffer(static_cast<std::size_t>(layout._bytes));
 
-    mapped::PublicationDefinition legacy;
-    legacy._producer = header._producer;
-    legacy._schema = publication._header._schema;
-    legacy._format = publication._header._format;
-    legacy._flags = publication._header._flags;
-    legacy._producerIncarnation = 1;
-    legacy._publicationSequence = 1;
-    legacy._publishedAt = publishedAt;
-    legacy._topologyRevision = 1;
-    legacy._schemaReference = 4096;
-    legacy._payload = payload;
-    const auto legacyPlanned = mapped::plan_publication_layout(legacy_offset, 1, payload.size(), record_limit);
-    ASSERT_TRUE(std::holds_alternative<mapped::PublicationLayout>(legacyPlanned));
-    mapped::DestinationDefinition legacyDestination;
-    legacyDestination._queue = QueueId{4};
-    legacyDestination._queueSequence = 1;
-    legacyDestination._enqueuedAt = publishedAt;
-    legacyDestination._receiptReference = std::get<mapped::PublicationLayout>(legacyPlanned)._receiptsOffset;
-    legacy._destinations.push_back(legacyDestination);
-
-    // Validate meaningful contents independently of the later checksums. The
-    // new decoded payload must point inside the caller's encoded record, not a
-    // hidden owned copy. Format-2 intentionally returns its own owning values.
+    // The decoded payload must borrow the caller's record buffer, while its
+    // complete observed header and exact destination remain unchanged.
     const auto encoded = recorded::encode_publication_record(publication, header, owned_offset, buffer);
     ASSERT_TRUE(std::holds_alternative<recorded::LogReference>(encoded));
     const auto decoded = recorded::decode_publication_record(buffer, header, std::get<recorded::LogReference>(encoded));
@@ -198,17 +148,8 @@ namespace
     const auto row = view.destination_at(0);
     ASSERT_TRUE(std::holds_alternative<recorded::DestinationRecord>(row));
     EXPECT_EQ(std::get<recorded::DestinationRecord>(row), destinations.front());
-    const auto legacyEncoded = mapped::encode_publication_body(legacy, legacy_offset, record_limit);
-    ASSERT_TRUE(std::holds_alternative<std::vector<std::byte>>(legacyEncoded));
-    const auto legacyDecoded = mapped::decode_publication_body(
-        std::get<std::vector<std::byte>>(legacyEncoded), legacy_offset, record_limit);
-    ASSERT_TRUE(std::holds_alternative<mapped::PublicationDefinition>(legacyDecoded));
-    EXPECT_EQ(std::get<mapped::PublicationDefinition>(legacyDecoded), legacy);
-
-    const auto ownedWarmup = owned_cycles(publication, header, buffer, allocation_cycles);
-    const auto legacyWarmup = legacy_cycles(legacy, allocation_cycles);
-    ASSERT_TRUE(ownedWarmup._valid && legacyWarmup._valid);
-    ASSERT_EQ(ownedWarmup._checksum, legacyWarmup._checksum);
+    const auto warmup = owned_cycles(publication, header, buffer, allocation_cycles);
+    ASSERT_TRUE(warmup._valid);
 
     CycleResult ownedCaptured;
     std::uint64_t ownedAllocations{};
@@ -217,19 +158,20 @@ namespace
       ownedCaptured = owned_cycles(publication, header, buffer, allocation_cycles);
       ownedAllocations = capture.stop();
     }
-    CycleResult legacyCaptured;
-    std::uint64_t legacyAllocations{};
+    ASSERT_TRUE(ownedCaptured._valid);
+    EXPECT_EQ(ownedCaptured._checksum, warmup._checksum);
+    EXPECT_EQ(ownedAllocations, 0u);
+    // This explicit control uses the allocator itself, not a superseded codec.
+    // Allocating outside timed work keeps codec measurements current-format only.
+    void* allocationControl{};
+    std::uint64_t controlAllocations{};
     {
       AllocationCapture capture;
-      legacyCaptured = legacy_cycles(legacy, allocation_cycles);
-      legacyAllocations = capture.stop();
+      allocationControl = ::operator new(payloadBytes);
+      controlAllocations = capture.stop();
     }
-    ASSERT_TRUE(ownedCaptured._valid && legacyCaptured._valid);
-    EXPECT_EQ(ownedCaptured._checksum, legacyCaptured._checksum);
-    EXPECT_EQ(ownedAllocations, 0u);
-    // The owning control also establishes that this executable's counter sees
-    // allocation requests; zero on the new path is not a disabled collector.
-    EXPECT_GT(legacyAllocations, 0u);
+    ::operator delete(allocationControl);
+    EXPECT_GT(controlAllocations, 0u);
 
     bool valid = true;
     std::uint64_t expectedChecksum{};
@@ -238,67 +180,32 @@ namespace
       expectedChecksum += std::to_integer<unsigned char>(payload[index % payload.size()]) + 2;
     }
     std::array<double, sample_count> ownedTimes{};
-    std::array<double, sample_count> legacyTimes{};
     for (std::size_t sample = 0; sample != sample_count; ++sample)
     {
-      const auto measureOwned = [&]
-      {
-        ownedTimes[sample] = measure_cycle_ns(
-            [&]
-            {
-              return owned_cycles(publication, header, buffer, sample_cycles);
-            }, expectedChecksum, valid);
-      };
-      const auto measureLegacy = [&]
-      {
-        legacyTimes[sample] = measure_cycle_ns(
-            [&]
-            {
-              return legacy_cycles(legacy, sample_cycles);
-            }, expectedChecksum, valid);
-      };
-      // Alternate adjacent blocks to reduce a fixed first/second ordering bias.
-      if (sample % 2 == 0)
-      {
-        measureOwned();
-        measureLegacy();
-      }
-      else
-      {
-        measureLegacy();
-        measureOwned();
-      }
+      ownedTimes[sample] = measure_cycle_ns(
+          [&]
+          {
+            return owned_cycles(publication, header, buffer, sample_cycles);
+          }, expectedChecksum, valid);
     }
     ASSERT_TRUE(valid);
     const auto ownedNs = median(ownedTimes);
-    const auto legacyNs = median(legacyTimes);
     ASSERT_GT(ownedNs, 0.0);
-    ASSERT_GT(legacyNs, 0.0);
     const auto ownedRate = 1e9 / ownedNs;
-    const auto legacyRate = 1e9 / legacyNs;
     RecordProperty("payload_bytes", static_cast<int>(payloadBytes));
     RecordProperty("owned_borrowed_median_cycle_ns", std::to_string(ownedNs));
-    RecordProperty("legacy_owning_median_cycle_ns", std::to_string(legacyNs));
     RecordProperty("owned_borrowed_cycles_per_second", std::to_string(ownedRate));
-    RecordProperty("legacy_owning_cycles_per_second", std::to_string(legacyRate));
     RecordProperty("owned_borrowed_allocations_per_cycle", std::to_string(double(ownedAllocations) / allocation_cycles));
-    RecordProperty("legacy_owning_allocations_per_cycle", std::to_string(double(legacyAllocations) / allocation_cycles));
     std::cout << std::fixed << std::setprecision(3)
               << "CODEC_PERFORMANCE {\"payload_bytes\":" << payloadBytes
+              << ",\"format_major\":3,\"allocation_control_count\":" << controlAllocations
               << ",\"samples\":" << sample_count << ",\"cycles_per_sample\":" << sample_cycles
               << ",\"owned_record_bytes\":" << layout._bytes
-              << ",\"legacy_body_bytes\":" << std::get<std::vector<std::byte>>(legacyEncoded).size()
-              << ",\"legacy_full_record_bytes\":" << std::get<mapped::PublicationLayout>(legacyPlanned)._totalBytes
               << ",\"owned_borrowed\":{\"median_cycle_ns\":" << ownedNs
               << ",\"cycles_per_second\":" << ownedRate
               << ",\"allocations_per_cycle\":" << double(ownedAllocations) / allocation_cycles
               << ",\"cycle_ns_samples\":";
     write_samples(ownedTimes);
-    std::cout << "},\"legacy_owning\":{\"median_cycle_ns\":" << legacyNs
-              << ",\"cycles_per_second\":" << legacyRate
-              << ",\"allocations_per_cycle\":" << double(legacyAllocations) / allocation_cycles
-              << ",\"cycle_ns_samples\":";
-    write_samples(legacyTimes);
     std::cout << "}}\n";
   }
 
