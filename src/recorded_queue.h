@@ -3,6 +3,7 @@
 // Private, fixed-topology recorded/unacknowledged point-to-point endpoints.
 // Public Session admission and integrated Task lifecycle follow separately.
 #include "producer_log.h"
+#include "recorded_progress.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -16,6 +17,10 @@ namespace angaria::detail::recorded
   {
     ProducerLogPaths _producerPaths;
     std::filesystem::path _connectionPath;
+    // Acknowledged bindings reserve separate consumer-owned progress. Empty
+    // selects <connectionPath>.progress; unacknowledged bindings have no file.
+    std::filesystem::path _progressPath;
+    bool _acknowledged{};
     ProducerLogOptions _log;
     // Supplied by the checked, sealed catalog owner. No endpoint consults
     // Session or reconstructs this snapshot during normal communication.
@@ -43,7 +48,9 @@ namespace angaria::detail::recorded
     DescriptorBeforeStamp,
     DescriptorPublished,
     DeliveryBeforeCredit,
-    DeliveryAfterCredit
+    DeliveryAfterCredit,
+    AcknowledgmentBeforeHint,
+    AcknowledgmentAfterHint
   };
 
   // Qualification only; ordinary opens have no observer. Callbacks must not
@@ -79,6 +86,9 @@ namespace angaria::detail::recorded
     Result<PublicationId> next_publication_id();
     RecordedSendResult try_send(PublicationId publication, const MessageView& message);
     Result<std::optional<ProducerAppendResult>> lookup(PublicationId publication) const;
+    // A possibly lagging committed processing watermark; never inferred from
+    // transport credit. Exact latest receipt inspection belongs to its owner.
+    Result<std::uint64_t> acknowledged_sequence() const;
 
   private:
     struct State;
@@ -107,6 +117,34 @@ namespace angaria::detail::recorded
   private:
     struct State;
     explicit RecordedConsumer(std::unique_ptr<State> state) noexcept;
+    std::unique_ptr<State> _state;
+  };
+
+  class RecordedAcknowledgedConsumer
+  {
+  public:
+    RecordedAcknowledgedConsumer() noexcept;
+    ~RecordedAcknowledgedConsumer();
+    RecordedAcknowledgedConsumer(RecordedAcknowledgedConsumer&&) noexcept;
+    RecordedAcknowledgedConsumer& operator=(RecordedAcknowledgedConsumer&&) noexcept;
+    RecordedAcknowledgedConsumer(const RecordedAcknowledgedConsumer&) = delete;
+    RecordedAcknowledgedConsumer& operator=(const RecordedAcknowledgedConsumer&) = delete;
+
+    static Result<RecordedAcknowledgedConsumer> open(const RecordedQueueOptions& options,
+        RecordedQueueObserver* observer = nullptr, ProgressObserver* progressObserver = nullptr);
+    Result<TaskClaim> claim() const;
+    // Timestamp overrides are private qualification inputs; an absent value
+    // samples the runtime UTC clock. Existing pins retain their original time.
+    Result<std::optional<Delivery>> try_receive(std::optional<UtcTimestamp> dequeuedAt = {});
+    OperationResult acknowledge(DeliveryToken token, std::optional<UtcTimestamp> acknowledgedAt = {});
+    OperationResult release(DeliveryToken token);
+    OperationResult close();
+    Result<ProgressSnapshot> progress() const;
+    Result<ProgressReceipt> receipt(std::uint64_t sequence);
+
+  private:
+    struct State;
+    explicit RecordedAcknowledgedConsumer(std::unique_ptr<State> state) noexcept;
     std::unique_ptr<State> _state;
   };
 } // namespace angaria::detail::recorded

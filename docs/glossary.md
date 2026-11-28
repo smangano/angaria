@@ -4,7 +4,7 @@ These definitions describe the terms used in Angaria's storage and recovery desi
 
 ## Proposed independent messaging protocol
 
-These terms belong to the [independent messaging protocol](independent-messaging-protocol.md). Steps 4.31–4.33 implement its private log codecs, storage and initial recorded point-to-point endpoints; the current public Session-gated runtime does not yet use that protocol.
+These terms belong to the [independent messaging protocol](independent-messaging-protocol.md). Steps 4.31–4.35 implement its private log codecs, storage, recorded point-to-point endpoints, failure qualification and [optional acknowledged progress](recorded-acknowledged-progress.md); the current public Session-gated runtime does not yet use that protocol.
 
 | Term | Meaning in the proposed protocol |
 | --- | --- |
@@ -19,8 +19,9 @@ These terms belong to the [independent messaging protocol](independent-messaging
 | **QueueCreditFull** | A private nonblocking send result: the new ID remains unaccepted because the Queue's logical credit is full. The caller may retry the same ID after consumption; no Error allocation or processing acknowledgment is required. |
 | **Sealed catalog** | The checked Registry/schema/topology snapshot fixed before the first protocol's data operations. Owner replacement changes Task incarnation, not this catalog. |
 | **Source operation image** | A reserved consumer-owned description of one operation's absolute Source, selected Queue and receipt after-state. An atomic selector commits it; interrupted installation is replayed locally. |
-| **Receipt ledger** | Reserved consumer-owned rows retaining each accepted destination's latest issuance and acknowledgment metadata. It is separate from the immutable message log and optional execution-event trace. |
-| **Applied generation** | The committed Source operation whose after-state has finished installation into the working/receipt rows. A lagging value requires replay of the selected operation. |
+| **Receipt ledger** | Reserved consumer-owned rows retaining each accepted destination's latest issuance and acknowledgment metadata. It is separate from the immutable message log and optional execution-event trace. Step 4.35 implements it privately in the [acknowledged progress file](recorded-acknowledged-progress.md#progress-file-10). |
+| **Source operation generation / selector** | The nonwrapping counter identifying a consumer-owned progress operation, independent of Task incarnation and connection generation. Publishing the selector commits that operation; generation parity selects one of two fixed operation images. |
+| **Applied generation** | The committed Source operation whose after-state has finished installation into the working/receipt rows. A lagging value requires replay of the selected operation. It does not certify hint publication; attachment/settlement also reconciles credit and acknowledgment hints. |
 
 ## Session storage
 

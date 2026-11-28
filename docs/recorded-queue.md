@@ -4,6 +4,8 @@ Framework **0.4.35**, milestone step **4.33**, implements workstream step 4 of t
 
 Step **4.34**, framework **0.4.36**, qualifies workstream step 5's process restart, log catch-up and connection independence. The [restart and independence section](#restart-and-connection-independence) describes the tested boundaries and the limits of this private profile.
 
+Step **4.35**, framework **0.4.37**, implements private [optional acknowledged progress](recorded-acknowledged-progress.md). Acknowledged bindings use this same producer-owned message log and descriptor ring, plus a separate consumer-owned receipt file. `RecordedAcknowledgedConsumer` returns `Delivery` with an exact token; repeated pinned receives, acknowledgment, release and replacement use local committed progress. Unacknowledged bindings reserve no receipt file. Public admission remains later work.
+
 This is a private, fixed-topology implementation. Public Session admission, TOML integration and the public runtime replacement follow separately. Acknowledgment remains the public default; this step does not change it. The runnable [primer](primer.md) continues to use the current public API.
 
 ## Checked setup and ownership
@@ -40,14 +42,15 @@ The native file has a 4,096-byte prefix followed by `capacity * 64` descriptor b
 | 120 | 4 | Qualified native ABI profile. |
 | 124 / 126 | 2 each | Synchronization revision 2 and atomic width 8. |
 | 128 | 8 | Exact Binary payload size. |
-| 136 | 8 | Required feature mask, 1: recorded/unacknowledged. |
+| 136 | 8 | Required feature mask: 1 for recorded/unacknowledged, 3 for recorded with acknowledged progress. |
 | 144 | 8 | Complete connection file length. |
 | 152 / 160 | 8 each | Connection file's own device/inode identity. |
-| 168 | 88 | Reserved zero. |
+| 168 / 176 | 8 each | Acknowledged progress file device/inode; zero for unacknowledged bindings. |
+| 184 | 72 | Reserved zero. |
 
 The **connection generation** distinguishes the fixed checked connection setup; it does not advance on ring wrap or owner replacement. The file is not reconfigured while endpoints are live. Unsupported format, native ABI, synchronization, atomic-width or feature requirements return `UnsupportedPolicy` before control-word binding or ownership-state writes. Malformed magic returns `IoError`; a supported-format header with different context or reserved bytes returns `ConfigurationMismatch` before ownership-state writes.
 
-Mutable words start in distinct 256-byte regions: returned credit at offset **256**, and the consumer incarnation at **512**. The incarnation advances under the consumer's claim before its identity can appear in returned messages and never wraps. Other prefix bytes are initialized to zero. Descriptors start at **4096**, with a 64-byte stride:
+Mutable words start in distinct 256-byte regions: returned credit at offset **256**, consumer incarnation at **512**, and, for acknowledged bindings, a separately committed processing-watermark hint at **768**. The incarnation advances under the consumer's claim before its identity can appear in returned messages and never wraps. Other prefix bytes are initialized to zero. The processing hint may lag committed progress and is never inferred from returned credit. Descriptors start at **4096**, with a 64-byte stride:
 
 | Offset within slot | Bytes | Live field |
 | ---: | ---: | --- |

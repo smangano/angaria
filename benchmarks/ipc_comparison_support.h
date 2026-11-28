@@ -36,7 +36,8 @@ namespace angaria::benchmarks::ipc
     Angaria,
     Nanomsg,
     RecordedSpsc,
-    RecordedConnection
+    RecordedConnection,
+    RecordedAcknowledgedConnection
   };
 
   enum class Role
@@ -50,7 +51,18 @@ namespace angaria::benchmarks::ipc
   {
     return profile == Profile::Angaria ? "angaria" :
            profile == Profile::RecordedSpsc ? "recorded-spsc" :
-           profile == Profile::RecordedConnection ? "recorded-connection" : "nanomsg";
+           profile == Profile::RecordedConnection ? "recorded-connection" :
+           profile == Profile::RecordedAcknowledgedConnection ? "recorded-acknowledged-connection" : "nanomsg";
+  }
+
+  inline bool is_recorded(Profile profile)
+  {
+    return profile == Profile::RecordedConnection || profile == Profile::RecordedAcknowledgedConnection;
+  }
+
+  inline bool is_acknowledged(Profile profile)
+  {
+    return profile == Profile::Angaria || profile == Profile::RecordedAcknowledgedConnection;
   }
 
   inline std::string_view role_name(Role role)
@@ -101,11 +113,12 @@ namespace angaria::benchmarks::ipc
       if (flag == "--profile")
       {
         require(!haveProfile && (argument == "angaria" || argument == "nanomsg" || argument == "recorded-spsc" ||
-                                 argument == "recorded-connection"),
-                "Expected one --profile angaria|nanomsg|recorded-spsc|recorded-connection");
+                                 argument == "recorded-connection" || argument == "recorded-acknowledged-connection"),
+                "Expected one --profile angaria|nanomsg|recorded-spsc|recorded-connection|recorded-acknowledged-connection");
         options._profile = argument == "angaria" ? Profile::Angaria :
                            argument == "recorded-spsc" ? Profile::RecordedSpsc :
-                           argument == "recorded-connection" ? Profile::RecordedConnection : Profile::Nanomsg;
+                           argument == "recorded-connection" ? Profile::RecordedConnection :
+                           argument == "recorded-acknowledged-connection" ? Profile::RecordedAcknowledgedConnection : Profile::Nanomsg;
         haveProfile = true;
       }
       else if (flag == "--role")

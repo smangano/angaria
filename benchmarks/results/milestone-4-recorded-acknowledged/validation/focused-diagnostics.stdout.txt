@@ -1,0 +1,17 @@
+Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+[==========] Running 2 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from RecordedAcknowledgedAllocationCapture
+[ RUN      ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests
+[       OK ] RecordedAcknowledgedAllocationCapture.CountsSuccessfulAllocationRequests (0 ms)
+[----------] 1 test from RecordedAcknowledgedAllocationCapture (0 ms total)
+
+[----------] 1 test from RecordedAcknowledgedPerformance
+[ RUN      ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts
+{"study":"recorded_acknowledged_queue_same_process_cost","payload_bytes":8,"ring_capacity":2,"cycles_per_block":64,"id_send_lookup_receive_ack_ns":[735.031,1184.234,1072.266,976.562,594.406],"verified_acknowledged_publications_per_second":1024000.000,"pinned_repeat_ns_per_call":[30.594,28.000,26.688,26.031,26.703],"release_redelivery_ns_per_cycle":[266.266,258.469,257.812,257.812,257.812],"messaging_allocations":[0,0,0,0,0],"pinned_repeat_allocations":[0,0,0,0,0],"release_redelivery_allocations":[0,0,0,0,0],"diagnostics_enabled":true}
+[       OK ] RecordedAcknowledgedPerformance.MessagingPinRepeatsAndRedeliveryKeepBoundedLocalCosts (1 ms)
+[----------] 1 test from RecordedAcknowledgedPerformance (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 2 test suites ran. (1 ms total)
+[  PASSED  ] 2 tests.

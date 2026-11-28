@@ -14,6 +14,8 @@ Steps **4.31–4.33** add private [producer-log byte codecs](producer-log-format
 
 Step **4.34**, framework **0.4.36**, adds [restart and connection-independence tests](recorded-queue.md#restart-and-connection-independence) for those private endpoints. The tests stop programs while they send or receive and check that accepted messages remain replayable and other connections can keep working. A restarted consumer can receive an unacknowledged message again; freeing transport credit does not prove the application finished its work. The runnable lessons below will adopt the replacement once its public API integration is ready.
 
+Step **4.35**, framework **0.4.37**, adds [acknowledged progress](recorded-acknowledged-progress.md) to the private replacement. Receiving gives the consumer a delivery token. Repeating that receive keeps the same token until the application acknowledges or releases it. Acknowledgment records completion; release makes the message available again with a new token. If a consumer stops before acknowledging, its replacement can receive the message again. The private progress file keeps these decisions separate from the message log and from transport credit. The public examples below continue to use the implemented public API; their eventual replacement is a later step.
+
 ## A few ideas before the code
 
 A **process** is a running program. A **thread** is one path of execution inside a process. Two terminal windows can launch two independent processes, even when both run the same executable.
