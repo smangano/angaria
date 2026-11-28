@@ -283,6 +283,12 @@ def plot(output, manifest, reports, rows, active=False):
     histories = sorted({row["history"] for row in reports})
     acknowledged = profiles(manifest["runner_metadata"])[0] in ipc.ACKNOWLEDGED_PROFILES
     metrics = selected_metrics(active, acknowledged)
+    axis_labels = {
+        "logical_start_to_delivery_ns": "Producer start → delivery\n(µs, log scale)",
+        "logical_start_to_acknowledgment_ns": "Producer start → consumer ACK\n(µs, log scale)",
+        "bounded_cohort_verified_per_second": "Completed publications/s from T0\n(log scale)",
+        "first_send_to_last_verified_per_second": "Active completed publications/s\n(log scale)",
+    }
     figure, axes = plt.subplots(len(metrics), len(payloads), figsize=(5.1 * len(payloads), 4.0 * len(metrics)), squeeze=False)
     for column, payload in enumerate(payloads):
         for row_index, (metric, ylabel, scale) in enumerate(metrics):
@@ -306,7 +312,7 @@ def plot(output, manifest, reports, rows, active=False):
             ax.set_xticks(range(len(histories)), [str(value) for value in histories])
             ax.set_xlabel("Initial retained messages (H)")
             if column == 0:
-                ax.set_ylabel(ylabel + " · log scale")
+                ax.set_ylabel(axis_labels[metric], fontsize=9.5)
             ax.set_yscale("log"); ax.grid(axis="y", alpha=.2)
             if row_index == 0:
                 ax.set_title(str(payload) + "-byte payload")

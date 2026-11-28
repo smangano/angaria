@@ -40,3 +40,7 @@ benchmarks/results/milestone-4-recorded-connection/**/*.txt -text whitespace=-bl
 benchmarks/results/milestone-4-recorded-restart/*.svg -text whitespace=-blank-at-eol,-blank-at-eof
 benchmarks/results/milestone-4-recorded-restart/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
 benchmarks/results/milestone-4-recorded-restart/**/provenance/** -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-recorded-acknowledged/**/*.svg -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-recorded-acknowledged/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/results/milestone-4-recorded-acknowledged/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-recorded-acknowledged/**/provenance/** -text whitespace=-blank-at-eol,-blank-at-eof

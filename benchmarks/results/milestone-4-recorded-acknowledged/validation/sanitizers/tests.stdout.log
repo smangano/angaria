@@ -1,0 +1,121 @@
+[==========] Running 52 tests from 4 test suites.
+[----------] Global test environment set-up.
+[----------] 19 tests from RecordedAcknowledgedQueueTest
+[ RUN      ] RecordedAcknowledgedQueueTest.PinnedReceiveKeepsItsTokenAndEpochZeroTimeWithoutAnotherCommit
+[       OK ] RecordedAcknowledgedQueueTest.PinnedReceiveKeepsItsTokenAndEpochZeroTimeWithoutAnotherCommit (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.ReleaseRetainsHistoryAndStaleTokensCannotFinishItsRedelivery
+[       OK ] RecordedAcknowledgedQueueTest.ReleaseRetainsHistoryAndStaleTokensCannotFinishItsRedelivery (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.EveryTokenFieldMustMatchTheCurrentPin
+[       OK ] RecordedAcknowledgedQueueTest.EveryTokenFieldMustMatchTheCurrentPin (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.CloseReleasesItsPinAndReplacementPreservesTheAcknowledgedPrefix
+[       OK ] RecordedAcknowledgedQueueTest.CloseReleasesItsPinAndReplacementPreservesTheAcknowledgedPrefix (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.ReleasingAnOldCreditedPinDoesNotReadItsRecycledRingSlot
+[       OK ] RecordedAcknowledgedQueueTest.ReleasingAnOldCreditedPinDoesNotReadItsRecycledRingSlot (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.FullMessageLogStillPermitsReleaseAcknowledgmentAndReplacement
+[       OK ] RecordedAcknowledgedQueueTest.FullMessageLogStillPermitsReleaseAcknowledgmentAndReplacement (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.APrecommitProgressErrorPreservesItsBorrowAndCommittedPin
+[       OK ] RecordedAcknowledgedQueueTest.APrecommitProgressErrorPreservesItsBorrowAndCommittedPin (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.AnUncertainIssueSettlesToItsOriginalTokenAndCapturedTime
+[       OK ] RecordedAcknowledgedQueueTest.AnUncertainIssueSettlesToItsOriginalTokenAndCapturedTime (0 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.AnUncertainAcknowledgmentSettlesWithoutIssuingTheTerminalMessageAgain
+[       OK ] RecordedAcknowledgedQueueTest.AnUncertainAcknowledgmentSettlesWithoutIssuingTheTerminalMessageAgain (0 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.AForeignThreadCannotOperateThePinnedSource
+[       OK ] RecordedAcknowledgedQueueTest.AForeignThreadCannotOperateThePinnedSource (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.AcknowledgmentModeIsBoundToItsStoredConnection
+[       OK ] RecordedAcknowledgedQueueTest.AcknowledgmentModeIsBoundToItsStoredConnection (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.FreshIssuanceReservesTheLastGenerationForItsTerminalResolution
+[       OK ] RecordedAcknowledgedQueueTest.FreshIssuanceReservesTheLastGenerationForItsTerminalResolution (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.ASourceWithOnlyOneGenerationRemainingRejectsFreshIssuanceWithoutAPin
+[       OK ] RecordedAcknowledgedQueueTest.ASourceWithOnlyOneGenerationRemainingRejectsFreshIssuanceWithoutAPin (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.ExhaustedIssuanceStillRepeatsAndResolvesItsExistingPin
+[       OK ] RecordedAcknowledgedQueueTest.ExhaustedIssuanceStillRepeatsAndResolvesItsExistingPin (0 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.EmptyPollingStillReturnsEmptyWhenProgressGenerationsAreExhausted
+[       OK ] RecordedAcknowledgedQueueTest.EmptyPollingStillReturnsEmptyWhenProgressGenerationsAreExhausted (1 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.RecoveryCanBeKilledAgainWithoutLosingTheOriginalAcknowledgmentTime
+[       OK ] RecordedAcknowledgedQueueTest.RecoveryCanBeKilledAgainWithoutLosingTheOriginalAcknowledgmentTime (114 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.InterruptedReplacementReusesOnlyItsNeverExposedCandidateIncarnation
+[       OK ] RecordedAcknowledgedQueueTest.InterruptedReplacementReusesOnlyItsNeverExposedCandidateIncarnation (22 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.CommittedIssuanceRepairsCreditAfterDeathBeforeTheHintStore
+[       OK ] RecordedAcknowledgedQueueTest.CommittedIssuanceRepairsCreditAfterDeathBeforeTheHintStore (12 ms)
+[ RUN      ] RecordedAcknowledgedQueueTest.ACommittedAcknowledgmentCanHaveALaggingProducerHintUntilRecovery
+[       OK ] RecordedAcknowledgedQueueTest.ACommittedAcknowledgmentCanHaveALaggingProducerHintUntilRecovery (12 ms)
+[----------] 19 tests from RecordedAcknowledgedQueueTest (178 ms total)
+
+[----------] 1 test from RecordedAcknowledgedIndependenceTest
+[ RUN      ] RecordedAcknowledgedIndependenceTest.ACommittedPausedPeerAcknowledgmentAndItsRecoveryDoNotGateOtherTraffic
+[       OK ] RecordedAcknowledgedIndependenceTest.ACommittedPausedPeerAcknowledgmentAndItsRecoveryDoNotGateOtherTraffic (38 ms)
+[----------] 1 test from RecordedAcknowledgedIndependenceTest (38 ms total)
+
+[----------] 6 tests from RecordedProgressTest
+[ RUN      ] RecordedProgressTest.BootstrapHeaderAndIssuanceImageMatchIndependentBytes
+[       OK ] RecordedProgressTest.BootstrapHeaderAndIssuanceImageMatchIndependentBytes (0 ms)
+[ RUN      ] RecordedProgressTest.ReleaseRetainsIssuanceAndAcknowledgmentPreservesExplicitTimePresence
+[       OK ] RecordedProgressTest.ReleaseRetainsIssuanceAndAcknowledgmentPreservesExplicitTimePresence (0 ms)
+[ RUN      ] RecordedProgressTest.FailedInactiveImagesDoNotCommitAndSelectedImagesSettleExactly
+[       OK ] RecordedProgressTest.FailedInactiveImagesDoNotCommitAndSelectedImagesSettleExactly (2 ms)
+[ RUN      ] RecordedProgressTest.UnsupportedOrMismatchedHeadersRejectWithoutWrites
+[       OK ] RecordedProgressTest.UnsupportedOrMismatchedHeadersRejectWithoutWrites (0 ms)
+[ RUN      ] RecordedProgressTest.ActualInodeClaimAndSelfIdentityPreventDuplicateProgressOwners
+[       OK ] RecordedProgressTest.ActualInodeClaimAndSelfIdentityPreventDuplicateProgressOwners (0 ms)
+[ RUN      ] RecordedProgressTest.InvalidTransitionsLeaveSelectedProgressUnchanged
+[       OK ] RecordedProgressTest.InvalidTransitionsLeaveSelectedProgressUnchanged (0 ms)
+[----------] 6 tests from RecordedProgressTest (5 ms total)
+
+[----------] 26 tests from RealProgressStops/RecordedAcknowledgedProgressDeath
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_PartialImage
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_PartialImage (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_ImageWritten
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_ImageWritten (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_BeforeSelector
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_BeforeSelector (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_SelectorPublished
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_SelectorPublished (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_PartialReceipt
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_PartialReceipt (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_ReceiptInstalled
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_ReceiptInstalled (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_PartialSource
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_PartialSource (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_SourceInstalled
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_SourceInstalled (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_BeforeApplied
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_BeforeApplied (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_AppliedPublished
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/issue_AppliedPublished (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_PartialImage
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_PartialImage (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_ImageWritten
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_ImageWritten (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_BeforeSelector
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_BeforeSelector (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_SelectorPublished
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_SelectorPublished (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_PartialReceipt
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_PartialReceipt (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_ReceiptInstalled
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_ReceiptInstalled (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_PartialSource
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_PartialSource (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_SourceInstalled
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_SourceInstalled (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_BeforeApplied
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_BeforeApplied (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_AppliedPublished
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/ack_AppliedPublished (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/release_BeforeSelector
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/release_BeforeSelector (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/release_SelectorPublished
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/release_SelectorPublished (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/release_PartialSource
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/release_PartialSource (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/close_BeforeSelector
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/close_BeforeSelector (12 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/close_SelectorPublished
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/close_SelectorPublished (11 ms)
+[ RUN      ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/close_PartialSource
+[       OK ] RealProgressStops/RecordedAcknowledgedProgressDeath.OnlyTheSelectedOperationSurvivesAndReplacementPreservesItsTime/close_PartialSource (11 ms)
+[----------] 26 tests from RealProgressStops/RecordedAcknowledgedProgressDeath (314 ms total)
+
+[----------] Global test environment tear-down
+[==========] 52 tests from 4 test suites ran. (537 ms total)
+[  PASSED  ] 52 tests.
