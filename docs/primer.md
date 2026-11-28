@@ -1008,9 +1008,9 @@ CTest's [log_replay_example.py](../test/log_replay_example.py) runs these same t
 
 ## What comes next
 
-The public runtime now uses producer-owned recording and independent connection progress. A Source currently receives from one Active Queue; milestone 5 adds selection among multiple inputs. A Task can already own several outgoing Queue endpoints sharing one producer log, and its exact schema is selected from each MessageHeader.
+The public runtime now uses producer-owned recording and independent connection progress. A Source currently receives from one Active Queue; the [milestone-5 plan](milestones/milestone-5.md) adds selection among multiple inputs, then priority, fairness and weighted-random policies, plus configured stale-message loss. These are planned chapters, not runnable features. A Task can already own several outgoing Queue endpoints sharing one producer log, and its exact schema is selected from each MessageHeader.
 
-Acknowledgment changes certified processing progress without reclaiming immutable message bytes. Reserved progress and owner replacement can work while the producer log is full, subject to their own storage and counter checks. Later milestones add Publishing fan-out/retry, more wait policies, configured stale-data loss, storage reclamation and advanced replay controls. Accepted messages are already retained for replay.
+Acknowledgment changes certified processing progress without reclaiming immutable message bytes. Reserved progress and owner replacement can work while the producer log is full, subject to their own storage and counter checks. Milestone 6 adds Publishing fan-out/retry, milestone 7 adds waiting policies, and milestone 8 defines log growth, rotation, retention and reclamation. Advanced replay controls remain later work; accepted messages are already retained for replay. The [current completion review](milestones/milestone-4-current-completion.md) explains the final qualification needed before milestone 5 begins. The eighteen lessons above continue to use only implemented public calls.
 
 ## Understand bounds and ordinary failures
 

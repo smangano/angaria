@@ -1,6 +1,6 @@
 # Milestone 4 completion audit
 
-> Historical completion audit of the superseded runtime. [Public runtime admission](../public-runtime-admission.md) replaces that engine; its current correctness and performance qualification takes precedence.
+> Historical completion audit of the superseded runtime. [Public runtime admission](../public-runtime-admission.md) replaces that engine. Current milestone-4 exit decisions and pending qualification are recorded in the [current-runtime completion review](milestone-4-current-completion.md); this document preserves the original 0.4.13 audit.
 
 **Integration hold:** the step-4.11 baseline below exposed unacceptable performance. Step [4.12 diagnostics](../performance-diagnostics-findings.md), framework **0.4.14**, records the causes and next fix candidates. Integration into `main` requires reviewed measured improvements and final qualification. This document retains the original step-4.11 scope audit.
 

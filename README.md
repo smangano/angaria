@@ -12,6 +12,8 @@ Framework **0.4.39** admits the independent messaging runtime through the public
 
 Framework **0.4.40** [reduces ownership-check overhead](docs/performance-fork-aware-ownership.md) using the existing fork-invalidation registry. Process/Thread ownership and early inherited-handle rejection remain part of the public runtime contract.
 
+Framework **0.4.41** updates the [current milestone-4 completion review](docs/milestones/milestone-4-current-completion.md) and the [milestone-5 Source Queue Set plan](docs/milestones/milestone-5.md). Final qualification of the current implementation on Linux and milestone-4 integration into `main` remain pending. Multiple-input selection and configured stale-message loss remain planned features; this review changes no runtime behavior.
+
 All registration and activation must finish before the first writer, Source or publication-ID issuer opens the runtime. That first admission seals the catalog. Use fresh development Sessions: the current native format is **3.0**, synchronization revision **2**, and earlier native formats are rejected. The superseded Session-gated message engine and v0 prototype have been removed; their pinned source and measurements remain available in Git history.
 
 The current profile supports multiple outgoing Queues and exact schemas per producer Task, Process and Thread Tasks, optional acknowledgment, replacement, backlog recovery, owning Message copies and public log replay/export. Multiple-input scheduling, Publishing Queue Set execution, allowed-loss delivery, notification waiting, log reclamation and other policies follow later roadmap steps. Metadata declarations for future topology do not imply those operations are implemented.
