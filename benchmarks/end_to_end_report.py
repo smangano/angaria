@@ -257,7 +257,7 @@ def plot_group(output, manifest, cases, rows, panels, filename, title):
                 handles.append(handle); labels.append(label)
     figure.legend(handles, labels, loc="upper center", bbox_to_anchor=(.5, .945), frameon=False,
                   ncol=1 if len(labels) > 3 else 2, fontsize=9)
-    figure.suptitle(title + " — " + manifest.get("host_label", "retained host"), fontsize=13, y=.99)
+    figure.suptitle(title + "\n" + manifest.get("host_label", "retained host"), fontsize=13, y=.99)
     count_pairs = sorted({(measured_messages(case), case_value(case, "warmup_messages")) for case in cases})
     counts = "; ".join("N=" + format(count, ",") + ", warmup=" + format(warm, ",") for count, warm in count_pairs)
     footer = ("Dots: every run; center: median; whiskers: full run range. Latency dots are each run's nearest-rank quantile.\n" +
