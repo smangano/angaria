@@ -132,7 +132,7 @@ namespace native_pipeline
     for (std::uint32_t processed = 0; processed != count; ++processed)
     {
       // A finite wait handles a live Feed without depending on arbitrary sleeps.
-      // The walkthrough also starts with more backlog than the two-entry ring.
+      // Its reserved sixteen-message Queue also holds the offline walkthrough backlog.
       auto event = inputs.receive(std::chrono::seconds{5});
       if (const auto* error = std::get_if<Error>(&event))
       {

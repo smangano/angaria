@@ -15,7 +15,7 @@ There are two Queues and two consumer-owned Source Queue Sets. Each Source has o
 | Source | What it demonstrates |
 | --- | --- |
 | [17_native_pipeline.cpp](../examples/primer/17_native_pipeline.cpp) | Command-line validation and reporting the original Error code, path, and message. |
-| [native-pipeline.toml](../examples/primer/native-pipeline.toml) | Four named Tasks, two Queues/Sources, seven Fields, three exact schemas, ring capacity two, and recovery delivery. |
+| [native-pipeline.toml](../examples/primer/native-pipeline.toml) | Four named Tasks, two Queues/Sources, seven Fields, three exact schemas, ring capacity sixteen, and recovery delivery. |
 | [producers.cpp](../examples/primer/native_pipeline/producers.cpp) | `Session::create_from_file`, named attachment/writer setup, schema-driven encoding, explicit publication IDs, same-ID outcome resolution, and retained acceptance lookup. |
 | [consumers.cpp](../examples/primer/native_pipeline/consumers.cpp) | Named Sources, finite receive waits, complete MessageHeader inspection, owning copies, exact decoding, release/redelivery, stale tokens, forwarding, acknowledgment, and explicit close. |
 | [roles.h](../examples/primer/native_pipeline/roles.h) | Application command declarations and small domain constants. It contains no configuration or Result wrappers. |
@@ -37,7 +37,7 @@ The coordinator reserves that new workspace, copies the TOML file into it, and l
 Expected summary:
 
 ```text
-Recovered six quotes across ring wrap and Feed/Strategy replacement.
+Recovered six recorded quotes across Feed/Strategy replacement.
 Decoded exact Quote v1/v2 layouts and audited six linked alerts.
 Release/redelivery rejected the old token; cold lookups preserved acceptance.
 Initialization, ownership, CLI, and workspace conflicts preserved existing data.
@@ -49,8 +49,8 @@ A retained run also prints its workspace location. Read `logs/feed-original.log`
 
 The complete run proceeds as follows:
 
-1. Setup creates `market-session` next to the copied TOML. All three business Tasks are registered before their processes attach.
-2. Feed publishes Quotes 1–4 while Strategy is offline, then reports that its sends completed. The ring holds only the latest two references, but all four messages remain in the log.
+1. Setup creates `market-session` next to the copied TOML. All business Tasks, Fields, exact schemas and connections are registered and activated before the first endpoint seals the catalog.
+2. Feed publishes Quotes 1–4 while Strategy is offline, then reports that its sends completed. Its sixteen logical Queue slots hold this offline backlog, and every accepted message also remains in the producer log.
 3. Strategy receives Queue sequence 1 from that backlog, copies its complete header and bytes, and pauses **before forwarding or reserving an output publication ID**. The coordinator terminates this Strategy and the original Feed only after their explicit readiness messages.
 4. A replacement Feed attaches to the same logical Task and publishes Quotes 5–6. Its incarnation advances and its publication sequence starts again at 1. The Quotes Queue sequence continues from the prior producer's messages.
 5. Audit and the replacement Strategy run as independent live processes. Replacement first restores the unfinished input delivery. Strategy deliberately releases that first borrow, receives it with a new token, and verifies that its old token is stale. It then decodes and forwards all six Quotes, acknowledging each input after its PriceAlert is accepted.

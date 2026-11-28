@@ -115,8 +115,9 @@ def walkthrough(example, inspector, workspace):
         first_bytes = capture_path("first").read_bytes()
         check(len(first_bytes) == 176, "First capture is not two complete records")
 
-        # READY means the file has been flushed, closed, and checked. Killing
-        # this child tests claim replacement, not recovery of a torn append.
+        # READY means the file has been flushed, closed, and checked. Records
+        # use capture-local numbering, so this has not sealed Registry setup.
+        # Killing tests claim replacement, not recovery of a torn append.
         producer.kill()
         remaining, _ = producer.communicate(timeout=10)
         check(producer.returncode != 0 and remaining == b"", "Producer did not stop at its completed capture")

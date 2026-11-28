@@ -2,8 +2,8 @@
 
 #include "performance_diagnostics.h"
 
-#include "task_claim_redo.h"
 #include "topology_state.h"
+#include "public_runtime.h"
 
 #include <algorithm>
 #include <array>
@@ -165,34 +165,9 @@ namespace angaria::detail
 
     void require_cleanup_state(RuntimeAccess& access)
     {
-      const auto layout = mapped::make_fixed_layout(access._session->_controller->configuration()._limits);
-      if (!layout)
-      {
-        runtime_fail(ErrorCode::IoError, "task.cleanup", "Session has no valid fixed layout");
-      }
-      if ((access._session->_controller->configuration()._requiredFeatures & mapped::native_delivery_feature) == 0)
-      {
-        for (const auto kind : {9, 10})
-        {
-          if (!access.record_references(static_cast<std::uint16_t>(kind)).empty())
-          {
-            runtime_fail(ErrorCode::UnsupportedPolicy, "task.cleanup", "Legacy claims cannot clean native delivery records");
-          }
-        }
-      }
-      // Validate definitions and resource mirrors before installing a claim,
-      // including through a Session handle opened before external corruption.
-      // ReleaseClaim replay independently discovers retained receipt identities
-      // and immutable Source ownership, including after a partial cleanup.
+      // Claims only change administrative diagnostics. Message pins/receipts
+      // recover through their own consumer-owned progress files.
       (void)runtime_topology(access);
-    }
-
-    mapped::RedoCommand release_claim(std::uint64_t offset, std::uint64_t incarnation, std::int64_t timestamp)
-    {
-      const std::array values{incarnation, std::bit_cast<std::uint64_t>(timestamp)};
-      auto command = runtime_write_words(offset, values);
-      command._opcode = mapped::RedoOpcode::ReleaseClaim;
-      return command;
     }
 
     mapped::TransactionPlan fixed_plan(RuntimeAccess& access, TaskId actor, std::uint64_t incarnation)
@@ -231,7 +206,10 @@ namespace angaria::detail
       }
       require_cleanup_state(access);
       auto plan = fixed_plan(access, _claim._task, _claim._incarnation);
-      plan._commands.push_back(release_claim(loaded._stateOffset, _claim._incarnation, runtime_now_ns()));
+      auto detached = words;
+      detached[6] = (detached[6] & ~task_attached_flag) | task_detachment_time_flag;
+      detached[9] = std::bit_cast<std::uint64_t>(runtime_now_ns());
+      plan._commands.push_back(runtime_write_words(loaded._stateOffset, detached));
       runtime_value(access.execute(plan));
       _attached.store(false, std::memory_order_release);
     }
@@ -245,6 +223,28 @@ namespace angaria::detail
   void runtime_check_task_owner(const std::shared_ptr<TaskState>& task)
   {
     check_native(task);
+  }
+
+  void runtime_check_messaging_owner(const std::shared_ptr<TaskState>& task)
+  {
+    // The native lease and immutable resources were authenticated at binding.
+    // Their owning handles keep them alive; online replacement is unsupported.
+    // Check fork/Thread affinity before any inherited local mutex is touched.
+    const auto pid = static_cast<std::uint64_t>(::getpid());
+    if (!task || !task->_lease || !task->_attached.load(std::memory_order_acquire))
+    {
+      runtime_fail(ErrorCode::InvalidState, "task", "Task has no live attachment");
+    }
+    if (task->_ownerPid != pid ||
+        (task->_kind == TaskKind::Thread && task->_thread != std::this_thread::get_id()))
+    {
+      runtime_fail(ErrorCode::WrongOwner, "task", "Task belongs to another process or thread");
+    }
+    if (task->_kind == TaskKind::Thread && (!task->_parent || task->_parent->_ownerPid != pid ||
+        !task->_parent->_attached.load(std::memory_order_acquire)))
+    {
+      runtime_fail(ErrorCode::WrongOwner, "task.process", "Thread Task requires its retained Process claim");
+    }
   }
 
   void runtime_check_task(RuntimeAccess& access, const std::shared_ptr<TaskState>& task)
@@ -365,11 +365,8 @@ namespace angaria::detail
       state->_claim = TaskClaim{state->_session->_controller->session_id(), task, words[0]};
       state->_kind = loaded._definition._descriptor._kind;
       state->_thread = std::this_thread::get_id();
+      state->_ownerPid = static_cast<std::uint64_t>(::getpid());
       auto plan = fixed_plan(access, task, words[0]);
-      if (previous != 0)
-      {
-        plan._commands.push_back(release_claim(loaded._stateOffset, previous, timestamp));
-      }
       plan._commands.push_back(runtime_write_words(loaded._stateOffset, words));
       if (bootstrap)
       {
@@ -391,20 +388,9 @@ namespace angaria::detail
   {
     try
     {
-      check_native(task);
-      RuntimeAccess access(task->_session);
-      const auto loaded = runtime_task(access, task->_claim._task);
-      const auto words = check_with_access(access, task, loaded);
-      if (words[1] == std::numeric_limits<std::uint64_t>::max())
-      {
-        runtime_fail(ErrorCode::CapacityExceeded, "task.publication", "Publication sequence is exhausted for this claim");
-      }
-      const PublicationId publication{task->_claim, words[1] + 1};
-      auto plan = fixed_plan(access, task->_claim._task, task->_claim._incarnation);
-      const std::array next{publication._sequence};
-      plan._commands.push_back(runtime_write_words(loaded._stateOffset + 8, next));
-      runtime_value(access.execute(plan));
-      return publication;
+      runtime_check_messaging_owner(task);
+      std::lock_guard lock(task->_producerMutex);
+      return runtime_producer_log(task)->next_publication_id();
     }
     catch (...)
     {

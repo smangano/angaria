@@ -346,6 +346,8 @@ namespace angaria::proposed
     QueueWriter(const QueueWriter&) = delete;
     QueueWriter& operator=(const QueueWriter&) = delete;
     QueueId id() const;
+    // Committed per-Queue processing lower bound, independent of credit.
+    Result<std::uint64_t> acknowledged_sequence() const;
     // Input header schema/format/payloadBytes/flags describe the bytes; size must
     // match the span. Explicit id and runtime clocks establish authoritative
     // publication/destination metadata. Historical input provenance is ignored,

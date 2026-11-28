@@ -68,7 +68,7 @@ def source_snapshot(commit):
     def relevant(name):
         return bool(name) and (Path(name).suffix in (".cpp", ".h", ".hpp", ".cmake", ".in") or
                                name in ("CMakeLists.txt", "VERSION", "benchmarks/recorded_connection_study.py",
-                                        "benchmarks/run_ipc_comparison.py", "benchmarks/run_native.py", "test/ipc_comparison.py"))
+                                        "benchmarks/run_ipc_comparison.py", "benchmarks/run_native.py", "test/public_ipc_comparison.py"))
     names = [name for name in names if relevant(name)]
     unknown = subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=ROOT).decode().split("\0")
     ipc.check(not any(relevant(name) for name in unknown), "Commit all implementation inputs before measurement")

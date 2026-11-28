@@ -53,7 +53,7 @@ class EndToEndValidation(unittest.TestCase):
             scheduled = self.t0 + index * self.case["interval_ns"]
             logical = max(self.t0 + 100 + index * 100000, scheduled + 100)
             digest = golden_hash(sequence, scheduled, logical, self.case["payload_bytes"])
-            recorded = self.profile in ipc.RECORDED_PROFILES
+            recorded = self.profile in ipc.LOOKUP_PROFILES
             identified = self.profile in ipc.IDENTITY_PROFILES
             self.sent.append([sequence, scheduled, logical, logical + 100,
                               logical + 110 if recorded else 0, digest,
@@ -66,7 +66,7 @@ class EndToEndValidation(unittest.TestCase):
 
     def report(self, role):
         producer = role == "producer"
-        recorded = self.profile in ipc.RECORDED_PROFILES
+        recorded = self.profile in ipc.LOOKUP_PROFILES
         nanomsg = self.profile == "nanomsg"
         n, w = self.case["messages"], self.case["warmup_messages"]
         first = self.sent[w][2] if producer else self.received[w][3]
@@ -122,6 +122,10 @@ class EndToEndValidation(unittest.TestCase):
                           file_byte_scope=("reserved producer log, owner, connection and progress; catalog reported separately"
                                            if self.profile in ipc.ACKNOWLEDGED_PROFILES else
                                            "reserved producer log, owner and connection; catalog reported separately"))
+        if self.profile in ipc.PUBLIC_PROFILES:
+            result.update(runtime_surface="Session/Task/QueueWriter/SourceQueueSet",
+                          producer_path_scope="public ID issuance, send retries and publication_status",
+                          file_byte_scope="all reserved public messaging resources; catalog reported separately")
         return result
 
     def write(self):
@@ -160,13 +164,25 @@ class EndToEndValidation(unittest.TestCase):
         self.reject()
 
     def test_each_profile_has_its_real_ack_and_identity_boundary(self):
-        for profile in ("recorded-connection", "recorded-acknowledged-connection", "nanomsg", "angaria", "recorded-spsc"):
+        for profile in (*ipc.LOOKUP_PROFILES, "nanomsg", "angaria", "recorded-spsc"):
             with self.subTest(profile=profile):
                 self.profile = profile
                 self.prepare()
                 result = self.validate()
                 self.assertEqual(result["acknowledged"], 5 if profile in ipc.ACKNOWLEDGED_PROFILES else 0)
                 self.assertEqual("logical_start_to_acknowledgment_ns" in result["metrics"], profile in ipc.ACKNOWLEDGED_PROFILES)
+
+    def test_public_qualification_requires_public_surface_and_complete_lookup(self):
+        # A public comparison cannot quietly substitute a private endpoint or
+        # omit its ordinary public acceptance-status lookup from completion.
+        self.profile = "public-recorded"
+        self.prepare()
+        del self.reports["producer"]["runtime_surface"]
+        self.reject()
+        self.prepare()
+        self.sent[-1][4] = 0
+        self.write()
+        self.reject()
 
     def test_truncated_extra_and_header_mismatch_are_rejected(self):
         path = self.directory / "consumer.samples.bin"

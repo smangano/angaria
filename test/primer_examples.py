@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the primer programs and their independent-process ownership walkthrough."""
 
-# These are format-2 public API examples. They configure connections and open
+# These are current format-3 public API examples. They configure connections and open
 # endpoints. Lesson 14 adds direct Queue acceptance and retained outcome lookup;
 # lesson 15 now receives, releases, copies, acknowledges, and closes Sources.
 import argparse
@@ -38,8 +38,8 @@ def command(executable, *arguments, succeeds=True):
 
 def expect_ready(process, role, incarnation):
     # Wait for the program's flushed handshake rather than guessing how long
-    # initialization takes. READY occurs after the original Task has closed:
-    # only its endpoint handles retain the role's exclusive claim at this point.
+    # initialization takes. READY occurs after the role owns its Task claim;
+    # this metadata-only lesson deliberately opens no messaging endpoints.
     expected = f"READY {role} incarnation={incarnation}".encode()
     deadline = time.monotonic() + 5
     received = b""
@@ -116,7 +116,7 @@ def process_example(executable, session):
             busy = command(executable, role, session, succeeds=False)
             check("OwnershipBusy" in busy, f"Second {role} did not report OwnershipBusy: {busy!r}")
 
-        # Closing the producer's last endpoints permits a new incarnation,
+        # Closing the producer's Task claim permits a new incarnation,
         # while the original consumer remains attached independently.
         finish(producer)
         replacement = command(executable, "producer", session)
@@ -192,9 +192,9 @@ def receive_example(executable, workspace):
     session = workspace / "receive"
     output = command(executable, session)
     for marker in (
-        "Recovered oldest Queue sequence after ring wrap: 1",
+        "Received oldest retained Queue sequence: 1",
         "Release redelivered the same publication with a new token.",
-        "Closing an unacknowledged Source allows redelivery.",
+        "Closing before acknowledgment allows redelivery.",
         "Final receive: timeout.",
         "Saved copy after all handles close: PriceTicks=12345",
         "Saved header kept every delivery field.",
@@ -207,28 +207,26 @@ def receive_example(executable, workspace):
     check(log.read_bytes() == original, "Receive lesson changed an existing Session")
 
 
-def allowed_loss_example(executable, fixture, workspace):
-    directory = workspace / "allowed-loss"
+def unacknowledged_example(executable, fixture, workspace):
+    directory = workspace / "unacknowledged"
     directory.mkdir()
     configuration = directory / "settings.toml"
     shutil.copyfile(fixture, configuration)
     output = command(executable, configuration)
     for marker in (
-        "Configured delivery: allow_loss (ring capacity 2).",
-        "Gap: 1..1",
-        "Received after gap: 2",
-        "In-flight sequence 2 survives ring overwrite.",
-        "Gap after release: 2..3",
-        "Received retained sequences: 4,5",
-        "Final receive: timeout.",
-        "Default delivery remains recover_from_log.",
+        "Configured acknowledgment: none; accepted messages remain recorded.",
+        "Unacknowledged receive: Queue sequence 1.",
+        "A MessageView has no acknowledgment token.",
+        "Owning copy preserves every header field.",
+        "Reopening can replay the same unacknowledged publication.",
+        "Saved copy after all handles close: PriceTicks=12345",
     ):
-        check(marker in output.splitlines(), f"Allowed-loss lesson omitted {marker!r}: {output!r}")
-    log = directory / "allowed-loss-session" / "session.ang"
+        check(marker in output.splitlines(), f"Unacknowledged lesson omitted {marker!r}: {output!r}")
+    log = directory / "unacknowledged-session" / "session.ang"
     original = log.read_bytes()
     retry = command(executable, configuration, succeeds=False)
-    check("Conflict" in retry, f"Repeated allowed-loss creation did not report Conflict: {retry!r}")
-    check(log.read_bytes() == original, "Allowed-loss lesson changed an existing Session")
+    check("Conflict" in retry, f"Repeated unacknowledged creation did not report Conflict: {retry!r}")
+    check(log.read_bytes() == original, "Unacknowledged lesson changed an existing Session")
 
 
 def main():
@@ -237,8 +235,8 @@ def main():
     parser.add_argument("configuration", type=Path, help="lesson 7 TOML fixture")
     parser.add_argument("direct_send", type=Path, help="lesson 14 direct-send executable")
     parser.add_argument("receive", type=Path, help="lesson 15 receive executable")
-    parser.add_argument("allowed_loss", type=Path, help="lesson 16 allowed-loss executable")
-    parser.add_argument("loss_configuration", type=Path, help="lesson 16 TOML fixture")
+    parser.add_argument("unacknowledged", type=Path, help="lesson 16 unacknowledged executable")
+    parser.add_argument("unacknowledged_configuration", type=Path, help="lesson 16 TOML fixture")
     arguments = parser.parse_args()
     executables = [path.resolve() for path in arguments.examples]
     try:
@@ -249,11 +247,11 @@ def main():
             configuration_example(executables[6], arguments.configuration.resolve(), workspace)
             direct_send_example(arguments.direct_send.resolve(), workspace)
             receive_example(arguments.receive.resolve(), workspace)
-            allowed_loss_example(arguments.allowed_loss.resolve(), arguments.loss_configuration.resolve(), workspace)
+            unacknowledged_example(arguments.unacknowledged.resolve(), arguments.unacknowledged_configuration.resolve(), workspace)
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"primer_examples: {error}", file=sys.stderr)
         return 1
-    print("Primer examples passed: setup, ownership, TOML, direct send, receive, copy, close, and allowed-loss gaps.")
+    print("Primer examples passed: setup, ownership, TOML, direct send, receive, copy, close, and recorded unacknowledged delivery.")
     return 0
 
 

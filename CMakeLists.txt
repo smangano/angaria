@@ -33,26 +33,16 @@ add_library(angaria STATIC
   src/performance_diagnostics.cpp
   src/capture.cpp
   src/inspection.cpp
+  src/log.cpp
   src/message_record.cpp
   src/message.cpp
-  src/publication_metadata.cpp
   src/producer_log_format.cpp
   src/producer_log.cpp
   src/recorded_queue.cpp
   src/recorded_progress.cpp
-  src/publication_runtime.cpp
-  src/mapped_payload.cpp
-  src/delivery_state.cpp
-  src/delivery_runtime.cpp
-  src/delivery_progress.cpp
-  src/delivery_loss.cpp
-  src/loss_redo.cpp
   src/payload.cpp
   src/configuration.cpp
   src/configuration_runtime.cpp
-  src/session.cpp
-  src/session_log.cpp
-  src/role_lock.cpp
   src/mapped_superblock.cpp
   src/native_file.cpp
   src/native_reservation.cpp
@@ -69,7 +59,6 @@ add_library(angaria STATIC
   src/registry_snapshot.cpp
   src/runtime_session.cpp
   src/task_runtime.cpp
-  src/task_claim_redo.cpp
   src/task_registry.cpp
   src/schema_metadata.cpp
   src/schema_runtime.cpp
@@ -81,6 +70,8 @@ add_library(angaria STATIC
   src/topology_append.cpp
   src/topology_mutations.cpp
   src/endpoint_runtime.cpp
+  src/public_runtime.cpp
+  src/public_runtime_storage.cpp
   src/source_lifecycle.cpp
   src/source_receive.cpp
 )
@@ -95,61 +86,18 @@ endif()
 
 option(ANGARIA_BUILD_BENCHMARKS "Build native transport measurement tools" ON)
 option(ANGARIA_BUILD_IPC_COMPARISON "Build the optional classic nanomsg IPC comparison" OFF)
-option(ANGARIA_BUILD_STALL_STUDY "Build the private recorded SPSC and stall experiments" OFF)
-if(ANGARIA_BUILD_STALL_STUDY AND NOT ANGARIA_BUILD_IPC_COMPARISON)
-  message(FATAL_ERROR "ANGARIA_BUILD_STALL_STUDY requires ANGARIA_BUILD_IPC_COMPARISON=ON")
-endif()
 if(ANGARIA_BUILD_IPC_COMPARISON AND NOT ANGARIA_BUILD_BENCHMARKS)
   message(FATAL_ERROR "ANGARIA_BUILD_IPC_COMPARISON requires ANGARIA_BUILD_BENCHMARKS=ON")
 endif()
 if(ANGARIA_BUILD_IPC_COMPARISON AND
-   (ANGARIA_ENABLE_CACHEGRIND OR (ANGARIA_ENABLE_DIAGNOSTICS AND NOT ANGARIA_BUILD_STALL_STUDY)))
+   (ANGARIA_ENABLE_CACHEGRIND OR ANGARIA_ENABLE_DIAGNOSTICS))
   message(FATAL_ERROR "Ordinary IPC comparison requires diagnostics and Cachegrind instrumentation OFF")
 endif()
 if(ANGARIA_ENABLE_CACHEGRIND AND NOT ANGARIA_BUILD_BENCHMARKS)
   message(FATAL_ERROR "ANGARIA_ENABLE_CACHEGRIND requires ANGARIA_BUILD_BENCHMARKS=ON")
 endif()
-if(ANGARIA_BUILD_BENCHMARKS)
-  add_executable(angaria_transport_benchmark benchmarks/native_transport.cpp)
-  target_include_directories(angaria_transport_benchmark PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_transport_benchmark PRIVATE angaria)
-  add_executable(angaria_transport_diagnostics benchmarks/transport_diagnostics.cpp)
-  target_include_directories(angaria_transport_diagnostics PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_transport_diagnostics PRIVATE angaria)
-  if(ANGARIA_ENABLE_DIAGNOSTICS)
-    target_compile_definitions(angaria_transport_diagnostics PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
-  endif()
-  if(ANGARIA_ENABLE_CACHEGRIND)
-    find_path(ANGARIA_VALGRIND_INCLUDE_DIR NAMES valgrind/cachegrind.h REQUIRED)
-    include(CheckCXXSourceCompiles)
-    include(CMakePushCheckState)
-    cmake_push_check_state(RESET)
-    set(CMAKE_REQUIRED_INCLUDES "${ANGARIA_VALGRIND_INCLUDE_DIR}")
-    check_cxx_source_compiles([[
-      #include <valgrind/cachegrind.h>
-      #if !defined(__VALGRIND_MAJOR__) || !defined(__VALGRIND_MINOR__)
-      #error Valgrind header version is unavailable
-      #endif
-      #if __VALGRIND_MAJOR__ < 3 || (__VALGRIND_MAJOR__ == 3 && __VALGRIND_MINOR__ < 22)
-      #error Cachegrind region requests require Valgrind 3.22 or newer
-      #endif
-      #if !defined(CACHEGRIND_START_INSTRUMENTATION) || !defined(CACHEGRIND_STOP_INSTRUMENTATION)
-      #error Cachegrind start and stop requests are unavailable
-      #endif
-      int main()
-      {
-        CACHEGRIND_START_INSTRUMENTATION;
-        CACHEGRIND_STOP_INSTRUMENTATION;
-        return 0;
-      }
-    ]] ANGARIA_CACHEGRIND_CLIENT_REQUESTS)
-    cmake_pop_check_state()
-    if(NOT ANGARIA_CACHEGRIND_CLIENT_REQUESTS)
-      message(FATAL_ERROR "Cachegrind profiling requires working Valgrind 3.22+ start/stop client requests")
-    endif()
-    target_include_directories(angaria_transport_diagnostics SYSTEM PRIVATE "${ANGARIA_VALGRIND_INCLUDE_DIR}")
-    target_compile_definitions(angaria_transport_diagnostics PRIVATE ANGARIA_ENABLE_CACHEGRIND=1)
-  endif()
+if(ANGARIA_ENABLE_CACHEGRIND)
+  message(FATAL_ERROR "The former Session-gated Cachegrind driver is retired; use a pinned pre-admission revision")
 endif()
 
 if(ANGARIA_BUILD_IPC_COMPARISON)
@@ -183,28 +131,13 @@ if(ANGARIA_BUILD_IPC_COMPARISON)
     "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_include_directories(angaria_ipc_comparison SYSTEM PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/comparison-include")
-  target_link_libraries(angaria_ipc_comparison PRIVATE nanomsg)
-  if(ANGARIA_BUILD_STALL_STUDY)
-    add_library(angaria_recorded_spsc STATIC benchmarks/recorded_spsc.cpp)
-    target_include_directories(angaria_recorded_spsc PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_link_libraries(angaria_recorded_spsc PUBLIC angaria)
-    target_link_libraries(angaria_ipc_comparison PRIVATE angaria_recorded_spsc)
-    target_compile_definitions(angaria_ipc_comparison PRIVATE ANGARIA_BUILD_STALL_STUDY=1)
-    if(ANGARIA_ENABLE_DIAGNOSTICS)
-      target_compile_definitions(angaria_recorded_spsc PUBLIC ANGARIA_ENABLE_DIAGNOSTICS=1)
-      target_compile_definitions(angaria_ipc_comparison PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
-    endif()
-  else()
-    target_link_libraries(angaria_ipc_comparison PRIVATE angaria)
-  endif()
+  target_link_libraries(angaria_ipc_comparison PRIVATE angaria nanomsg)
   target_compile_definitions(angaria_ipc_comparison PRIVATE
     ANGARIA_NANOMSG_VERSION="1.3.0"
     ANGARIA_NANOMSG_COMMIT="73e89d2ca28d11cbd39bb15e8d2e1edeb7eec68a"
     ANGARIA_NANOMSG_ARCHIVE_SHA256="acf65c0ef312f431aa3c4cb114326781c999ec0c977067f3a1f0c81b5ec8710f")
-endif()
 
-add_executable(angaria_queue_demo examples/queue_demo.cpp)
-target_link_libraries(angaria_queue_demo PRIVATE angaria)
+endif()
 
 add_executable(angaria_inspect tools/inspect.cpp)
 target_link_libraries(angaria_inspect PRIVATE angaria)
@@ -220,7 +153,7 @@ target_include_directories(angaria_public_api_review PRIVATE "${CMAKE_CURRENT_SO
 target_compile_features(angaria_public_api_review PRIVATE cxx_std_20)
 
 # Primer programs use implemented public APIs and remain runnable without tests.
-foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record 12_capture 13_process_exchange 14_direct_send 15_receive 16_allowed_loss 17_native_pipeline)
+foreach(lesson IN ITEMS 01_session 02_tasks 03_schemas 04_connections 05_fanout 06_processes 07_configuration 08_registry 09_payload 10_logical_fields 11_message_record 12_capture 13_process_exchange 14_direct_send 15_receive 16_unacknowledged 17_native_pipeline 18_log_replay)
   add_executable(angaria_primer_${lesson} examples/primer/${lesson}.cpp)
   target_link_libraries(angaria_primer_${lesson} PRIVATE angaria)
 endforeach()
@@ -234,12 +167,52 @@ if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 
+  add_executable(angaria_admission_storage_tests
+    test/test_mapped_superblock.cpp
+    test/test_session_metadata.cpp
+    test/test_topology_metadata.cpp
+    test/test_file_configuration.cpp
+    test/test_public_runtime_storage.cpp)
+  target_include_directories(angaria_admission_storage_tests PRIVATE src)
+  target_link_libraries(angaria_admission_storage_tests PRIVATE angaria GTest::gtest_main)
+  target_compile_definitions(angaria_admission_storage_tests PRIVATE
+    ANGARIA_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/examples/trading.toml")
+  include(GoogleTest)
+  gtest_discover_tests(angaria_admission_storage_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 20)
+
+  add_executable(angaria_recorded_admission_tests test/test_recorded_admission.cpp test/test_log_archive.cpp)
+  target_include_directories(angaria_recorded_admission_tests PRIVATE src)
+  target_link_libraries(angaria_recorded_admission_tests PRIVATE angaria GTest::gtest_main)
+  gtest_discover_tests(angaria_recorded_admission_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 20)
+
+  add_executable(angaria_public_runtime_tests test/test_public_runtime_admission.cpp)
+  add_executable(angaria_public_runtime_consumer_worker test/public_runtime_consumer_worker.cpp)
+  target_link_libraries(angaria_public_runtime_consumer_worker PRIVATE angaria)
+  target_include_directories(angaria_public_runtime_tests PRIVATE src)
+  target_link_libraries(angaria_public_runtime_tests PRIVATE angaria GTest::gtest_main)
+  target_compile_definitions(angaria_public_runtime_tests PRIVATE
+    ANGARIA_PUBLIC_RUNTIME_CONSUMER_WORKER="$<TARGET_FILE:angaria_public_runtime_consumer_worker>")
+  add_dependencies(angaria_public_runtime_tests angaria_public_runtime_consumer_worker)
+  gtest_discover_tests(angaria_public_runtime_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 30)
+
+  add_executable(angaria_public_runtime_performance test/test_public_runtime_performance.cpp)
+  target_include_directories(angaria_public_runtime_performance PRIVATE src)
+  target_link_libraries(angaria_public_runtime_performance PRIVATE angaria GTest::gtest_main)
+  if(ANGARIA_ENABLE_DIAGNOSTICS)
+    target_compile_definitions(angaria_public_runtime_performance PRIVATE ANGARIA_ENABLE_DIAGNOSTICS=1)
+  endif()
+  add_test(NAME public_runtime_performance COMMAND angaria_public_runtime_performance)
+  set_tests_properties(public_runtime_performance PROPERTIES TIMEOUT 30)
+
   # These evidence checks use only Python's standard library. Keep them in
   # ordinary CI even when the optional nanomsg comparison is not built.
   add_test(NAME end_to_end_validation
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_end_to_end_validation.py")
   add_test(NAME end_to_end_coordinator
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_end_to_end_coordinator.py")
+  add_test(NAME public_runtime_controls_validation
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/test_public_runtime_controls.py")
+  set_tests_properties(public_runtime_controls_validation PROPERTIES TIMEOUT 20)
 
   # Isolate allocation replacement hooks from the ordinary correctness suite.
   add_executable(angaria_producer_log_performance test/test_producer_log_performance.cpp)
@@ -285,34 +258,10 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ipc_comparison_deadlines COMMAND angaria_ipc_comparison_tests)
     add_test(NAME ipc_comparison_smoke
-      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/ipc_comparison.py"
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/public_ipc_comparison.py"
               "$<TARGET_FILE:angaria_ipc_comparison>")
     set_tests_properties(ipc_comparison_smoke PROPERTIES TIMEOUT 120)
-    if(ANGARIA_BUILD_STALL_STUDY)
-      add_executable(angaria_recorded_spsc_worker test/recorded_spsc_worker.cpp)
-      target_include_directories(angaria_recorded_spsc_worker PRIVATE benchmarks src test)
-      target_link_libraries(angaria_recorded_spsc_worker PRIVATE angaria_recorded_spsc)
-      add_executable(angaria_recorded_spsc_tests test/test_recorded_spsc.cpp)
-      target_include_directories(angaria_recorded_spsc_tests PRIVATE benchmarks src test)
-      target_link_libraries(angaria_recorded_spsc_tests PRIVATE angaria_recorded_spsc GTest::gtest_main)
-      target_compile_definitions(angaria_recorded_spsc_tests PRIVATE
-        ANGARIA_RECORDED_SPSC_WORKER="$<TARGET_FILE:angaria_recorded_spsc_worker>")
-      add_dependencies(angaria_recorded_spsc_tests angaria_recorded_spsc_worker)
-      add_test(NAME recorded_spsc COMMAND angaria_recorded_spsc_tests)
-      set_tests_properties(recorded_spsc PROPERTIES TIMEOUT 120)
-    endif()
-  endif()
 
-  # Validate the measurement tool's results, never a machine's speed.
-  if(ANGARIA_BUILD_BENCHMARKS)
-    add_test(NAME native_benchmark_smoke
-      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/run_native.py"
-              "$<TARGET_FILE:angaria_transport_benchmark>" --smoke)
-    set_tests_properties(native_benchmark_smoke PROPERTIES TIMEOUT 60)
-    add_test(NAME native_diagnostics_smoke
-      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/run_diagnostics.py"
-              "$<TARGET_FILE:angaria_transport_diagnostics>" --smoke)
-    set_tests_properties(native_diagnostics_smoke PROPERTIES TIMEOUT 90)
   endif()
 
   add_executable(angaria_native_atomic_worker test/native_atomic_worker.cpp)
@@ -330,30 +279,6 @@ if(BUILD_TESTING)
   add_executable(angaria_native_session_worker test/native_session_worker.cpp)
   target_include_directories(angaria_native_session_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_native_session_worker PRIVATE angaria)
-
-  add_executable(angaria_native_delivery_progress_worker test/native_delivery_progress_worker.cpp)
-  target_include_directories(angaria_native_delivery_progress_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_native_delivery_progress_worker PRIVATE angaria)
-
-  add_executable(angaria_native_publication_worker test/native_publication_worker.cpp)
-  target_include_directories(angaria_native_publication_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_native_publication_worker PRIVATE angaria)
-
-  add_executable(angaria_native_source_worker test/native_source_worker.cpp)
-  target_include_directories(angaria_native_source_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_native_source_worker PRIVATE angaria)
-
-  add_executable(angaria_native_loss_worker test/native_loss_worker.cpp)
-  target_include_directories(angaria_native_loss_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_native_loss_worker PRIVATE angaria)
-
-  add_executable(angaria_native_transport_worker test/native_transport_worker.cpp)
-  target_include_directories(angaria_native_transport_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_native_transport_worker PRIVATE angaria)
-
-  add_executable(angaria_native_transport_io_worker test/native_transport_io_worker.cpp)
-  target_include_directories(angaria_native_transport_io_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_link_libraries(angaria_native_transport_io_worker PRIVATE angaria)
 
   add_executable(angaria_native_registration_worker test/native_registration_worker.cpp)
   target_include_directories(angaria_native_registration_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -403,7 +328,6 @@ if(BUILD_TESTING)
     test/test_payload.cpp
     test/test_message_record.cpp
     test/test_message.cpp
-    test/test_publication_metadata.cpp
     test/test_producer_log_format.cpp
     test/test_producer_log.cpp
     test/test_recorded_queue.cpp
@@ -412,42 +336,15 @@ if(BUILD_TESTING)
     test/test_recorded_acknowledged_queue.cpp
     test/test_recorded_progress.cpp
     test/test_recorded_queue_format.cpp
-    test/test_publication_api.cpp
-    test/test_publication_runtime.cpp
-    test/test_publication_recovery.cpp
-    test/test_source_runtime.cpp
-    test/test_source_lifecycle.cpp
-    test/test_source_deadlines.cpp
-    test/test_source_recovery.cpp
-    test/test_allowed_loss.cpp
-    test/test_loss_validation.cpp
-    test/test_loss_configuration.cpp
-    test/test_loss_redo.cpp
-    test/test_loss_recovery.cpp
-    test/test_transport_recovery.cpp
-    test/test_transport_exhaustion.cpp
-    test/test_transport_io.cpp
-    test/test_mapped_payload.cpp
-    test/test_payload_rollback.cpp
-    test/test_delivery_state.cpp
-    test/test_delivery_framing.cpp
-    test/test_delivery_compatibility.cpp
-    test/test_delivery_validation.cpp
-    test/test_delivery_progress.cpp
-    test/test_delivery_claim_cleanup.cpp
-    test/test_delivery_progress_recovery.cpp
     test/test_capture.cpp
     test/test_inspection.cpp
-    test/test_session.cpp
     test/test_configuration.cpp
-    test/test_file_configuration.cpp
     test/test_registry_snapshot.cpp
     test/test_registry_qualification.cpp
     test/test_task_catalog_validation.cpp
     test/test_identities.cpp
     test/test_api_contract.cpp
     test/test_mapped_format.cpp
-    test/test_mapped_superblock.cpp
     test/test_native_file.cpp
     test/test_native_atomic.cpp
     test/test_session_controller.cpp
@@ -455,7 +352,6 @@ if(BUILD_TESTING)
     test/test_journal_validation.cpp
     test/test_mutation_journal.cpp
     test/test_journal_bulk_redo.cpp
-    test/test_session_metadata.cpp
     test/test_runtime_session.cpp
     test/test_runtime_access.cpp
     test/test_task_registration.cpp
@@ -463,11 +359,9 @@ if(BUILD_TESTING)
     test/test_schema_metadata.cpp
     test/test_schema_registry.cpp
     test/test_schema_recovery.cpp
-    test/test_topology_metadata.cpp
     test/test_topology_registry.cpp
     test/test_topology_recovery.cpp
     test/test_topology_activation.cpp
-    test/test_endpoint_runtime.cpp
     test/test_activation_recovery.cpp
   )
   target_include_directories(angaria_tests SYSTEM PRIVATE "${cpptoml_SOURCE_DIR}/include")
@@ -482,12 +376,6 @@ if(BUILD_TESTING)
     ANGARIA_NATIVE_CONTROLLER_WORKER="$<TARGET_FILE:angaria_native_controller_worker>"
     ANGARIA_NATIVE_JOURNAL_WORKER="$<TARGET_FILE:angaria_native_journal_worker>"
     ANGARIA_NATIVE_SESSION_WORKER="$<TARGET_FILE:angaria_native_session_worker>"
-    ANGARIA_NATIVE_DELIVERY_PROGRESS_WORKER="$<TARGET_FILE:angaria_native_delivery_progress_worker>"
-    ANGARIA_NATIVE_PUBLICATION_WORKER="$<TARGET_FILE:angaria_native_publication_worker>"
-    ANGARIA_NATIVE_SOURCE_WORKER="$<TARGET_FILE:angaria_native_source_worker>"
-    ANGARIA_NATIVE_LOSS_WORKER="$<TARGET_FILE:angaria_native_loss_worker>"
-    ANGARIA_NATIVE_TRANSPORT_WORKER="$<TARGET_FILE:angaria_native_transport_worker>"
-    ANGARIA_NATIVE_TRANSPORT_IO_WORKER="$<TARGET_FILE:angaria_native_transport_io_worker>"
     ANGARIA_NATIVE_REGISTRATION_WORKER="$<TARGET_FILE:angaria_native_registration_worker>"
     ANGARIA_NATIVE_SCHEMA_WORKER="$<TARGET_FILE:angaria_native_schema_worker>"
     ANGARIA_NATIVE_TOPOLOGY_WORKER="$<TARGET_FILE:angaria_native_topology_worker>"
@@ -501,8 +389,7 @@ if(BUILD_TESTING)
   )
   target_include_directories(angaria_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(angaria_tests PRIVATE angaria GTest::gtest)
-  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_delivery_progress_worker angaria_native_publication_worker angaria_native_source_worker angaria_native_loss_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
-  add_dependencies(angaria_tests angaria_native_transport_worker angaria_native_transport_io_worker)
+  add_dependencies(angaria_tests angaria_native_atomic_worker angaria_native_controller_worker angaria_native_journal_worker angaria_native_session_worker angaria_native_registration_worker angaria_native_schema_worker angaria_native_topology_worker angaria_native_activation_worker angaria_native_registry_worker)
   add_dependencies(angaria_tests angaria_producer_log_worker)
   add_dependencies(angaria_tests angaria_recorded_queue_worker)
   add_dependencies(angaria_tests angaria_recorded_queue_independence_worker)
@@ -510,18 +397,6 @@ if(BUILD_TESTING)
 
   include(GoogleTest)
   gtest_discover_tests(angaria_tests NO_PRETTY_VALUES PROPERTIES TIMEOUT 10)
-  add_test(
-    NAME queue_demo
-    COMMAND "${CMAKE_COMMAND}" "-DDEMO=$<TARGET_FILE:angaria_queue_demo>"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/queue_demo.cmake"
-  )
-  set_tests_properties(queue_demo PROPERTIES TIMEOUT 15)
-  add_test(
-    NAME restart_demo
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/restart_demo.py"
-            "$<TARGET_FILE:angaria_queue_demo>"
-  )
-  set_tests_properties(restart_demo PROPERTIES TIMEOUT 30)
   add_test(
     NAME primer_examples
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/primer_examples.py"
@@ -535,10 +410,18 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/configuration.toml"
             "$<TARGET_FILE:angaria_primer_14_direct_send>"
             "$<TARGET_FILE:angaria_primer_15_receive>"
-            "$<TARGET_FILE:angaria_primer_16_allowed_loss>"
-            "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/allowed-loss.toml"
+            "$<TARGET_FILE:angaria_primer_16_unacknowledged>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/primer/unacknowledged.toml"
   )
   set_tests_properties(primer_examples PROPERTIES TIMEOUT 45)
+  add_test(
+    NAME log_replay_example
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/log_replay_example.py"
+            "$<TARGET_FILE:angaria_primer_15_receive>"
+            "$<TARGET_FILE:angaria_primer_18_log_replay>"
+            "$<TARGET_FILE:angaria_inspect>"
+  )
+  set_tests_properties(log_replay_example PROPERTIES TIMEOUT 45)
   add_test(
     NAME registry_walkthrough
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/registry_walkthrough.py"

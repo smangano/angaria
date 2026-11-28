@@ -2,9 +2,11 @@
 
 Milestone 3, step 3.5, framework version `0.3.5`, adds [capture stream helpers](../include/angaria/capture.h), an owning [message inspector](../include/angaria/inspection.h), and the `angaria_inspect` command. The [twelfth primer program](../examples/primer/12_capture.cpp) records Quote v1, Quote v2, Order, and Heartbeat. The generic inspector decodes them from retained Registry definitions, without including that application's message types.
 
-A **capture** is an ordinary binary stream containing consecutive [canonical message records](message-record.md). There is no additional file header, index, or schema serialization format: each entry is the existing 80-byte header followed by its declared payload. An empty stream is a valid empty capture. Native Session formats 2.0/2.1, record encoding version 1, and required features are unchanged.
+A **capture** is an ordinary binary stream containing consecutive [canonical message records](message-record.md). There is no additional file header, index, or schema serialization format: each entry is the existing 80-byte header followed by its declared payload. An empty stream is a valid empty capture. Portable record encoding remains version 1; current native Sessions independently use format 3.0 and synchronization revision 2.
 
 Capture order and duplicate publication IDs are preserved. They do not establish queue order, admission, delivery, or acknowledgment. Capture writes use ordinary streams; they are separate from Angaria's native journal and [direct Queue publication](direct-publication.md).
+
+The manual capture lessons choose `PublicationId{producer.claim(), writer.records_written() + 1}` to label records within each output file. These application-chosen identities are not native issuer results and must not be mixed into a producer log's issuance/deduplication namespace. No messaging endpoint is opened and `Task::next_publication_id()` is not called, leaving Registry setup unsealed for the schema-evolution walkthrough. Native messaging instead seals the completed catalog at first admission. Exporting actual accepted messages through [LogArchive](public-runtime-admission.md#replay-export-and-inspection) preserves their original native identities; it does not turn arbitrary capture records into accepted publications.
 
 ## Retain the source catalog
 
@@ -83,6 +85,6 @@ The CLI closes its native Session handle after obtaining the owning catalog and 
 
 Diagnostics on stderr escape control/non-ASCII bytes as `\xhh` and literal backslashes as `\\` in paths, messages, and delegated exception text. Each failure has one diagnostic line, so a malformed value paired with a control-bearing Field name cannot add terminal commands or forged error lines. The library's structured `Error` retains its original text; escaping is applied when the CLI displays it.
 
-The [primer's capture lesson](primer.md#12-capture-and-inspect-multiple-message-types) shows creation and inspection as separate commands after the creator exits. Step 3.6's [process exchange lesson](process-exchange.md) qualifies retained catalogs across schema additions and producer replacement. Native Queue transport, generalized log replay, catalog export/converters, and foreign/physically-read-only native-file tools retain their roadmap scope.
+The [primer's capture lesson](primer.md#12-capture-and-inspect-multiple-message-types) shows creation and inspection as separate commands after the creator exits. Step 3.6's [process exchange lesson](process-exchange.md) qualifies retained catalogs across schema additions and producer replacement. [Public runtime admission](public-runtime-admission.md) separately covers native Queue transport and accepted-log replay/export; portable catalog bundles, converters and foreign/physically-read-only native-file tools retain their roadmap scope.
 
 [Message records](message-record.md) · [Payloads](message-payload.md) · [Milestone 3 plan](milestones/milestone-3.md)

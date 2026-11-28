@@ -56,6 +56,12 @@ namespace angaria
     Partial
   };
 
+  enum class AcknowledgmentMode
+  {
+    Required,
+    None
+  };
+
   enum class PayloadFormat
   {
     Binary,
@@ -204,6 +210,7 @@ namespace angaria
     SelectionPolicy _selection{SelectionPolicy::Strict};
     WaitPolicy _wait{WaitPolicy::Spin};
     AcceptancePolicy _acceptance{AcceptancePolicy::AllDestinations};
+    AcknowledgmentMode _acknowledgment{AcknowledgmentMode::Required};
   };
 
   struct SessionOptions
@@ -216,6 +223,9 @@ namespace angaria
     std::optional<std::uint64_t> _segmentBytes{};
     CapacityLimits _limits{};
     PolicyDefaults _defaults{};
+    // Per-Task recording reservations, separate from the administrative journal.
+    std::uint64_t _producerLogBytes{64 * 1024 * 1024};
+    std::uint64_t _producerLogPublications{65536};
   };
 
   struct TaskDescriptor
@@ -235,6 +245,7 @@ namespace angaria
     std::optional<WaitPolicy> _wait{};
     std::optional<std::uint64_t> _randomSeed{};
     std::string _doc{};
+    std::optional<AcknowledgmentMode> _acknowledgment{};
   };
 
   struct QueueDescriptor

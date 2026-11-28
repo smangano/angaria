@@ -99,8 +99,8 @@ namespace angaria::detail::recorded
     std::vector<QueueProgress> checked_queues(const ProducerLogOptions& options)
     {
       value(encode_producer_header(options._header));
-      require(!options._queues.empty() && options._queues.size() <= std::numeric_limits<std::uint16_t>::max(),
-              ErrorCode::InvalidArgument, "Producer requires a bounded nonempty outgoing Queue list");
+      require(options._queues.size() <= std::numeric_limits<std::uint16_t>::max(),
+              ErrorCode::InvalidArgument, "Producer requires a bounded outgoing Queue list");
       std::vector<QueueProgress> queues;
       queues.reserve(options._queues.size());
       for (const auto queue : options._queues)
@@ -327,6 +327,7 @@ namespace angaria::detail::recorded
     std::optional<mapped::AtomicWord> _tail;
     TaskClaim _actor;
     std::thread::id _thread{std::this_thread::get_id()};
+    bool _threadBound{true};
     std::uint64_t _issued{};
     ProducerLogObserver* _observer{};
     bool _inAppend{};
@@ -334,7 +335,7 @@ namespace angaria::detail::recorded
     void check() const
     {
       value(_claim.check_owner());
-      require(_thread == std::this_thread::get_id(), ErrorCode::WrongOwner, "Producer log belongs to another thread");
+      require(!_threadBound || _thread == std::this_thread::get_id(), ErrorCode::WrongOwner, "Producer log belongs to another thread");
       require(!_inAppend, ErrorCode::InvalidState, "Producer log operation cannot reenter append");
       require(!_data._failed, ErrorCode::IoError, "Producer log requires reopening after validation failure");
     }
@@ -352,10 +353,11 @@ namespace angaria::detail::recorded
     LogData _data;
     std::uint64_t _pid{static_cast<std::uint64_t>(::getpid())};
     std::thread::id _thread{std::this_thread::get_id()};
+    bool _threadBound{true};
 
     void check() const
     {
-      require(_pid == static_cast<std::uint64_t>(::getpid()) && _thread == std::this_thread::get_id(),
+      require(_pid == static_cast<std::uint64_t>(::getpid()) && (!_threadBound || _thread == std::this_thread::get_id()),
               ErrorCode::WrongOwner, "Producer log reader belongs to another process or thread");
       require(!_data._failed, ErrorCode::IoError, "Producer log reader requires reopening after validation failure");
     }
@@ -398,7 +400,7 @@ namespace angaria::detail::recorded
   }
 
   Result<ProducerLog> ProducerLog::open_writer(const ProducerLogPaths& paths, const ProducerLogOptions& options,
-                                              ProducerLogObserver* observer)
+                                              ProducerLogObserver* observer, std::optional<TaskClaim> actor)
   {
     return protect<ProducerLog>([&]
     {
@@ -425,10 +427,22 @@ namespace angaria::detail::recorded
       const auto previous = incarnation.load_acquire();
       require(state->_data._records.empty() || state->_data._records.back()._publication._producer._incarnation <= previous,
               ErrorCode::IoError, "Committed publication claim exceeds persisted ownership");
-      require(previous != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded, "Producer incarnation is exhausted");
+      require(actor || previous != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded, "Producer incarnation is exhausted");
+      if (actor)
+      {
+        require(actor->_session == options._header._session && actor->_task == options._header._producer &&
+                    actor->_incarnation != 0 && actor->_incarnation >= previous,
+                ErrorCode::WrongOwner, "Authoritative Task claim differs from this producer or precedes its incarnation");
+      }
       state->_bytes = value(state->_data._mapping.writable_bytes());
       state->_tail.emplace(value(mapped::AtomicWord::bind(state->_bytes, committed_tail_offset)));
-      state->_actor = TaskClaim{options._header._session, options._header._producer, previous + 1};
+      state->_actor = actor ? *actor : TaskClaim{options._header._session, options._header._producer, previous + 1};
+      state->_threadBound = !actor.has_value();
+      if (!state->_data._records.empty() &&
+          state->_data._records.back()._publication._producer == state->_actor)
+      {
+        state->_issued = state->_data._records.back()._publication._sequence;
+      }
       state->_observer = observer;
       // One authoritative word needs no multiword owner journal. Publish before
       // exposing IDs or performing any operation of this new incarnation.
@@ -625,11 +639,13 @@ namespace angaria::detail::recorded
   {
   }
 
-  Result<ProducerLogReader> ProducerLogReader::open(const std::filesystem::path& logPath, const ProducerLogOptions& options)
+  Result<ProducerLogReader> ProducerLogReader::open(const std::filesystem::path& logPath, const ProducerLogOptions& options,
+                                                  bool threadBound)
   {
     return protect<ProducerLogReader>([&]
     {
       auto state = std::make_unique<State>();
+      state->_threadBound = threadBound;
       state->_data = open_data(logPath, options, false);
       return ProducerLogReader(std::move(state));
     });
@@ -736,6 +752,16 @@ namespace angaria::detail::recorded
       require(bool(_state), ErrorCode::InvalidState, "Producer log reader is empty or moved-from");
       _state->check();
       return acquired_end(_state->_data);
+    });
+  }
+
+  Result<std::uint64_t> ProducerLogReader::queue_sequence(QueueId queue) const
+  {
+    return protect<std::uint64_t>([&]
+    {
+      require(bool(_state), ErrorCode::InvalidState, "Producer log reader is empty or moved-from");
+      _state->check();
+      return queue_progress(_state->_data, queue, ErrorCode::InvalidArgument)._sequence;
     });
   }
 

@@ -19,9 +19,9 @@ namespace
   namespace ipc = angaria::benchmarks::ipc;
   using angaria::benchmarks::BenchmarkFailure;
 
-  ipc::Options parse_options(std::initializer_list<const char*> extra)
+  ipc::Options parse_options(std::initializer_list<const char*> extra, const char* profile = "nanomsg")
   {
-    std::vector<std::string> arguments{"ipc_comparison", "--profile", "nanomsg", "--role", "producer",
+    std::vector<std::string> arguments{"ipc_comparison", "--profile", profile, "--role", "producer",
                                        "--directory", "/unused-qualification-fixture"};
     for (const auto* argument : extra)
     {
@@ -53,6 +53,22 @@ namespace
     EXPECT_THROW((void)parse_options({"--qualification", "1", "--warmup-messages", "16"}), BenchmarkFailure);
     EXPECT_THROW((void)parse_options({"--qualification", "1", "--scenario", "backlog"}), BenchmarkFailure);
     EXPECT_THROW((void)parse_options({"--qualification", "true"}), BenchmarkFailure);
+  }
+
+  TEST(IpcComparisonQualification, PublicProfilesAreExplicitAndSupersededEnginesAreRejected)
+  {
+    // Current public admission has distinct evidence labels. Historical runs
+    // retain their source commit; aliases must not silently select a new engine.
+    for (const auto* profile : {"public-recorded", "public-acknowledged"})
+    {
+      const auto options = parse_options({"--qualification", "1"}, profile);
+      EXPECT_TRUE(ipc::is_public(options._profile));
+      EXPECT_FALSE(ipc::is_recorded(options._profile));
+      EXPECT_EQ(ipc::profile_name(options._profile), profile);
+      EXPECT_THROW((void)parse_options({}, profile), BenchmarkFailure);
+    }
+    EXPECT_THROW((void)parse_options({"--qualification", "1"}, "angaria"), BenchmarkFailure);
+    EXPECT_THROW((void)parse_options({"--qualification", "1"}, "recorded-spsc"), BenchmarkFailure);
   }
 
   TEST(IpcComparisonQualification, ConsumerWorkAndPauseHaveExplicitMeasuredBounds)

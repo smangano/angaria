@@ -29,8 +29,10 @@ from run_native import ROOT, check, metadata, sha256
 
 PROFILES = ("angaria", "nanomsg")
 RECORDED_PROFILES = ("recorded-connection", "recorded-acknowledged-connection")
-ACKNOWLEDGED_PROFILES = ("angaria", "recorded-acknowledged-connection")
-IDENTITY_PROFILES = ("angaria", "recorded-spsc", *RECORDED_PROFILES)
+PUBLIC_PROFILES = ("public-recorded", "public-acknowledged")
+LOOKUP_PROFILES = (*RECORDED_PROFILES, *PUBLIC_PROFILES)
+ACKNOWLEDGED_PROFILES = ("angaria", "recorded-acknowledged-connection", "public-acknowledged")
+IDENTITY_PROFILES = ("angaria", "recorded-spsc", *LOOKUP_PROFILES)
 ROLES = ("producer", "consumer")
 DIMENSIONS = ("messages", "history", "payload_bytes", "interval_ns", "socket_buffer_bytes", "budget_ms")
 MAX_STDOUT = 4 * 1024 * 1024
@@ -653,7 +655,7 @@ def parse_arguments():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--output", type=Path, required=True, help="new result directory")
     parser.add_argument("--blocks", type=int, default=5, help="ABBA/BAAB blocks; two runs per profile per block")
-    parser.add_argument("--angaria-profile", choices=("angaria", *RECORDED_PROFILES), default="angaria",
+    parser.add_argument("--angaria-profile", choices=RECORDED_PROFILES, default="recorded-acknowledged-connection",
                         help="Angaria side of the matched pair; the default retains the current acknowledged runtime")
     parser.add_argument("--ring-slots", type=int, default=8, help="fixed Angaria Queue credit capacity for this series")
     parser.add_argument("--messages", type=int, default=16)
@@ -715,9 +717,9 @@ def comparison_metadata(executable, options):
         if path.is_file() and path.suffix in (".cpp", ".h") and " 2." not in path.name:
             sources[str(path.relative_to(ROOT))] = sha256(path)
     sources["benchmarks/run_ipc_comparison.py"] = sha256(Path(__file__))
-    if (ROOT / "test/ipc_comparison.py").is_file():
-        sources["test/ipc_comparison.py"] = sha256(ROOT / "test/ipc_comparison.py")
-    if getattr(options, "angaria_profile", "angaria") in RECORDED_PROFILES:
+    if (ROOT / "test/public_ipc_comparison.py").is_file():
+        sources["test/public_ipc_comparison.py"] = sha256(ROOT / "test/public_ipc_comparison.py")
+    if getattr(options, "angaria_profile", "angaria") in LOOKUP_PROFILES:
         for directory in ("src", "include/angaria", "benchmarks"):
             for path in sorted((ROOT / directory).rglob("*")):
                 if path.is_file() and path.suffix in (".h", ".cpp") and " 2." not in path.name:

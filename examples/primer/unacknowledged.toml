@@ -1,0 +1,54 @@
+# Copy beside a fresh Session path before running lesson 16.
+config_version = 2
+
+[session]
+name = "Recorded unacknowledged ticks"
+directory = "unacknowledged-session"
+max_log_bytes = 1048576
+producer_log_bytes = 1048576
+producer_log_publications = 64
+
+[limits]
+tasks = 2
+queues = 1
+source_sets = 1
+publishing_sets = 0
+memberships_per_set = 1
+fields = 1
+message_schemas = 1
+symbols = 0
+string_pool_bytes = 0
+
+[defaults.queue]
+ring_capacity = 2
+delivery = "recover_from_log"
+
+[defaults.source_set]
+acknowledgment = "required"
+
+[[tasks]]
+name = "Feed"
+
+[[tasks]]
+name = "Consumer"
+
+[[source_sets]]
+name = "ConsumerInputs"
+owner = "Consumer"
+acknowledgment = "none"
+
+[[queues]]
+name = "Ticks"
+producer = "Feed"
+source_set = "ConsumerInputs"
+
+[[fields]]
+name = "PriceTicks"
+id = 0xEE000001
+type = "int64"
+
+[[messages]]
+name = "Tick"
+type = 1
+version = 1
+fields = ["PriceTicks"]

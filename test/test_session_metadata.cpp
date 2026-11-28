@@ -84,23 +84,25 @@ namespace
 
   std::vector<std::byte> golden_session()
   {
-    // Independently authored from the format table: 128 fixed bytes followed
+    // Independently authored from the format table: 144 fixed bytes followed
     // by name, framework version, application version, user and original path.
-    std::vector<std::byte> bytes(128);
-    for (const auto offset : {0, 2, 4, 6, 8, 10})
+    std::vector<std::byte> bytes(144);
+    for (const auto offset : {0, 2, 4, 6, 8, 10, 12})
     {
       put_integer(bytes, offset, 1, 2);
     }
     put_integer(bytes, 16, 0xfffffffffffffff9, 8);
     put_integer(bytes, 24, 8, 8);
     put_integer(bytes, 40, 0x1122334455667788, 8);
-    const std::array<std::uint64_t, 5> offsets{8384, 8385, 8390, 8393, 8394};
+    const std::array<std::uint64_t, 5> offsets{8400, 8401, 8406, 8409, 8410};
     const std::array<std::uint64_t, 5> lengths{1, 5, 3, 1, 2};
     for (std::size_t index = 0; index != offsets.size(); ++index)
     {
       put_integer(bytes, 48 + 16 * index, offsets[index], 8);
       put_integer(bytes, 56 + 16 * index, lengths[index], 8);
     }
+    put_integer(bytes, 128, 67108864, 8);
+    put_integer(bytes, 136, 65536, 8);
     append_text(bytes, "S0.2.4simu/d");
     return bytes;
   }
@@ -209,7 +211,7 @@ namespace
     for (const auto offset : {0, 2, 4, 6, 8, 10, 12, 15, 24})
     {
       auto body = golden_session();
-      put_integer(body, offset, offset >= 12 && offset <= 15 ? 1 : 0, offset >= 12 && offset <= 15 ? 1 : 2);
+      put_integer(body, offset, offset == 15 ? 1 : 0, offset == 15 ? 1 : 2);
       expect_error(mapped::decode_session_definition(body, record_offset, configuration()), ErrorCode::IoError);
     }
     for (const auto length : {0u, 16u, 127u, 139u})

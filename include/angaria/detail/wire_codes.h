@@ -49,6 +49,7 @@ namespace angaria::detail::wire
                                                  SelectionPolicy::WeightedRandom};
   inline constexpr std::array wait_policies{WaitPolicy::Spin, WaitPolicy::EventFd};
   inline constexpr std::array acceptance_policies{AcceptancePolicy::AllDestinations, AcceptancePolicy::Partial};
+  inline constexpr std::array acknowledgment_modes{AcknowledgmentMode::Required, AcknowledgmentMode::None};
   inline constexpr std::array payload_formats{PayloadFormat::Binary, PayloadFormat::Json, PayloadFormat::Xml,
                                               PayloadFormat::Csv, PayloadFormat::Text};
   inline constexpr std::array task_kinds{TaskKind::Process, TaskKind::Thread};
@@ -75,5 +76,5 @@ namespace angaria::detail::wire
       ErrorCode::WrongOwner, ErrorCode::ReadOnlyRegistry, ErrorCode::NotActive,
       ErrorCode::UnsupportedPolicy, ErrorCode::SchemaConflict, ErrorCode::LogFull,
       ErrorCode::StaleDelivery, ErrorCode::OutputBufferTooSmall, ErrorCode::HistoryUnavailable,
-      ErrorCode::IoError, ErrorCode::OutcomeUnknown};
+      ErrorCode::IoError, ErrorCode::OutcomeUnknown, ErrorCode::QueueFull};
 } // namespace angaria::detail::wire

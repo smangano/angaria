@@ -1,7 +1,7 @@
 #pragma once
 
-// Private, fixed-topology recorded/unacknowledged point-to-point endpoints.
-// Public Session admission and integrated Task lifecycle follow separately.
+// Private fixed-topology transport beneath public Task admission. Established
+// endpoints use cached bindings and retain no Session administrative gate.
 #include "producer_log.h"
 #include "recorded_progress.h"
 
@@ -13,6 +13,12 @@
 
 namespace angaria::detail::recorded
 {
+  struct RecordedSchemaBinding
+  {
+    SchemaId _schema{};
+    std::uint64_t _reference{};
+  };
+
   struct RecordedQueueOptions
   {
     ProducerLogPaths _producerPaths;
@@ -33,6 +39,10 @@ namespace angaria::detail::recorded
     std::uint64_t _topologyRevision{};
     std::uint64_t _generation{1};
     std::uint64_t _capacity{32};
+    // Public admission supplies every sealed exact schema and its authoritative
+    // definition reference. An empty list retains the private single-schema
+    // fixture shorthand above, not a second public delivery engine.
+    std::vector<RecordedSchemaBinding> _schemaBindings;
   };
 
   // Known unaccepted backpressure, without allocating an Error or retiring the
@@ -67,8 +77,10 @@ namespace angaria::detail::recorded
   };
 
   // Offline bootstrap, after catalog validation and before publishing paths.
-  // The initial profile has exactly one outgoing Queue per producer stream.
+  // Public admission creates a Task log once, then creates each connection.
+  // create_recorded_queue is a convenience for private one-connection fixtures.
   OperationResult create_recorded_queue(const RecordedQueueOptions& options);
+  OperationResult create_recorded_connection(const RecordedQueueOptions& options);
 
   class RecordedProducer
   {
@@ -82,6 +94,8 @@ namespace angaria::detail::recorded
 
     static Result<RecordedProducer> open(const RecordedQueueOptions& options,
                                           RecordedQueueObserver* observer = nullptr);
+    static Result<RecordedProducer> open_shared(const RecordedQueueOptions& options,
+        std::shared_ptr<ProducerLog> log, RecordedQueueObserver* observer = nullptr);
     Result<TaskClaim> claim() const;
     Result<PublicationId> next_publication_id();
     RecordedSendResult try_send(PublicationId publication, const MessageView& message);
@@ -107,7 +121,8 @@ namespace angaria::detail::recorded
     RecordedConsumer& operator=(const RecordedConsumer&) = delete;
 
     static Result<RecordedConsumer> open(const RecordedQueueOptions& options,
-                                          RecordedQueueObserver* observer = nullptr);
+                                          RecordedQueueObserver* observer = nullptr,
+                                          std::optional<TaskClaim> actor = {});
     Result<TaskClaim> claim() const;
     // Nonblocking. A call ends the preceding borrow, including timeout/error.
     // Received views retain exact schema decoding metadata; copy_message()
@@ -131,7 +146,8 @@ namespace angaria::detail::recorded
     RecordedAcknowledgedConsumer& operator=(const RecordedAcknowledgedConsumer&) = delete;
 
     static Result<RecordedAcknowledgedConsumer> open(const RecordedQueueOptions& options,
-        RecordedQueueObserver* observer = nullptr, ProgressObserver* progressObserver = nullptr);
+        RecordedQueueObserver* observer = nullptr, ProgressObserver* progressObserver = nullptr,
+        std::optional<TaskClaim> actor = {});
     Result<TaskClaim> claim() const;
     // Timestamp overrides are private qualification inputs; an absent value
     // samples the runtime UTC clock. Existing pins retain their original time.

@@ -4,13 +4,15 @@
 // by the adapter; successful fill/validation/hash calls allocate no storage.
 #include "angaria/detail/byte_operations.h"
 #include "angaria/detail/checked_arithmetic.h"
+#include "angaria/detail/error_support.h"
 #include "angaria/detail/text_escaping.h"
-#include "transport_support.h"
+#include "angaria/runtime.h"
 #include "performance_diagnostics.h"
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -22,8 +24,59 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <utility>
 #include <sys/resource.h>
 #include <time.h>
+
+namespace angaria::benchmarks
+{
+  // IPC-tool error and option helpers belong with this benchmark's control
+  // protocol. The former Session-gated transport harness is no longer built.
+  struct BenchmarkFailure
+  {
+    Error _error;
+  };
+
+  template <typename T>
+  T value(Result<T> result)
+  {
+    return detail::value_or_throw<BenchmarkFailure>(std::move(result));
+  }
+
+  inline void require(bool condition, std::string_view message)
+  {
+    if (!condition)
+    {
+      throw BenchmarkFailure{Error{ErrorCode::InvalidState, std::string{message}, "benchmark"}};
+    }
+  }
+
+  inline std::uint64_t parse_count(std::string_view text, std::string_view name)
+  {
+    std::uint64_t result{};
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), result);
+    if (text.empty() || parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
+    {
+      throw BenchmarkFailure{Error{ErrorCode::InvalidArgument,
+          "Expected an unsigned decimal integer", std::string{name}}};
+    }
+    return result;
+  }
+
+  inline void check_report(const PublicationReport& report, PublicationId publication, QueueId queue)
+  {
+    if (report._error != ErrorCode::None)
+    {
+      throw BenchmarkFailure{Error{report._error, "Publication returned an error", "benchmark.send"}};
+    }
+    require(report._publication == publication && report._status == PublicationStatus::Accepted &&
+                report._destinations.size() == 1 && report._destinations[0]._queue == queue &&
+                report._destinations[0]._status == DestinationStatus::Accepted &&
+                report._destinations[0]._reason == ErrorCode::None,
+            "Publication was not accepted by its sole destination");
+  }
+}
 
 namespace angaria::benchmarks::ipc
 {
@@ -33,11 +86,11 @@ namespace angaria::benchmarks::ipc
 
   enum class Profile
   {
-    Angaria,
     Nanomsg,
-    RecordedSpsc,
     RecordedConnection,
-    RecordedAcknowledgedConnection
+    RecordedAcknowledgedConnection,
+    PublicRecorded,
+    PublicAcknowledged
   };
 
   enum class Role
@@ -49,10 +102,10 @@ namespace angaria::benchmarks::ipc
 
   inline std::string_view profile_name(Profile profile)
   {
-    return profile == Profile::Angaria ? "angaria" :
-           profile == Profile::RecordedSpsc ? "recorded-spsc" :
-           profile == Profile::RecordedConnection ? "recorded-connection" :
-           profile == Profile::RecordedAcknowledgedConnection ? "recorded-acknowledged-connection" : "nanomsg";
+    return profile == Profile::RecordedConnection ? "recorded-connection" :
+           profile == Profile::RecordedAcknowledgedConnection ? "recorded-acknowledged-connection" :
+           profile == Profile::PublicRecorded ? "public-recorded" :
+           profile == Profile::PublicAcknowledged ? "public-acknowledged" : "nanomsg";
   }
 
   inline bool is_recorded(Profile profile)
@@ -62,7 +115,12 @@ namespace angaria::benchmarks::ipc
 
   inline bool is_acknowledged(Profile profile)
   {
-    return profile == Profile::Angaria || profile == Profile::RecordedAcknowledgedConnection;
+    return profile == Profile::RecordedAcknowledgedConnection || profile == Profile::PublicAcknowledged;
+  }
+
+  inline bool is_public(Profile profile)
+  {
+    return profile == Profile::PublicRecorded || profile == Profile::PublicAcknowledged;
   }
 
   inline std::string_view role_name(Role role)
@@ -79,7 +137,7 @@ namespace angaria::benchmarks::ipc
 
   struct Options
   {
-    Profile _profile = Profile::Angaria;
+    Profile _profile = Profile::PublicAcknowledged;
     Role _role = Role::Setup;
     std::filesystem::path _directory;
     std::uint64_t _messages = 16;
@@ -118,13 +176,14 @@ namespace angaria::benchmarks::ipc
       const std::string_view argument{argv[++index]};
       if (flag == "--profile")
       {
-        require(!haveProfile && (argument == "angaria" || argument == "nanomsg" || argument == "recorded-spsc" ||
-                                 argument == "recorded-connection" || argument == "recorded-acknowledged-connection"),
-                "Expected one --profile angaria|nanomsg|recorded-spsc|recorded-connection|recorded-acknowledged-connection");
-        options._profile = argument == "angaria" ? Profile::Angaria :
-                           argument == "recorded-spsc" ? Profile::RecordedSpsc :
-                           argument == "recorded-connection" ? Profile::RecordedConnection :
-                           argument == "recorded-acknowledged-connection" ? Profile::RecordedAcknowledgedConnection : Profile::Nanomsg;
+        require(!haveProfile && (argument == "nanomsg" || argument == "recorded-connection" ||
+                                 argument == "recorded-acknowledged-connection" || argument == "public-recorded" ||
+                                 argument == "public-acknowledged"),
+                "Expected --profile nanomsg|recorded-connection|recorded-acknowledged-connection|public-recorded|public-acknowledged");
+        options._profile = argument == "recorded-connection" ? Profile::RecordedConnection :
+                           argument == "recorded-acknowledged-connection" ? Profile::RecordedAcknowledgedConnection :
+                           argument == "public-recorded" ? Profile::PublicRecorded :
+                           argument == "public-acknowledged" ? Profile::PublicAcknowledged : Profile::Nanomsg;
         haveProfile = true;
       }
       else if (flag == "--role")
@@ -211,9 +270,6 @@ namespace angaria::benchmarks::ipc
     require(options._ringSlots >= 1 && options._ringSlots <= 128, "Ring slots must be in 1..128");
     require(detail::diagnostics::instrumentation_enabled || options._collectionName == "none",
             "Diagnostics collection requires an instrumented study build");
-#if !defined(ANGARIA_BUILD_STALL_STUDY) || !ANGARIA_BUILD_STALL_STUDY
-    require(options._profile != Profile::RecordedSpsc, "SPSC profile requires the experimental study build");
-#endif
     require(haveProfile && haveRole && haveDirectory, "IPC benchmark requires profile, role and directory");
     require(options._messages >= 1 && options._messages <= (options._qualification ? 262'144 : 128),
             "Messages exceed the selected benchmark mode's limit");
@@ -221,6 +277,8 @@ namespace angaria::benchmarks::ipc
             "History exceeds the selected benchmark mode's limit");
     require(!options._qualification || options._scenario == "concurrent",
             "End-to-end qualification requires the concurrent scenario");
+    require(!is_public(options._profile) || options._qualification,
+            "Public runtime profiles use the qualification evidence format");
     require(options._qualification || (options._warmupMessages == 0 && options._processingDelayNs == 0 &&
                 options._pauseAt == 0 && options._pauseNs == 0 && !options._pacingSpin),
             "Warmup, processing delay, pause and spin pacing require qualification mode");

@@ -162,7 +162,8 @@ def walkthrough(executable, fixture, session, workspace):
         retried = check_snapshot(command(executable, "inspect", session))
         check(retried["SNAPSHOT"][0]["revision"] == header["revision"], "Exact registration/activation retries appended revisions")
 
-        # An owner holds endpoints after its original Task variable has ended.
+        # A metadata-only owner retains its Task claim until exit; no messaging
+        # endpoint is opened, so later Registry changes remain available.
         # Only this script's child is killed, then reaped before replacement.
         owner = start("owner", session, "--hold")
         expect_line(owner, "READY owner incarnation=1")

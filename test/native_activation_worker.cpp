@@ -280,26 +280,6 @@ int main(int argc, char** argv)
       report(static_cast<std::uint64_t>(require_value(registry.source_members(SourceQueueSetId{1})).size()));
       return 0;
     }
-    if (mode == "hold_endpoints")
-    {
-      // Endpoint states retain the real Task claim after its original handle
-      // closes. No send/receive or delivery cleanup is being modeled here.
-      auto owner = require_value(session.attach_task(actor));
-      const auto incarnation = owner.claim()._incarnation;
-      auto writer = require_value(owner.open_writer(QueueId{1}));
-      auto source = require_value(owner.open_source_set(SourceQueueSetId{1}));
-      auto publishing = require_value(owner.open_publishing_set(PublishingQueueSetId{3}));
-      {
-        auto closing = std::move(owner);
-      }
-      report('H');
-      report(static_cast<std::uint64_t>(writer.id()));
-      report(static_cast<std::uint64_t>(source.id()));
-      report(static_cast<std::uint64_t>(publishing.id()));
-      report(incarnation);
-      wait_for_parent();
-      return 0;
-    }
     if (mode == "register")
     {
       auto owner = require_value(session.attach_task(actor));

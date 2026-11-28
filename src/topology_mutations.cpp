@@ -1,3 +1,4 @@
+#include "public_runtime_storage.h"
 #include "topology_mutations.h"
 
 #include "angaria/detail/checked_arithmetic.h"
@@ -527,6 +528,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       const auto topology = runtime_topology(access);
       switch (change._operation)
       {

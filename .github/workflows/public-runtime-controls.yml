@@ -1,0 +1,52 @@
+name: Matched public and private runtime controls (on demand)
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controls:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-public-controls'
+    name: Linux x86_64 public admission controls
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check native architecture
+        run: test "$(uname -m)" = x86_64
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ libboost-dev python3
+      - name: Check control ordering and summaries
+        run: python3 -B test/test_public_runtime_controls.py
+      - name: Configure ordinary Release profiles
+        run: >-
+          cmake -S . -B build/controls -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=OFF -DANGARIA_BUILD_BENCHMARKS=ON
+          -DANGARIA_BUILD_IPC_COMPARISON=ON -DANGARIA_ENABLE_DIAGNOSTICS=OFF
+          -DANGARIA_ENABLE_CACHEGRIND=OFF
+      - name: Build matched profiles in one executable
+        run: cmake --build build/controls --target angaria_ipc_comparison --parallel 3
+      - name: Compare public admission with the private core and nanomsg
+        run: >-
+          python3 -B benchmarks/public_runtime_controls.py collect build/controls/angaria_ipc_comparison
+          --output build/public-runtime-controls --source-commit "$(git rev-parse HEAD)"
+          --host-label "GitHub hosted Ubuntu 24.04 x86_64; matched public/private admission controls"
+      - name: Verify retained raw evidence and published summary
+        run: python3 -B benchmarks/public_runtime_controls.py verify build/public-runtime-controls
+      - name: Retain all control attempts and provenance
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: public-runtime-controls-linux-x86_64
+          path: build/public-runtime-controls/
+          if-no-files-found: warn
+          retention-days: 14

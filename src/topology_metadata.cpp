@@ -125,6 +125,8 @@ namespace angaria::detail::mapped
     void check_source(const SourceQueueSetDescriptor& descriptor, ErrorCode code)
     {
       check_text(descriptor._name, descriptor._doc, "source_set.name", "source_set.doc", code);
+      codec_require(!descriptor._acknowledgment || wire::encode(*descriptor._acknowledgment,
+                    wire::acknowledgment_modes).has_value(), code, "source_set.acknowledgment", "Unknown acknowledgment mode");
       if (descriptor._selection)
       {
         static_cast<void>(selection_code(*descriptor._selection, code));
@@ -372,6 +374,8 @@ namespace angaria::detail::mapped
       write_unsigned_le<std::uint16_t>(bytes, 64, static_cast<std::uint16_t>(descriptor._owner));
       write_unsigned_le<std::uint16_t>(bytes, 66, selection_code(*descriptor._selection, ErrorCode::InvalidArgument));
       write_unsigned_le<std::uint16_t>(bytes, 68, wait_code(*descriptor._wait, ErrorCode::InvalidArgument));
+      write_unsigned_le<std::uint16_t>(bytes, 70,
+          *wire::encode(descriptor._acknowledgment.value_or(AcknowledgmentMode::Required), wire::acknowledgment_modes));
       write_unsigned_le<std::uint64_t>(bytes, 72, descriptor._randomSeed.value_or(0));
       write_members(bytes, definition._members, 80, recordOffset + 64);
       return bytes;
@@ -389,13 +393,15 @@ namespace angaria::detail::mapped
     {
       codec_require(immutableBody.size() >= set_fixed_bytes, ErrorCode::IoError, "source_set.definition", "Truncated Source body");
       const auto begin = body_begin(recordOffset, immutableBody.size(), ErrorCode::IoError);
-      codec_require(all_zero(immutableBody.subspan(70, 2)), ErrorCode::IoError, "source_set.definition", "Reserved Source bytes are nonzero");
       SourceDefinition definition;
       definition._id = static_cast<SourceQueueSetId>(read_common(immutableBody, definition._registration, definition._state));
       auto& descriptor = definition._descriptor;
       descriptor._owner = static_cast<TaskId>(read_unsigned_le<std::uint16_t>(immutableBody, 64));
       descriptor._selection = decode_selection(read_unsigned_le<std::uint16_t>(immutableBody, 66));
       descriptor._wait = decode_wait(read_unsigned_le<std::uint16_t>(immutableBody, 68));
+      const auto acknowledgment = wire::decode(read_unsigned_le<std::uint16_t>(immutableBody, 70), wire::acknowledgment_modes);
+      codec_require(acknowledgment.has_value(), ErrorCode::IoError, "source_set.acknowledgment", "Unknown stored acknowledgment mode");
+      descriptor._acknowledgment = *acknowledgment;
       const auto seed = read_unsigned_le<std::uint64_t>(immutableBody, 72);
       if (*descriptor._selection == SelectionPolicy::WeightedRandom)
       {

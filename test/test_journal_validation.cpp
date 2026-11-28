@@ -2,7 +2,6 @@
 // to mutate its target. The allowlist protects immutable history, reserved bytes, and
 // engine-owned roots; application code submits operations through Session/Task instead.
 
-#include "wire_fixture.h"
 #include "result_helpers.h"
 #include "journal_validation.h"
 
@@ -33,11 +32,6 @@ namespace
     EXPECT_FALSE(error._message.empty());
   }
 
-  void put_word(std::span<std::byte> bytes, std::size_t offset, std::uint64_t value)
-  {
-    angaria::test_support::put_integer(bytes, offset, value);
-  }
-
   TEST(JournalRecordLookup, ResolvesOnlyExactBoundariesAcrossTheOrderedRange)
   {
     // The compact replay reader must retain exact reference validation when
@@ -64,19 +58,15 @@ namespace
   class JournalValidationTest : public testing::Test
   {
   protected:
-    mapped::JournalRecordRange publication() const
+    mapped::JournalRecordRange administrative_definition() const
     {
-      // This local fixture describes only the receipt geometry used by the
-      // target validator; registered message semantics are a separate layer.
       mapped::RecordEnvelope envelope;
-      envelope._kind = 9;
-      envelope._totalBytes = 448;
+      envelope._kind = 2;
+      envelope._totalBytes = 192;
       envelope._immutableBytes = 128;
       envelope._generation = 1;
       envelope._readiness = 2;
-      std::array<std::byte, 128> body{};
-      put_word(body, 96, _layout._arenaBegin + 192);
-      put_word(body, 104, 2);
+      const std::array<std::byte, 128> body{};
       return require_value(mapped::validate_journal_record(_layout._arenaBegin, envelope, body,
                                                            _layout._arenaBegin));
     }
@@ -101,24 +91,26 @@ namespace
                                                                 .memberships_per_set(1));
   };
 
-  // Each retained destination reserves mutable receipt state for delivery progress.
-  // Only its seven declared words are generic redo targets; recovery space remains protected.
-  TEST_F(JournalValidationTest, PublicationReceiptsExposeOnlyTheirSevenStateWords)
+  // Processing receipts belong to producer/connection files. Their former
+  // Session-journal record kinds must never expose mutable receipt targets.
+  TEST_F(JournalValidationTest, ProducerMessageAndRetryKindsAreRejectedBeforeExposingMutableRanges)
   {
-    const std::array records{publication()};
-    for (const auto receipt : {std::uint64_t{0}, std::uint64_t{128}})
+    for (const auto kind : {9u, 10u})
     {
-      const auto begin = records[0]._mutableBegin + receipt;
-      for (std::uint64_t offset = 0; offset < 56; offset += 8)
-      {
-        const std::array commands{write_range(begin + offset)};
-        require_value(mapped::validate_redo_targets(commands, _layout, records));
-      }
-      for (const auto offset : {std::uint64_t{56}, std::uint64_t{64}, std::uint64_t{120}})
-      {
-        const std::array commands{write_range(begin + offset)};
-        expect_error(mapped::validate_redo_targets(commands, _layout, records));
-      }
+      mapped::RecordEnvelope envelope;
+      envelope._kind = static_cast<std::uint16_t>(kind);
+      envelope._totalBytes = 448;
+      envelope._immutableBytes = 128;
+      envelope._generation = 1;
+      envelope._readiness = 2;
+      const std::array<std::byte, 128> body{};
+      const auto result = mapped::validate_journal_record(_layout._arenaBegin, envelope, body, _layout._arenaBegin);
+      ASSERT_TRUE(std::holds_alternative<Error>(result));
+      EXPECT_EQ(std::get<Error>(result)._code, ErrorCode::IoError);
+      const auto preflight = mapped::validate_journal_record(_layout._arenaBegin, envelope, body,
+          _layout._arenaBegin, ErrorCode::InvalidArgument);
+      ASSERT_TRUE(std::holds_alternative<Error>(preflight));
+      EXPECT_EQ(std::get<Error>(preflight)._code, ErrorCode::UnsupportedPolicy);
     }
   }
 
@@ -126,11 +118,11 @@ namespace
   // Whole-stream validation is what lets replay reject malformed intent before any partial repair.
   TEST_F(JournalValidationTest, AReservedLaterWordRejectsTheCompleteRangeOrStream)
   {
-    const std::array records{publication()};
-    const auto receipt = records[0]._mutableBegin;
-    const std::array crossing{write_range(receipt + 48, 16)};
+    const std::array records{administrative_definition()};
+    const auto task = section_offset(mapped::SectionKind::TaskState);
+    const std::array crossing{write_range(task + 72, 16)};
     expect_error(mapped::validate_redo_targets(crossing, _layout, records));
-    const std::array commands{write_range(receipt), write_range(receipt + 128 + 120)};
+    const std::array commands{write_range(task), write_range(task + 80)};
     const auto before = commands;
     expect_error(mapped::validate_redo_targets(commands, _layout, records, ErrorCode::InvalidArgument),
                  ErrorCode::InvalidArgument);
@@ -141,7 +133,7 @@ namespace
   // that installs allocation, revision, manifest, and generation roots as one final sequence.
   TEST_F(JournalValidationTest, ImmutableRecordsAndOwnedControlWordsAreNeverRedoTargets)
   {
-    const std::array records{publication()};
+    const std::array records{administrative_definition()};
     const auto record = records[0]._offset;
     const std::array<std::uint64_t, 11> targets{
         record, record + 48, record + 56, record + 64, record + 184,
@@ -152,7 +144,7 @@ namespace
       const std::array commands{write_range(target)};
       expect_error(mapped::validate_redo_targets(commands, _layout, records));
     }
-    for (const auto target : {std::uint64_t{72}, std::uint64_t{112}})
+    for (const auto target : {std::uint64_t{72}, std::uint64_t{112}, std::uint64_t{184}})
     {
       const std::array commands{write_range(target)};
       require_value(mapped::validate_redo_targets(commands, _layout, records));

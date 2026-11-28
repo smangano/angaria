@@ -1349,7 +1349,9 @@ namespace
     EXPECT_FALSE(require_value(session.registry().task_status(TaskId{1}))._attached);
     auto replacement = require_value(session.attach_task(TaskId{1}));
     EXPECT_EQ(replacement.claim()._incarnation, 2u);
-    EXPECT_EQ(require_value(replacement.next_publication_id())._sequence, 1u);
+    // Issuing an ID begins operational admission; Draft Queues are not a
+    // completed messaging catalog, even though Task replacement is valid.
+    expect_error(replacement.next_publication_id(), ErrorCode::NotActive);
     EXPECT_EQ(observe()._snapshot._tail, before._snapshot._tail);
     EXPECT_EQ(observe()._snapshot._accounted, before._snapshot._accounted);
     EXPECT_EQ(require_value(session.registry().metadata(feed))._createdAt, metadata._createdAt);

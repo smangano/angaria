@@ -20,15 +20,17 @@ from producer_log_append_study import load_json, require, write_json
 
 
 PROFILES = ("recorded-connection", "recorded-acknowledged-connection", "nanomsg",
-            "angaria", "recorded-spsc")
+            "angaria", "recorded-spsc", "public-recorded", "public-acknowledged")
 LABELS = {
     "recorded-connection": "Angaria: recorded / unacknowledged",
     "recorded-acknowledged-connection": "Angaria: recorded / acknowledged",
     "nanomsg": "nanomsg IPC: unrecorded / unacknowledged",
     "angaria": "Legacy public Angaria: recorded / acknowledged",
     "recorded-spsc": "Legacy current-log SPSC experiment",
+    "public-recorded": "Public Angaria: recorded / unacknowledged",
+    "public-acknowledged": "Public Angaria: recorded / acknowledged",
 }
-COLORS = dict(zip(PROFILES, ("#168469", "#356eab", "#cc702d", "#9a568f", "#777777")))
+COLORS = dict(zip(PROFILES, ("#168469", "#356eab", "#cc702d", "#9a568f", "#777777", "#168469", "#356eab")))
 
 # Keys name reconstructed values, never a percentile pooled across processes or
 # attempts. An absent ACK or insufficient tail sample stays absent in the plot.

@@ -53,7 +53,7 @@ Source/executable hashes, compiler/build settings, exact invocation, tool versio
 
 ## Request a GitHub profile
 
-The separate [Cachegrind workflow](../.github/workflows/cachegrind.yml) runs on Ubuntu 24.04 x86_64 with a 30-minute job limit. It builds only `angaria_transport_diagnostics`, then runs the nine cases above. It retains the raw results and matrix as `cachegrind-linux-x86_64-cycle` for **14 days**, including artifacts from a failed profiling attempt. Download any evidence needed for longer-term analysis before expiration.
+The separate [Cachegrind workflow](https://github.com/smangano/angaria/blob/b4ec8ae/.github/workflows/cachegrind.yml) runs on Ubuntu 24.04 x86_64 with a 30-minute job limit. It builds only `angaria_transport_diagnostics`, then runs the nine cases above. It retains the raw results and matrix as `cachegrind-linux-x86_64-cycle` for **14 days**, including artifacts from a failed profiling attempt. Download any evidence needed for longer-term analysis before expiration.
 
 Add the **`profile-cachegrind`** label to a pull request to request a run for that PR's head commit. The trigger is the `labeled` activity, so later pushes do not automatically repeat the profile. Remove and reapply the label to request the newer commit. Manual dispatch requires the workflow to exist on the default branch; then select the intended ref. GitHub documents the [event and manual-dispatch rules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
 

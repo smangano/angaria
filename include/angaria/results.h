@@ -3,6 +3,7 @@
 #include "angaria/identities.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <variant>
@@ -31,7 +32,8 @@ namespace angaria
     OutputBufferTooSmall,
     HistoryUnavailable,
     IoError,
-    OutcomeUnknown
+    OutcomeUnknown,
+    QueueFull
   };
 
   struct Error
@@ -58,6 +60,9 @@ namespace angaria
     QueueId _queue{};
     DestinationStatus _status{DestinationStatus::Rejected};
     ErrorCode _reason{ErrorCode::InvalidState};
+    // Accepted point-to-point sequence, usable with the writer's committed
+    // acknowledgment watermark. Rejected/unknown destinations have no sequence.
+    std::optional<std::uint64_t> _queueSequence{};
   };
 
   enum class PublicationStatus

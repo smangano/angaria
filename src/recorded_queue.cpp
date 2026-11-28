@@ -92,7 +92,20 @@ namespace angaria::detail::recorded
       return *selected;
     }
 
-    BinaryPayloadCodec checked_options(const RecordedQueueOptions& options)
+    struct BoundSchema
+    {
+      SchemaId _schema;
+      std::uint64_t _reference;
+      BinaryPayloadCodec _codec;
+      MessageView _messageTemplate;
+    };
+
+    auto schema_key(SchemaId schema)
+    {
+      return std::pair{static_cast<std::uint16_t>(schema._type), schema._version};
+    }
+
+    std::vector<BoundSchema> checked_options(const RecordedQueueOptions& options)
     {
       const auto& header = options._log._header;
       value(encode_producer_header(header));
@@ -110,13 +123,12 @@ namespace angaria::detail::recorded
                 ErrorCode::InvalidArgument, "Acknowledged progress must have a separate resource path");
       }
       require(options._queue != QueueId::Invalid && options._source != SourceQueueSetId::Invalid &&
-                  options._consumer != TaskId::Invalid && options._consumer != header._producer &&
-                  options._log._queues.size() == 1 && options._log._queues.front() == options._queue,
-              ErrorCode::UnsupportedPolicy, "Initial recorded profile requires one outgoing Queue and separate Process Tasks");
+                  options._consumer != TaskId::Invalid &&
+                  std::count(options._log._queues.begin(), options._log._queues.end(), options._queue) == 1,
+              ErrorCode::UnsupportedPolicy, "Recorded binding requires its outgoing Queue and registered Tasks");
       require(options._capacity != 0 && options._capacity <= 65536 &&
                   options._capacity <= header._publicationCapacity && options._generation != 0 &&
-                  options._schemaReference >= producer_header_bytes && options._schemaReference % 8 == 0 &&
-                  fits_host_size(options._schemaReference) && options._topologyRevision != 0 &&
+                  options._topologyRevision != 0 &&
                   options._topologyRevision <= header._catalogRevision,
               ErrorCode::InvalidArgument, "Invalid recorded Queue bounds or catalog references");
       require(options._catalog._revision == header._catalogRevision &&
@@ -125,8 +137,17 @@ namespace angaria::detail::recorded
       for (const auto task : {header._producer, options._consumer})
       {
         const auto& definition = selected_snapshot(options._catalog._tasks, task);
-        require(definition._descriptor._kind == TaskKind::Process && !definition._descriptor._process,
-                ErrorCode::UnsupportedPolicy, "Integrated Thread Task parent claims follow public admission");
+        if (definition._descriptor._kind == TaskKind::Thread)
+        {
+          require(definition._descriptor._process && *definition._descriptor._process != task &&
+                      selected_snapshot(options._catalog._tasks, *definition._descriptor._process)._descriptor._kind == TaskKind::Process,
+                  ErrorCode::ConfigurationMismatch, "Thread Task requires a registered Process parent");
+        }
+        else
+        {
+          require(definition._descriptor._kind == TaskKind::Process && !definition._descriptor._process,
+                  ErrorCode::ConfigurationMismatch, "Invalid Process Task definition");
+        }
       }
       const auto& queue = selected_snapshot(options._catalog._queues, options._queue);
       const auto& source = selected_snapshot(options._catalog._sources, options._source);
@@ -135,17 +156,44 @@ namespace angaria::detail::recorded
                   queue._registration._revision == options._topologyRevision &&
                   source._descriptor._owner == options._consumer && source._members == std::vector{options._queue},
               ErrorCode::ConfigurationMismatch, "Queue/Source differs from the sealed active topology");
-      require(std::count_if(options._catalog._queues.begin(), options._catalog._queues.end(), [&](const auto& entry)
-              {
-                return entry._descriptor._producer == header._producer;
-              }) == 1,
-              ErrorCode::UnsupportedPolicy, "Initial recorded endpoints support one outgoing Queue per producer");
+      for (const auto outgoing : options._log._queues)
+      {
+        const auto& definition = selected_snapshot(options._catalog._queues, outgoing);
+        require(definition._descriptor._producer == header._producer,
+                ErrorCode::ConfigurationMismatch, "Producer log includes another Task's outgoing Queue");
+      }
       require((!queue._descriptor._ringCapacity || *queue._descriptor._ringCapacity == options._capacity) &&
                   (!queue._descriptor._delivery || *queue._descriptor._delivery == DeliveryPolicy::RecoverFromLog) &&
                   (!source._descriptor._selection || *source._descriptor._selection == SelectionPolicy::Strict) &&
                   (!source._descriptor._wait || *source._descriptor._wait == WaitPolicy::Spin),
               ErrorCode::UnsupportedPolicy, "Recorded profile requires recover-from-log, strict single-input nonblocking operation");
-      return value(BinaryPayloadCodec::from_snapshot(options._catalog, options._schema, header._fileBytes));
+      auto bindings = options._schemaBindings;
+      if (bindings.empty())
+      {
+        bindings.push_back({options._schema, options._schemaReference});
+      }
+      else
+      {
+        require(bindings.size() == options._catalog._messages.size(), ErrorCode::ConfigurationMismatch,
+                "Public recorded binding must cache all registered exact schemas");
+      }
+      std::sort(bindings.begin(), bindings.end(), [](const auto& left, const auto& right)
+      {
+        return schema_key(left._schema) < schema_key(right._schema);
+      });
+      std::vector<BoundSchema> schemas;
+      schemas.reserve(bindings.size());
+      for (const auto& binding : bindings)
+      {
+        require(binding._reference >= producer_header_bytes && binding._reference % 8 == 0 &&
+                    fits_host_size(binding._reference) &&
+                    (schemas.empty() || schema_key(schemas.back()._schema) < schema_key(binding._schema)),
+                ErrorCode::InvalidArgument, "Invalid or duplicate exact schema binding");
+        schemas.push_back({binding._schema, binding._reference,
+            value(BinaryPayloadCodec::from_snapshot(options._catalog, binding._schema, header._fileBytes)), {}});
+      }
+      require(!schemas.empty(), ErrorCode::UnsupportedPolicy, "Recorded transport requires a registered exact schema");
+      return schemas;
     }
 
     std::uint64_t connection_size(const RecordedQueueOptions& options)
@@ -157,7 +205,7 @@ namespace angaria::detail::recorded
     using ConnectionHeader = std::array<std::byte, producer_immutable_bytes>;
 
     ConnectionHeader connection_header(const RecordedQueueOptions& options, mapped::FileIdentity identity,
-                                        std::uint64_t payloadBytes, mapped::FileIdentity connectionIdentity,
+                                        const std::vector<BoundSchema>& schemas, mapped::FileIdentity connectionIdentity,
                                         mapped::FileIdentity progressIdentity = {})
     {
       ConnectionHeader bytes{};
@@ -176,9 +224,9 @@ namespace angaria::detail::recorded
       write_unsigned_le<std::uint16_t>(bytes, 36, static_cast<std::uint16_t>(options._consumer));
       write_unsigned_le<std::uint16_t>(bytes, 38, static_cast<std::uint16_t>(options._source));
       write_unsigned_le<std::uint64_t>(bytes, 40, log._catalogRevision);
-      write_unsigned_le<std::uint16_t>(bytes, 48, static_cast<std::uint16_t>(options._schema._type));
-      write_unsigned_le<std::uint32_t>(bytes, 52, options._schema._version);
-      write_unsigned_le<std::uint64_t>(bytes, 56, options._schemaReference);
+      write_unsigned_le<std::uint16_t>(bytes, 48, static_cast<std::uint16_t>(schemas.front()._schema._type));
+      write_unsigned_le<std::uint32_t>(bytes, 52, schemas.front()._schema._version);
+      write_unsigned_le<std::uint64_t>(bytes, 56, schemas.front()._reference);
       write_unsigned_le<std::uint64_t>(bytes, 64, options._topologyRevision);
       write_unsigned_le<std::uint64_t>(bytes, 72, options._generation);
       write_unsigned_le<std::uint64_t>(bytes, 80, options._capacity);
@@ -189,13 +237,34 @@ namespace angaria::detail::recorded
       write_unsigned_le<std::uint32_t>(bytes, 120, log._liveAbiProfile);
       write_unsigned_le<std::uint16_t>(bytes, 124, log_synchronization_version);
       write_unsigned_le<std::uint16_t>(bytes, 126, 8);
-      write_unsigned_le<std::uint64_t>(bytes, 128, payloadBytes);
+      write_unsigned_le<std::uint64_t>(bytes, 128, schemas.front()._codec.payload_size());
       write_unsigned_le<std::uint64_t>(bytes, 136, options._acknowledged ? 3 : 1);
       write_unsigned_le<std::uint64_t>(bytes, 144, connection_size(options));
       write_unsigned_le<std::uint64_t>(bytes, 152, connectionIdentity._device);
       write_unsigned_le<std::uint64_t>(bytes, 160, connectionIdentity._inode);
       write_unsigned_le<std::uint64_t>(bytes, 168, progressIdentity._device);
       write_unsigned_le<std::uint64_t>(bytes, 176, progressIdentity._inode);
+      if (!options._schemaBindings.empty())
+      {
+        // This binds the complete sealed schema list, not only its first entry.
+        // The caller's catalog authority and revision remain the trust boundary.
+        std::uint64_t fingerprint = 14695981039346656037ULL;
+        for (const auto& schema : schemas)
+        {
+          const std::array words{static_cast<std::uint64_t>(schema._schema._type),
+              static_cast<std::uint64_t>(schema._schema._version), schema._reference, schema._codec.payload_size()};
+          for (const auto word : words)
+          {
+            for (std::size_t byte = 0; byte != 8; ++byte)
+            {
+              fingerprint ^= static_cast<unsigned char>(word >> (byte * 8));
+              fingerprint *= 1099511628211ULL;
+            }
+          }
+        }
+        write_unsigned_le<std::uint64_t>(bytes, 184, schemas.size());
+        write_unsigned_le<std::uint64_t>(bytes, 192, fingerprint);
+      }
       return bytes;
     }
 
@@ -209,9 +278,9 @@ namespace angaria::detail::recorded
 
     struct Connection
     {
-      Connection(const RecordedQueueOptions& options, BinaryPayloadCodec codec)
-          : _codec(std::move(codec)), _session(options._log._header._session), _producer(options._log._header._producer), _queue(options._queue), _source(options._source),
-            _consumer(options._consumer), _schemaReference(options._schemaReference),
+      Connection(const RecordedQueueOptions& options, std::vector<BoundSchema> schemas)
+          : _schemas(std::move(schemas)), _session(options._log._header._session), _producer(options._log._header._producer), _queue(options._queue), _source(options._source),
+            _consumer(options._consumer),
             _topologyRevision(options._topologyRevision), _generation(options._generation),
             _capacity(options._capacity), _publicationCapacity(options._log._header._publicationCapacity)
       {
@@ -225,14 +294,12 @@ namespace angaria::detail::recorded
       std::optional<mapped::AtomicWord> _incarnation;
       std::optional<mapped::AtomicWord> _acknowledgedSequence;
       std::vector<Slot> _slots;
-      BinaryPayloadCodec _codec;
-      MessageView _messageTemplate;
+      std::vector<BoundSchema> _schemas;
       SessionId _session;
       TaskId _producer;
       QueueId _queue;
       SourceQueueSetId _source;
       TaskId _consumer;
-      std::uint64_t _schemaReference;
       std::uint64_t _topologyRevision;
       std::uint64_t _generation;
       std::uint64_t _capacity;
@@ -242,6 +309,7 @@ namespace angaria::detail::recorded
       std::thread::id _thread{std::this_thread::get_id()};
       bool _failed{};
       bool _inOperation{};
+      bool _threadBound{true};
 
       void check_thread(bool allowFailed = false) const
       {
@@ -249,9 +317,27 @@ namespace angaria::detail::recorded
         {
           value(_claim->check_owner());
         }
-        require(_thread == std::this_thread::get_id(), ErrorCode::WrongOwner, "Recorded endpoint belongs to another thread");
+        require(!_threadBound || _thread == std::this_thread::get_id(), ErrorCode::WrongOwner, "Recorded endpoint belongs to another thread");
         require(!_inOperation, ErrorCode::InvalidState, "Recorded endpoint cannot reenter an operation");
         require(allowFailed || !_failed, ErrorCode::IoError, "Recorded endpoint requires reopening after validation failure");
+      }
+
+      const BoundSchema& schema(SchemaId id, ErrorCode code = ErrorCode::SchemaConflict) const
+      {
+        // The usual one-schema binding stays one comparison. No codec, Registry
+        // snapshot or retention allocation is constructed while messaging.
+        if (_schemas.front()._schema == id)
+        {
+          return _schemas.front();
+        }
+        const auto selected = std::lower_bound(_schemas.begin(), _schemas.end(), schema_key(id),
+            [](const auto& entry, const auto& key)
+            {
+              return schema_key(entry._schema) < key;
+            });
+        require(selected != _schemas.end() && selected->_schema == id, code,
+                "Message schema is absent from the sealed exact-schema cache");
+        return *selected;
       }
 
       std::uint64_t read_credit(std::uint64_t accepted)
@@ -309,7 +395,7 @@ namespace angaria::detail::recorded
         require(progressIdentity != connectionIdentity && progressIdentity != logIdentity,
                 ErrorCode::ConfigurationMismatch, "Acknowledged progress aliases a connection resource");
       }
-      require(actual == connection_header(options, logIdentity, connection->_codec.payload_size(), connectionIdentity, progressIdentity),
+      require(actual == connection_header(options, logIdentity, connection->_schemas, connectionIdentity, progressIdentity),
               ErrorCode::ConfigurationMismatch, "Recorded connection differs from its sealed context or generation");
       connection->_mapping = value(connection->_file.map_read_write(0, connection_size(options)));
       const auto bytes = value(connection->_mapping.writable_bytes());
@@ -327,9 +413,12 @@ namespace angaria::detail::recorded
             value(mapped::AtomicWord::bind(bytes, offset + 8)), value(mapped::AtomicWord::bind(bytes, offset + 16)),
             value(mapped::AtomicWord::bind(bytes, offset + 24))});
       }
-      MessageHeader header;
-      header._schema = options._schema;
-      connection->_messageTemplate = value(MessageAccess::bind(header, {}, connection->_session, connection->_codec));
+      for (auto& schema : connection->_schemas)
+      {
+        MessageHeader header;
+        header._schema = schema._schema;
+        schema._messageTemplate = value(MessageAccess::bind(header, {}, connection->_session, schema._codec));
+      }
       return connection;
     }
 
@@ -374,13 +463,14 @@ namespace angaria::detail::recorded
                                 const std::optional<LogReference>& hint = {})
     {
       const auto destination = value(record.destination_at(0));
+      const auto& schema = connection.schema(record._header._schema, ErrorCode::IoError);
       require(destination._queue == connection._queue && destination._queueSequence == sequence &&
-                  record._header._schema == connection._codec.schema() && record._header._format == PayloadFormat::Binary &&
-                  record._schemaReference == connection._schemaReference && record._topologyRevision == connection._topologyRevision &&
+                  record._header._format == PayloadFormat::Binary &&
+                  record._schemaReference == schema._reference && record._topologyRevision == connection._topologyRevision &&
                   (!hint || *hint == record._reference),
               ErrorCode::IoError, "Accepted record differs from the next bound Queue delivery");
-      value(connection._codec.validate(record._payload));
-      auto message = connection._messageTemplate;
+      value(schema._codec.validate(record._payload));
+      auto message = schema._messageTemplate;
       message._header = record._header;
       message._header._queue = connection._queue;
       message._header._queueSequence = sequence;
@@ -390,14 +480,50 @@ namespace angaria::detail::recorded
       message._payload = record._payload;
       return message;
     }
+
+    struct NextQueueRecord
+    {
+      std::optional<PublicationRecordView> _record;
+      bool _exhausted{};
+    };
+
+    NextQueueRecord next_queue_record(ProducerLogReader& reader, ProducerReplayCursor& cursor, QueueId queue)
+    {
+      // Several outgoing Queues share one Task log. Bound each receive attempt
+      // while advancing its saved cursor past records for other destinations.
+      // The single-Queue path still examines precisely one new record.
+      for (std::size_t examined = 0; examined != 32; ++examined)
+      {
+        auto record = value(reader.poll_next(cursor));
+        if (!record)
+        {
+          return {{}, true};
+        }
+        if (value(record->destination_at(0))._queue == queue)
+        {
+          return {std::move(record), false};
+        }
+      }
+      return {{}, false};
+    }
   } // namespace
 
   OperationResult create_recorded_queue(const RecordedQueueOptions& options)
   {
     return protect<std::monostate>([&]
     {
-      const auto codec = checked_options(options);
+      (void)checked_options(options);
       value(ProducerLog::create(options._producerPaths, options._log));
+      value(create_recorded_connection(options));
+      return std::monostate{};
+    });
+  }
+
+  OperationResult create_recorded_connection(const RecordedQueueOptions& options)
+  {
+    return protect<std::monostate>([&]
+    {
+      const auto schemas = checked_options(options);
       auto log = value(mapped::NativeFile::open_existing(options._producerPaths._log, mapped::FileAccess::ReadOnly));
       auto file = value(mapped::NativeFile::create_exclusive(options._connectionPath, connection_size(options)));
       value(file.reserve(connection_size(options)));
@@ -409,7 +535,7 @@ namespace angaria::detail::recorded
         auto progress = value(mapped::NativeFile::open_existing(progress_path(options), mapped::FileAccess::ReadOnly));
         progressIdentity = value(progress.identity());
       }
-      const auto header = connection_header(options, value(log.identity()), codec.payload_size(), connectionIdentity, progressIdentity);
+      const auto header = connection_header(options, value(log.identity()), schemas, connectionIdentity, progressIdentity);
       auto mapping = value(file.map_read_write(0, connection_size(options)));
       auto bytes = value(mapping.writable_bytes());
       std::fill(bytes.begin(), bytes.end(), std::byte{});
@@ -427,13 +553,14 @@ namespace angaria::detail::recorded
   struct RecordedProducer::State
   {
     std::unique_ptr<Connection> _connection;
-    ProducerLog _log;
+    std::shared_ptr<ProducerLog> _log;
     std::uint64_t _accepted{};
+    bool _shared{};
     RecordedQueueObserver* _observer{};
 
     void check(bool allowFailed = false) const
     {
-      value(_log.claim()); // Fork-safe actual-inode ownership, without a syscall.
+      value(_log->claim()); // Fork-safe actual-inode ownership, without a syscall.
       _connection->check_thread(allowFailed);
     }
 
@@ -476,11 +603,35 @@ namespace angaria::detail::recorded
   {
     return protect<RecordedProducer>([&]
     {
+      // Private fixtures keep strict thread affinity. Public Tasks instead
+      // retain one shared producer owner and serialize their outgoing endpoints.
+      auto connection = open_connection(options, false);
+      auto log = std::make_shared<ProducerLog>(value(ProducerLog::open_writer(options._producerPaths, options._log, observer)));
       auto state = std::make_unique<State>();
-      // Validate immutable connection context before advancing producer identity.
+      state->_connection = std::move(connection);
+      state->_log = std::move(log);
+      state->_accepted = value(state->_log->queue_sequence(options._queue));
+      state->_connection->read_credit(state->_accepted);
+      state->_observer = observer;
+      return RecordedProducer(std::move(state));
+    });
+  }
+
+  Result<RecordedProducer> RecordedProducer::open_shared(const RecordedQueueOptions& options,
+      std::shared_ptr<ProducerLog> log, RecordedQueueObserver* observer)
+  {
+    return protect<RecordedProducer>([&]
+    {
+      require(bool(log), ErrorCode::InvalidArgument, "Shared producer owner is absent");
+      const auto actor = value(log->claim());
+      require(actor._session == options._log._header._session && actor._task == options._log._header._producer,
+              ErrorCode::WrongOwner, "Shared producer owner differs from the sealed binding");
+      auto state = std::make_unique<State>();
       state->_connection = open_connection(options, false);
-      state->_log = value(ProducerLog::open_writer(options._producerPaths, options._log, observer));
-      state->_accepted = value(state->_log.queue_sequence(options._queue));
+      state->_connection->_threadBound = false;
+      state->_log = std::move(log);
+      state->_shared = true;
+      state->_accepted = value(state->_log->queue_sequence(options._queue));
       state->_connection->read_credit(state->_accepted);
       state->_observer = observer;
       return RecordedProducer(std::move(state));
@@ -493,7 +644,7 @@ namespace angaria::detail::recorded
     {
       require(bool(_state), ErrorCode::InvalidState, "Recorded producer is empty or moved-from");
       _state->check(true);
-      return value(_state->_log.claim());
+      return value(_state->_log->claim());
     });
   }
 
@@ -503,7 +654,7 @@ namespace angaria::detail::recorded
     {
       require(bool(_state), ErrorCode::InvalidState, "Recorded producer is empty or moved-from");
       _state->check();
-      return value(_state->_log.next_publication_id());
+      return value(_state->_log->next_publication_id());
     });
   }
 
@@ -516,21 +667,31 @@ namespace angaria::detail::recorded
       _state->check();
       auto& state = *_state;
       auto& connection = *state._connection;
-      const auto existing = value(state._log.lookup(publication));
+      if (state._shared)
+      {
+        // Another QueueWriter for this same Task/Queue may have accepted since
+        // this endpoint last ran. The Task's producer mutex serializes access.
+        state._accepted = value(state._log->queue_sequence(connection._queue));
+      }
+      const auto existing = value(state._log->lookup(publication));
       ProducerAppendRequest request{publication, connection._queue, message,
-          connection._schemaReference, connection._topologyRevision, {}};
+          0, connection._topologyRevision, {}};
+      if (existing)
+      {
+        request._schemaReference = value(state._log->view(*existing))._schemaReference;
+      }
       if (!existing)
       {
         // Credit can delay a fresh acceptance, but cannot revive a retired ID
         // or an unaccepted ID issued by a previous producer claim.
-        value(state._log.check_new_publication(publication));
-        require(message._header._schema == connection._codec.schema(), ErrorCode::SchemaConflict,
-                "Outgoing schema differs from the frozen Queue binding");
+        value(state._log->check_new_publication(publication));
+        const auto& schema = connection.schema(message._header._schema);
+        request._schemaReference = schema._reference;
         require(message._header._format == PayloadFormat::Binary, ErrorCode::UnsupportedPolicy,
                 "Initial recorded Queue profile requires Binary payloads");
         require(message._header._payloadBytes == message._payload.size(), ErrorCode::InvalidArgument,
                 "Outgoing payload length is inconsistent");
-        value(connection._codec.validate(message._payload));
+        value(schema._codec.validate(message._payload));
         const auto credit = connection.read_credit(state._accepted);
         require(state._accepted < std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
                 "Recorded Queue sequence is exhausted");
@@ -541,12 +702,12 @@ namespace angaria::detail::recorded
         request._publishedAt = UtcTimestamp{std::chrono::nanoseconds{runtime_now_ns()}};
       }
       OperationScope scope(connection._inOperation);
-      auto appended = state._log.append(request);
+      auto appended = state._log->append(request);
       const auto* error = std::get_if<Error>(&appended);
       accepted = !error || error->_code == ErrorCode::OutcomeUnknown;
       // Includes an append whose acceptance succeeded before an injected or
       // interrupted return. Reconcile from the authority before another send.
-      state._accepted = value(state._log.queue_sequence(connection._queue));
+      state._accepted = value(state._log->queue_sequence(connection._queue));
       if (error)
       {
         return *error;
@@ -573,8 +734,8 @@ namespace angaria::detail::recorded
     {
       require(bool(_state), ErrorCode::InvalidState, "Recorded producer is empty or moved-from");
       _state->check(true);
-      const auto reference = value(_state->_log.lookup(publication));
-      return reference ? std::optional{append_result(value(_state->_log.view(*reference)), true)} : std::nullopt;
+      const auto reference = value(_state->_log->lookup(publication));
+      return reference ? std::optional{append_result(value(_state->_log->view(*reference)), true)} : std::nullopt;
     });
   }
 
@@ -585,6 +746,10 @@ namespace angaria::detail::recorded
       require(bool(_state), ErrorCode::InvalidState, "Recorded producer is empty or moved-from");
       _state->check();
       auto& connection = *_state->_connection;
+      if (_state->_shared)
+      {
+        _state->_accepted = value(_state->_log->queue_sequence(connection._queue));
+      }
       require(bool(connection._acknowledgedSequence), ErrorCode::UnsupportedPolicy,
               "Unacknowledged delivery has no processing watermark");
       // Acquire acknowledgment before checking its preceding credit repair.
@@ -615,21 +780,29 @@ namespace angaria::detail::recorded
   {
   }
 
-  Result<RecordedConsumer> RecordedConsumer::open(const RecordedQueueOptions& options, RecordedQueueObserver* observer)
+  Result<RecordedConsumer> RecordedConsumer::open(const RecordedQueueOptions& options, RecordedQueueObserver* observer,
+                                                 std::optional<TaskClaim> actor)
   {
     return protect<RecordedConsumer>([&]
     {
       require(!options._acknowledged, ErrorCode::UnsupportedPolicy, "Binding requires an acknowledged consumer");
       auto state = std::make_unique<State>();
       state->_connection = open_connection(options, true);
-      state->_reader = value(ProducerLogReader::open(options._producerPaths._log, options._log));
+      state->_connection->_threadBound = !actor.has_value();
+      state->_reader = value(ProducerLogReader::open(options._producerPaths._log, options._log, !actor.has_value()));
       state->_cursor = value(state->_reader.capture());
       auto& connection = *state->_connection;
-      connection.read_credit(state->_cursor.record_count());
+      connection.read_credit(value(state->_reader.queue_sequence(connection._queue)));
       const auto previous = connection._incarnation->load_acquire();
-      require(previous != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
+      require(actor || previous != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
               "Recorded consumer incarnation is exhausted");
-      state->_actor = TaskClaim{connection._session, connection._consumer, previous + 1};
+      if (actor)
+      {
+        require(actor->_session == connection._session && actor->_task == connection._consumer &&
+                    actor->_incarnation != 0 && actor->_incarnation >= previous,
+                ErrorCode::WrongOwner, "Authoritative consumer claim differs from its binding or precedes its incarnation");
+      }
+      state->_actor = actor ? *actor : TaskClaim{connection._session, connection._consumer, previous + 1};
       state->_observer = observer;
       connection._incarnation->publish_control(state->_actor._incarnation);
       return RecordedConsumer(std::move(state));
@@ -662,10 +835,11 @@ namespace angaria::detail::recorded
       const auto hint = next_hint(connection, sequence);
       // Load any matching stamp before acquiring the tail in poll_next: a
       // previously acquired tail may legitimately lag a just-published hint.
-      const auto record = value(state._reader.poll_next(state._cursor));
+      const auto next = next_queue_record(state._reader, state._cursor, connection._queue);
+      const auto& record = next._record;
       if (!record)
       {
-        require(!hint, ErrorCode::IoError, "Recorded descriptor has no accepted record");
+        require(!next._exhausted || !hint, ErrorCode::IoError, "Recorded descriptor has no accepted record");
         return std::optional<MessageView>{};
       }
       progressed = true;
@@ -758,7 +932,7 @@ namespace angaria::detail::recorded
     void repair_hints(const ProgressState& source)
     {
       auto& connection = *_connection;
-      require(source._credit <= _cursor.record_count() && source._acknowledged <= source._credit,
+      require(source._credit <= value(_reader.queue_sequence(connection._queue)) && source._acknowledged <= source._credit,
               ErrorCode::IoError, "Processing progress exceeds accepted records");
       const auto credit = connection._credit->load_acquire();
       const auto acknowledged = connection._acknowledgedSequence->load_acquire();
@@ -878,7 +1052,7 @@ namespace angaria::detail::recorded
   }
 
   Result<RecordedAcknowledgedConsumer> RecordedAcknowledgedConsumer::open(const RecordedQueueOptions& options,
-      RecordedQueueObserver* observer, ProgressObserver* progressObserver)
+      RecordedQueueObserver* observer, ProgressObserver* progressObserver, std::optional<TaskClaim> actor)
   {
     return protect<RecordedAcknowledgedConsumer>([&]
     {
@@ -886,23 +1060,32 @@ namespace angaria::detail::recorded
       auto state = std::make_unique<State>();
       state->_connection = open_connection(options, true);
       auto& connection = *state->_connection;
-      state->_reader = value(ProducerLogReader::open(options._producerPaths._log, options._log));
+      state->_connection->_threadBound = !actor.has_value();
+      state->_reader = value(ProducerLogReader::open(options._producerPaths._log, options._log, !actor.has_value()));
       state->_cursor = value(state->_reader.capture());
       const auto previous = connection._incarnation->load_acquire();
-      require(previous != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
+      require(actor || previous != std::numeric_limits<std::uint64_t>::max(), ErrorCode::CapacityExceeded,
               "Recorded consumer incarnation is exhausted");
-      state->_actor = {connection._session, connection._consumer, previous + 1};
+      if (actor)
+      {
+        require(actor->_session == connection._session && actor->_task == connection._consumer &&
+                    actor->_incarnation != 0 && actor->_incarnation >= previous,
+                ErrorCode::WrongOwner, "Authoritative consumer claim differs from its binding or precedes its incarnation");
+      }
+      state->_actor = actor ? *actor : TaskClaim{connection._session, connection._consumer, previous + 1};
       state->_observer = observer;
-      state->_progress = value(ProgressStore::open(progress_options(options, value(connection._file.identity())), progressObserver));
+      state->_progress = value(ProgressStore::open(progress_options(options, value(connection._file.identity())),
+                                                  progressObserver, !actor.has_value()));
       const auto snapshot = value(state->_progress.snapshot());
       require(snapshot._source._actorIncarnation == previous ||
-                  (snapshot._source._actorIncarnation == previous + 1 && snapshot._source._issuance == 0 &&
+                  (snapshot._source._actorIncarnation > previous &&
+                   snapshot._source._actorIncarnation <= state->_actor._incarnation && snapshot._source._issuance == 0 &&
                    snapshot._source._pinSequence == 0),
               ErrorCode::IoError, "Source context differs from persisted consumer incarnation");
-      require(snapshot._source._acknowledged <= state->_cursor.record_count(),
+      require(snapshot._source._acknowledged <= value(state->_reader.queue_sequence(connection._queue)),
               ErrorCode::IoError, "Acknowledged watermark exceeds accepted records");
       state->repair_hints(snapshot._source);
-      if (snapshot._source._actorIncarnation != state->_actor._incarnation)
+      if (snapshot._source._actorIncarnation != state->_actor._incarnation || snapshot._source._pinSequence != 0)
       {
         auto image = state->next_image();
         if (image._source._pinSequence)
@@ -912,8 +1095,11 @@ namespace angaria::detail::recorded
           image._receipt._state = ProgressReceiptState::Pending;
         }
         State::clear_pin(image._source);
+        if (image._source._actorIncarnation != state->_actor._incarnation)
+        {
+          image._source._issuance = 0;
+        }
         image._source._actorIncarnation = state->_actor._incarnation;
-        image._source._issuance = 0;
         state->commit(image);
         state->repair_hints(image._source);
         state->_needsSettle = false;
@@ -922,8 +1108,12 @@ namespace angaria::detail::recorded
       // advance the saved cursor, never restarting at the acknowledged prefix.
       for (std::uint64_t sequence = 1; sequence <= snapshot._source._acknowledged; ++sequence)
       {
-        const auto record = value(state->_reader.next(state->_cursor));
-        require(bool(record) && value(record->destination_at(0))._queueSequence == sequence,
+        auto record = value(state->_reader.next(state->_cursor));
+        while (record && value(record->destination_at(0))._queue != connection._queue)
+        {
+          record = value(state->_reader.next(state->_cursor));
+        }
+        require(record && value(record->destination_at(0))._queueSequence == sequence,
                 ErrorCode::IoError, "Acknowledged prefix is not present in its producer stream");
       }
       connection._incarnation->publish_control(state->_actor._incarnation);
@@ -963,10 +1153,11 @@ namespace angaria::detail::recorded
       before = state._cursor;
       validating = true;
       const auto hint = next_hint(*state._connection, sequence);
-      const auto record = value(state._reader.poll_next(state._cursor));
+      const auto next = next_queue_record(state._reader, state._cursor, state._connection->_queue);
+      const auto& record = next._record;
       if (!record)
       {
-        require(!hint, ErrorCode::IoError, "Recorded descriptor has no accepted record");
+        require(!next._exhausted || !hint, ErrorCode::IoError, "Recorded descriptor has no accepted record");
         return std::nullopt;
       }
       validating = false;

@@ -60,12 +60,10 @@ namespace
     const auto payload = std::get<0>(std::move(encode_result));
     MessageHeader header;
     header._schema = codec.schema();
-    auto next_publication_id_result = producer.next_publication_id();
-    if (const auto* error = std::get_if<Error>(&next_publication_id_result))
-    {
-      return *error;
-    }
-    header._publication = std::get<0>(std::move(next_publication_id_result));
+    // This application numbers records within this portable capture. These
+    // identities are not issued transport IDs or accepted Queue publications;
+    // do not combine them with the producer log's deduplication namespace.
+    header._publication = PublicationId{producer.claim(), writer.records_written() + 1};
     header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{
         static_cast<std::int64_t>(100 + header._publication._sequence)}};
     header._flags = flags;

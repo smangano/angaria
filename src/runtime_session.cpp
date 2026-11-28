@@ -201,7 +201,7 @@ namespace angaria
     {
       try
       {
-        runtime_check_task(state);
+        runtime_check_messaging_owner(state);
       }
       catch (...)
       {
@@ -256,7 +256,7 @@ namespace angaria
       mapped::SuperblockConfiguration configuration;
       configuration._formatMinor = mapped::delivery_format_minor;
       configuration._requiredFeatures = mapped::journal_feature | mapped::basic_fields_feature |
-          mapped::native_delivery_feature | mapped::allow_loss_feature;
+          mapped::native_delivery_feature;
       configuration._session = new_identity();
       configuration._maxLogBytes = options._maxLogBytes;
       configuration._limits = options._limits;
@@ -366,6 +366,10 @@ namespace angaria
       auto state = std::make_shared<SessionState>();
       state->_directory = fs::canonical(directory);
       state->_controller = runtime_value(mapped::SessionController::open_existing(state->_directory));
+      if ((state->_controller->configuration()._requiredFeatures & mapped::native_delivery_feature) == 0)
+      {
+        runtime_fail(ErrorCode::UnsupportedPolicy, "session.features", "Public Sessions require the recorded messaging capability");
+      }
       {
         RuntimeAccess access(state);
         (void)runtime_session_definition(access);

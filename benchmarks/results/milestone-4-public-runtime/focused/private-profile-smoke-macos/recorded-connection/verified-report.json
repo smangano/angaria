@@ -1,0 +1,139 @@
+{
+  "accepted": 40,
+  "acknowledged": 0,
+  "counters": {
+    "consumer": {
+      "measured_backpressure_count": 0,
+      "measured_credit_waits": 0,
+      "measured_receive_attempts": 2472,
+      "measured_receive_timeouts": 2440,
+      "measured_send_attempts": 0,
+      "total_backpressure_count": 0,
+      "total_credit_waits": 0,
+      "total_receive_attempts": 2490,
+      "total_receive_timeouts": 2450,
+      "total_send_attempts": 0
+    },
+    "producer": {
+      "measured_backpressure_count": 0,
+      "measured_credit_waits": 0,
+      "measured_receive_attempts": 0,
+      "measured_receive_timeouts": 0,
+      "measured_send_attempts": 32,
+      "total_backpressure_count": 0,
+      "total_credit_waits": 0,
+      "total_receive_attempts": 0,
+      "total_receive_timeouts": 0,
+      "total_send_attempts": 40
+    }
+  },
+  "delivered": 40,
+  "measured_count": 32,
+  "metrics": {
+    "logical_producer_path_ns": {
+      "count": 32,
+      "max_ns": 722000,
+      "min_ns": 0,
+      "p50_ns": 1000,
+      "p95_ns": 2000,
+      "p999_ns": null,
+      "p99_ns": null,
+      "total_ns": 756000
+    },
+    "logical_start_to_delivery_ns": {
+      "count": 32,
+      "max_ns": 726000,
+      "min_ns": 0,
+      "p50_ns": 1000,
+      "p95_ns": 5000,
+      "p999_ns": null,
+      "p99_ns": null,
+      "total_ns": 779000
+    },
+    "producer_schedule_lag_ns": {
+      "count": 32,
+      "max_ns": 10810000,
+      "min_ns": 10049000,
+      "p50_ns": 10072000,
+      "p95_ns": 10809000,
+      "p999_ns": null,
+      "p99_ns": null,
+      "total_ns": 327345000
+    }
+  },
+  "pending": 0,
+  "rates": {
+    "active_all_completed_per_second": 50377.83375314862,
+    "bounded_cohort_completed_per_second": 3699.9352511331053,
+    "measured_completed_per_second": 41994.75065616798
+  },
+  "resources": {
+    "consumer": {
+      "active_cpu_ns": 758000,
+      "active_cpu_ns_per_publication": 23687.5,
+      "inclusive_cpu_ns": 773000,
+      "inclusive_cpu_ns_per_publication": 24156.25,
+      "inclusive_major_faults": 0,
+      "inclusive_minor_faults": 1,
+      "major_faults": 0,
+      "minor_faults": 1,
+      "peak_rss_bytes": 3014656,
+      "resource_end_ns": 158553799735000,
+      "window_end_ns": 158553799518000,
+      "window_start_ns": 158553798752000
+    },
+    "producer": {
+      "active_cpu_ns": 119000,
+      "active_cpu_ns_per_publication": 3718.75,
+      "inclusive_cpu_ns": 135000,
+      "inclusive_cpu_ns_per_publication": 4218.75,
+      "inclusive_major_faults": 1,
+      "inclusive_minor_faults": 0,
+      "major_faults": 1,
+      "minor_faults": 0,
+      "peak_rss_bytes": 3014656,
+      "resource_end_ns": 158553799710000,
+      "window_end_ns": 158553799516000,
+      "window_start_ns": 158553798751000
+    },
+    "scope": "Per-role RUSAGE_SELF includes every library thread. Active counters cover that role's measured loop; inclusive counters continue from the same warm boundary through coordinated FINISH, including library and control tail. CPU per publication is not isolated API cost. Role windows differ; summed CPU divided by the common completion window is a descriptive ratio.",
+    "totals": {
+      "active_cpu_ns": 877000,
+      "active_cpu_ns_per_publication": 27406.25,
+      "inclusive_cpu_ns": 908000,
+      "inclusive_cpu_ns_per_publication": 28375.0,
+      "inclusive_cpu_per_completed_window_core_equivalents": 1.1916010498687664,
+      "inclusive_major_faults": 1,
+      "inclusive_minor_faults": 1,
+      "major_faults": 1,
+      "minor_faults": 1
+    }
+  },
+  "samples": {
+    "consumer": {
+      "count": 40,
+      "file": "consumer.samples.bin",
+      "format": 1,
+      "sha256": "2b7d87deb172b4cce690d7bdc75a2a209a333987e3a9eb96b2708cf7e8091925",
+      "stride": 72
+    },
+    "producer": {
+      "count": 40,
+      "file": "producer.samples.bin",
+      "format": 1,
+      "sha256": "b22245d00a2ac34baba173bbc1491e5fe594e849685144534ecf4c1057cd27d2",
+      "stride": 64
+    }
+  },
+  "status": "complete",
+  "warmup_messages": 8,
+  "windows": {
+    "active_all_elapsed_ns": 794000,
+    "active_all_start_ns": 158553798722000,
+    "cohort_elapsed_ns": 10811000,
+    "cohort_start_ns": 158553788705000,
+    "measured_elapsed_ns": 762000,
+    "measured_end_ns": 158553799516000,
+    "measured_start_ns": 158553798754000
+  }
+}

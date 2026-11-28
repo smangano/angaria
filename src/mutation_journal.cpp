@@ -7,10 +7,8 @@
 #include "angaria/detail/checked_arithmetic.h"
 #include "angaria/detail/error_support.h"
 #include "journal_validation.h"
-#include "loss_redo.h"
 #include "mapped_read_window.h"
 #include "native_atomic.h"
-#include "task_claim_redo.h"
 
 #include <algorithm>
 #include <array>
@@ -227,7 +225,7 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::IoError, "Record extends beyond its allocation plan");
       }
-      std::array<std::byte, 128> bodyBytes{};
+      std::array<std::byte, 144> bodyBytes{};
       const auto length = static_cast<std::size_t>(std::min<std::uint64_t>(bodyBytes.size(), envelope._immutableBytes));
       const auto body = std::span{bodyBytes}.first(length);
       copy_bytes(file, offset + record_envelope_bytes, body);
@@ -237,8 +235,13 @@ namespace angaria::detail::mapped
     template <typename Reader>
     Manifest read_manifest(Reader& file, const JournalRecordRange& record)
     {
-      return value_or_throw<JournalFailure>(decode_manifest_body(read_bytes(file, record._offset + record_envelope_bytes,
-                                                  record._envelope._immutableBytes), record._offset));
+      auto manifest = value_or_throw<JournalFailure>(decode_manifest_body(read_bytes(file,
+          record._offset + record_envelope_bytes, record._envelope._immutableBytes), record._offset));
+      if (manifest._subtype != TransactionSubtype::Registry)
+      {
+        fail(ErrorCode::UnsupportedPolicy, "The Session journal contains a non-administrative transaction");
+      }
+      return manifest;
     }
 
     template <typename ReferenceAt>
@@ -518,52 +521,25 @@ namespace angaria::detail::mapped
       std::vector<RedoCommand> _commands;
     };
 
-    bool has_compact(std::span<const RedoCommand> commands)
+    void require_fixed_compacts(std::span<const RedoCommand> commands, JournalKind, ErrorCode code)
     {
-      return std::any_of(commands.begin(), commands.end(), [](const auto& command)
-      {
-        return command._opcode != RedoOpcode::WriteRange;
-      });
-    }
-
-    void require_fixed_compacts(std::span<const RedoCommand> commands, JournalKind kind, ErrorCode code)
-    {
-      if (kind != JournalKind::FixedState && std::any_of(commands.begin(), commands.end(), [](const auto& command)
+      if (std::any_of(commands.begin(), commands.end(), [](const auto& command)
           {
-            return command._opcode == RedoOpcode::ReleaseClaim || command._opcode == RedoOpcode::LoseRange;
+            return command._opcode != RedoOpcode::WriteRange;
           }))
       {
         fail(code == ErrorCode::InvalidArgument ? ErrorCode::UnsupportedPolicy : code,
-             "Claim cleanup and loss require FixedState so replay discovery remains stable");
+             "Format 3 administrative transactions only support WriteRange");
       }
     }
 
-    void validate_domain_targets(MutationJournalState& state, NativeFile& file, const FixedLayout& layout,
+    void validate_domain_targets(MutationJournalState&, NativeFile&, const FixedLayout& layout,
                                  std::span<const JournalRecordRange> records,
                                  std::span<const RedoCommand> commands, JournalKind kind,
-                                 TaskId actor, std::uint64_t incarnation,
-                                 ErrorCode code = ErrorCode::IoError)
+                                 TaskId, std::uint64_t, ErrorCode code = ErrorCode::IoError)
     {
       require_fixed_compacts(commands, kind, code);
-      const auto features = state._controller->configuration()._requiredFeatures;
-      const bool allowLoss = (features & allow_loss_feature) != 0;
-      if (has_loss_command(commands))
-      {
-        value_or_throw<JournalFailure>(validate_loss_commands(file, layout, records, commands,
-            actor, incarnation, allowLoss, false, code));
-        value_or_throw<JournalFailure>(validate_redo_targets(commands.subspan(1), layout, records, code));
-      }
-      else if (has_compact(commands))
-      {
-        const bool nativeDelivery = (state._controller->configuration()._requiredFeatures & native_delivery_feature) != 0;
-        const auto expanded = value_or_throw<JournalFailure>(expand_task_claim_commands(
-            file, layout, records, commands, code, nativeDelivery, allowLoss));
-        value_or_throw<JournalFailure>(validate_redo_targets(expanded, layout, records, code));
-      }
-      else
-      {
-        value_or_throw<JournalFailure>(validate_redo_targets(commands, layout, records, code));
-      }
+      value_or_throw<JournalFailure>(validate_redo_targets(commands, layout, records, code));
     }
 
     AcceptedBatch validate_accepted(MutationJournalState& state, NativeFile& file,
@@ -613,42 +589,18 @@ namespace angaria::detail::mapped
         batch._commands = manifest._commands;
       }
       require_fixed_compacts(batch._commands, header._kind, ErrorCode::IoError);
-      const bool loss = has_loss_command(batch._commands);
-      const auto features = state._controller->configuration()._requiredFeatures;
-      const bool allowLoss = (features & allow_loss_feature) != 0;
-      if (loss)
-      {
-        value_or_throw<JournalFailure>(validate_loss_commands(file, fixed_layout(state), allRecords,
-            batch._commands, header._actor, header._actorIncarnation, allowLoss,
-            header._control != JournalControl::Prepared));
-      }
-      else if (has_compact(batch._commands))
-      {
-        const bool nativeDelivery = (state._controller->configuration()._requiredFeatures & native_delivery_feature) != 0;
-        batch._commands = value_or_throw<JournalFailure>(expand_task_claim_commands(
-            file, fixed_layout(state), allRecords, batch._commands, ErrorCode::IoError, nativeDelivery, allowLoss));
-      }
-      value_or_throw<JournalFailure>(validate_redo_targets(
-          std::span{batch._commands}.subspan(loss ? 1 : 0), fixed_layout(state), allRecords));
+      value_or_throw<JournalFailure>(validate_redo_targets(batch._commands, fixed_layout(state), allRecords));
       return batch;
     }
 
     void apply_accepted(MutationJournalState& state, NativeFile& file, const JournalHeader& header,
                          const PrefixRecords& prefix, const AcceptedBatch& batch)
     {
+      (void)prefix;
       ANGARIA_DIAGNOSTIC_SCOPE(CommitApply);
       std::uint64_t word{};
       for (const auto& command : batch._commands)
       {
-        if (command._opcode == RedoOpcode::LoseRange)
-        {
-          value_or_throw<JournalFailure>(apply_loss_command(file, fixed_layout(state), prefix._ranges,
-              command, [&]
-              {
-                checkpoint(state, JournalCheckpoint::RedoWord, word++);
-              }));
-          continue;
-        }
         // Retain one checked mapping for the command, including across fault
         // checkpoints, rather than mapping and unmapping every eight-byte word.
         auto mapping = value_or_throw<JournalFailure>(file.map_read_write(command._target, command._payload.size()));
@@ -733,21 +685,9 @@ namespace angaria::detail::mapped
       {
         fail(ErrorCode::InvalidArgument, "Ring initialization requires complete slots");
       }
-      if (draft._kind == 9)
+      if (draft._kind == 9 || draft._kind == 10)
       {
-        const auto receipts = draft._immutable.size() >= 128 ?
-            checked_multiply(read_unsigned_le<std::uint64_t>(draft._immutable, 104), 128) : std::nullopt;
-        if (!receipts || *receipts == 0 || *receipts != draft._mutable.size())
-        {
-          fail(ErrorCode::InvalidArgument, "Publication initialization must contain its complete receipt array");
-        }
-        for (std::size_t slot = 0; slot < draft._mutable.size(); slot += 128)
-        {
-          if (!all_zero(std::span{draft._mutable}.subspan(slot + 56, 72)))
-          {
-            fail(ErrorCode::InvalidArgument, "Publication initialization sets reserved receipt bytes");
-          }
-        }
+        fail(ErrorCode::UnsupportedPolicy, "Format 3 messages belong to producer-owned logs");
       }
       const auto layout = record_storage_layout(draft._immutable.size(), draft._mutable.size());
       if (!layout)
@@ -832,6 +772,10 @@ namespace angaria::detail::mapped
       if (plan._kind != JournalKind::FixedState && plan._kind != JournalKind::Append)
       {
         fail(ErrorCode::InvalidArgument, "Unknown journal operation kind");
+      }
+      if (plan._subtype != TransactionSubtype::Registry)
+      {
+        fail(ErrorCode::UnsupportedPolicy, "The Session journal only accepts administrative transactions");
       }
       require_fixed_compacts(plan._commands, plan._kind, ErrorCode::InvalidArgument);
       std::uint64_t commandBytes{};

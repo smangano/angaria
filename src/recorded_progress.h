@@ -119,7 +119,8 @@ namespace angaria::detail::recorded
     static OperationResult create(const ProgressOptions& options);
     // Caller already holds the matching connection's consumer claim. This
     // additional actual-inode claim prevents sharing a progress owner.
-    static Result<ProgressStore> open(const ProgressOptions& options, ProgressObserver* observer = nullptr);
+    static Result<ProgressStore> open(const ProgressOptions& options, ProgressObserver* observer = nullptr,
+                                       bool threadBound = true);
     Result<ProgressSnapshot> snapshot() const;
     // Receipt presence does not independently establish message acceptance.
     Result<ProgressReceipt> receipt(std::uint64_t sequence) const;

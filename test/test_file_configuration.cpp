@@ -301,6 +301,49 @@ fields = ["TradingEnabled", "OrderFlags", "Side", "InstrumentCode", "Delta", "Si
 
   // Registration and activation are separate operations in the programmatic
   // API. A complete initial file performs both before publishing the Session.
+  TEST_F(FileConfigurationTest, RecordingReservationsAndAcknowledgmentModesAreExplicitAndPersistent)
+  {
+    // The administrative journal and each Task's message log have separate
+    // limits. A Source inherits the Session acknowledgment default unless its
+    // own declaration chooses a different processing contract.
+    auto text = replace_once(settings(), "max_log_bytes = 1048576",
+        "max_log_bytes = 1048576\nproducer_log_bytes = 1048576\nproducer_log_publications = 64");
+    text = replace_once(text, "wait = \"spin\"", "wait = \"spin\"\nacknowledgment = \"none\"");
+    text += tasks() + R"toml(
+[[source_sets]]
+name = "Unacknowledged"
+owner = "Feed"
+
+[[source_sets]]
+name = "Acknowledged"
+owner = "Feed"
+acknowledgment = "required"
+)toml";
+    const auto file = write_configuration(text);
+    auto created = require_value(Session::create_from_file(file, "Setup"));
+    const auto options = require_value(created._session.options());
+    EXPECT_EQ(options._maxLogBytes, 1048576u);
+    EXPECT_EQ(options._producerLogBytes, 1048576u);
+    EXPECT_EQ(options._producerLogPublications, 64u);
+    EXPECT_EQ(options._defaults._acknowledgment, AcknowledgmentMode::None);
+    auto registry = created._session.registry();
+    const auto unacknowledged = require_value(registry.find_source_set("Unacknowledged"));
+    const auto acknowledged = require_value(registry.find_source_set("Acknowledged"));
+    EXPECT_EQ(require_value(registry.describe_source_set(unacknowledged))._acknowledgment, AcknowledgmentMode::None);
+    EXPECT_EQ(require_value(registry.describe_source_set(acknowledged))._acknowledgment, AcknowledgmentMode::Required);
+    auto attached = require_value(Session::attach_from_file(file));
+    EXPECT_EQ(require_value(attached.options())._producerLogPublications, 64u);
+    const auto changed = replace_once(text, "producer_log_publications = 64", "producer_log_publications = 65");
+    expect_error(Session::attach_from_file(write_configuration(changed, "changed.toml")),
+                 ErrorCode::ConfigurationMismatch, "session.producer_log_publications");
+  }
+
+  TEST_F(FileConfigurationTest, InvalidAcknowledgmentNamesFailBeforePublishingASession)
+  {
+    const auto text = replace_once(settings(), "wait = \"spin\"", "wait = \"spin\"\nacknowledgment = \"eventual\"") + tasks();
+    expect_creation_failure(text, ErrorCode::InvalidConfiguration, "defaults.source_set.acknowledgment");
+  }
+
   TEST_F(FileConfigurationTest, CreatesCompleteTopologyAndAttributesDefinitionsToDeclaredCreator)
   {
     const auto file = write_configuration(complete_configuration());
@@ -343,7 +386,9 @@ fields = ["TradingEnabled", "OrderFlags", "Side", "InstrumentCode", "Delta", "Si
     auto producer = require_value(created._session.attach_task(feed));
     auto receiver = require_value(created._session.attach_task(consumer));
     EXPECT_EQ(require_value(producer.open_writer(queue)).id(), queue);
-    EXPECT_EQ(require_value(producer.open_publishing_set(publisher)).id(), publisher);
+    // Publishing definitions remain inspectable; executing Publishing belongs
+    // to its later milestone and must not imply an admitted runtime path.
+    expect_error(producer.open_publishing_set(publisher), ErrorCode::UnsupportedPolicy);
     EXPECT_EQ(require_value(receiver.open_source_set(source)).id(), source);
   }
 

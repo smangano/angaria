@@ -1334,7 +1334,9 @@ namespace
     EXPECT_FALSE(require_value(session.registry().task_status(TaskId{1}))._attached);
     auto replacement = require_value(session.attach_task(TaskId{1}));
     EXPECT_EQ(replacement.claim()._incarnation, 2u);
-    EXPECT_EQ(require_value(replacement.next_publication_id())._sequence, 1u);
+    // This fixture qualifies administrative activation only. Real writer
+    // admission additionally needs a declared exact schema (public tests).
+    expect_error(replacement.next_publication_id(), ErrorCode::InvalidState);
     const auto after = observe();
     EXPECT_EQ(after._snapshot._tail, required);
     EXPECT_EQ(after._snapshot._accounted, before._snapshot._accounted);

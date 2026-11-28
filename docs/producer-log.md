@@ -1,5 +1,7 @@
 # Producer-owned append, recovery and replay
 
+**Current status — 0.4.39:** this producer-log implementation is the public message runtime's acceptance and replay authority. One Task shares its owner across outgoing writers; public Task claims authorize incarnations. See [public runtime admission](public-runtime-admission.md). Earlier step descriptions below are historical scope reports, not an alternative current engine.
+
 Framework **0.4.34**, milestone step **4.32**, implements step 3 of the [independent messaging plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). These are private storage primitives, not a new public Session or send/receive mode. The current public runtime and the seventeen [primer programs](primer.md) continue to use their existing protocol. Ring delivery, logical Queue credit, consumer progress, application acknowledgments and public admission follow in later steps.
 
 Step **4.33**, framework **0.4.35**, adds private [recorded point-to-point endpoints](recorded-queue.md). It extends this storage API with cached `queue_sequence()` and explicitly live `poll_next(cursor)`. Live polling consumes one already validated record or validates at most one newly committed record after the cursor's cut is exhausted; independent cursor copies stay frozen. Ordinary `next()` and `capture()` retain their replay-cut behavior. Consumer progress with application acknowledgments and public admission remain later work.

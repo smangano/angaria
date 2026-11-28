@@ -717,33 +717,8 @@ namespace
     }
   }
 
-  // Identity-only endpoint handles retain their Task's real native claim after
-  // the original Task object closes. SIGKILL releases it; a replacement claim
-  // keeps the active topology/rings and advances only its Task incarnation.
-  TEST_F(ActivationRecoveryTest, EndpointHandlesRetainClaimUntilProcessTermination)
-  {
-    const auto directory = _root / "endpoint-claim";
-    auto session = create_detached(directory, 7);
-    {
-      auto actor = require_value(session.attach_task(TaskId{1}));
-      require_value(perform(actor.registry(), 7));
-    }
-    const auto before = snapshot(directory);
-    const auto rings = ring_count(directory);
-    ActivationWorker holder(directory, "hold_endpoints", 7);
-    ASSERT_EQ(holder.receive(), 'H');
-    EXPECT_EQ(holder.receive_number(), 1u);
-    EXPECT_EQ(holder.receive_number(), 1u);
-    EXPECT_EQ(holder.receive_number(), 3u);
-    const auto incarnation = holder.receive_number();
-    EXPECT_TRUE(has_error(session.attach_task(TaskId{1}), ErrorCode::OwnershipBusy));
-    EXPECT_TRUE(require_value(session.registry().task_status(TaskId{1}))._attached);
-    holder.terminate();
-    auto replacement = require_value(session.attach_task(TaskId{1}));
-    EXPECT_EQ(replacement.claim()._incarnation, incarnation + 1);
-    EXPECT_EQ(snapshot(directory)._tail, before._tail);
-    EXPECT_EQ(snapshot(directory)._revision, before._revision);
-    EXPECT_EQ(ring_count(directory), rings);
-    EXPECT_EQ(require_value(replacement.open_writer(QueueId{1})).id(), QueueId{1});
-  }
+  // Actual endpoint ownership and SIGKILL/replacement are qualified by
+  // PublicRuntimeAdmission using real messages, schemas and progress files.
+  // This suite retains the administrative activation/recovery boundaries.
+
 } // namespace

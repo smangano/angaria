@@ -1,10 +1,10 @@
 # Angaria configuration and lifecycle contract
 
-This document defines Angaria's configuration schema and lifecycle rules. Step 2.10 implements TOML loading and the file-based Session factories against the same descriptor and policy validation used by programmatic registration.
+This document defines the current configuration and lifecycle contract for framework **0.4.39**, milestone step **4.37**. TOML loading and the public file-based Session factories use the same descriptor/policy validation as programmatic setup. Public messaging uses mapped format **3.0**, synchronization revision **2**; older Sessions are rejected and development Sessions must be recreated.
 
 Configuration files use TOML through cpptoml revision `fededad7169e538ca47e11a9ee9251bc361a9a65`. The syntax contract targets TOML v0.5.0, which the upstream README documents. The [trading configuration](../examples/trading.toml) illustrates the three-process topology from the [milestone 1 plan](milestones/milestone-1.md). [cpptoml source](https://github.com/skystrife/cpptoml/tree/fededad7169e538ca47e11a9ee9251bc361a9a65)
 
-The current native profile supports two-plane storage, scalar and basic logical Fields, strict selection, spin waiting, recovery-from-log and allowed-loss delivery, and all-destination acceptance. Other recognized policy choices below describe the planned contract and return `UnsupportedPolicy` until implemented. The [binary payload codec](message-payload.md) encodes these registered definitions. [Direct Queue send and acceptance lookup](direct-publication.md) are implemented in step 4.6; [public receive](native-receive.md) in step 4.7 gains allowed loss in step 4.8. YAML, JSON, and XML converters arrive in milestone 10 and produce TOML for this same loader.
+The current native profile supports two-plane storage, scalar/basic logical Binary Fields, strict single-input Sources, spin waiting and recorded delivery with required or no processing acknowledgments. Acknowledgment remains required by default. Several outgoing Queues of one Task share its producer log, and exact schemas are selected by MessageHeader. Multiple-input selection, Publishing delivery, stale-data loss, segmented storage and other recognized future choices return `UnsupportedPolicy` when requested as runtime behavior. YAML/JSON/XML converters remain milestone 10 and will produce TOML for this same cpptoml loader.
 
 The example registers three process Tasks, MarketData, StrategyHost, and Risk, plus the Strategy thread Task hosted by StrategyHost. Strategy owns StrategyInputs and produces StrategyToRisk. MarketDataUpdates names the Strategy and Risk destination queues. Its capacity values illustrate a bounded configuration. The [primer's TOML lesson](primer.md#7-move-setup-into-a-toml-file) provides a smaller runnable starting point.
 
@@ -23,15 +23,17 @@ TOML integers are signed 64-bit values. The loader validates sign and the destin
 | `session.name` | String | Required session name. |
 | `session.application_version` | String | Optional application version, defaulting to an empty string. |
 | `session.directory` | String | Required directory for session files. A relative path resolves from the TOML file's parent directory. |
-| `session.max_log_bytes` | Integer | Required positive byte limit, including the persisted Registry and message history. |
+| `session.max_log_bytes` | Integer | Required positive limit for the administrative Session file: Registry definitions, topology and administrative journal. Message recording uses the independent per-producer limits below. |
+| `session.producer_log_bytes` | Integer | Fixed byte reservation for each producing Task's accepted-message file. Optional, default **67,108,864** (64 MiB), at least 4,288, a multiple of 64, and within the build's supported geometry. |
+| `session.producer_log_publications` | Integer | Fixed publication-count bound for each producing Task's message log and dependent reserved indexes/progress. Optional positive integer, default **65,536**, no larger than `(producer_log_bytes - 4096) / 192`. |
 | `session.storage` | String | Defaults to `two_plane`. The alternative is `segmented`. |
-| `session.segment_bytes` | Integer | Allocation quantum for `segmented`, defaulting to 1,048,576 bytes. Format 2 requires at least 4,160 bytes and a multiple of 64, within the session byte cap. An extent may use multiple quanta for a large record. Specifying this key with two-plane storage is an error. |
+| `session.segment_bytes` | Integer | Allocation quantum for `segmented`, defaulting to 1,048,576 bytes. Segmented storage is a recognized future option and is unsupported by this runtime. Specifying this key with two-plane storage is an error. |
 
 Session creation identifies a process Task as its creator, as defined by the [public API contract](api.md). That Task consumes a reserved entry and supplies initial registration attribution.
 
 The storage mapping and allocation settings bind when a session is created. `Session::create_from_file(path, creator)` requires the creator to name a declared Process Task and consumes that declaration's entry, without adding an extra Task. It validates the complete configuration before initial registration, then registers definitions and activates complete nonempty topology through the common runtime path. The completed directory is published exclusively only after setup succeeds. A failure does not publish a partial Session or replace an existing target.
 
-`Session::attach_from_file(path)` locates the existing Session through the resolved directory, reads its recorded effective configuration, and validates compatibility. The Session name, application version, log byte limit, storage/segment settings, capacity limits, and policy defaults must match or return `ConfigurationMismatch`. The actual canonical directory can differ from the recorded creation location after relocation. Attachment checks supplied declarations and references without applying registrations, changing topology, or claiming Tasks. It does not require supported runtime topology changes to match the original declaration list. Normal Session validation and interrupted recovery may still write to the underlying file. Configuration changes take effect through a new Session or explicit supported Registry APIs.
+`Session::attach_from_file(path)` locates the existing Session through the resolved directory, reads its recorded effective configuration, and validates compatibility. The Session name, application version, administrative log byte limit, both producer-log limits, storage/segment settings, capacity limits and effective policy defaults (including acknowledgment mode) must match or return `ConfigurationMismatch`. The actual canonical directory can differ from the recorded creation location after relocation. Attachment checks supplied declarations and references without applying registrations, changing topology, or claiming Tasks. It does not require supported runtime topology changes to match the original declaration list. Normal Session validation and interrupted recovery may still write to the underlying file. Configuration changes take effect through a new Session or explicit supported Registry APIs.
 
 ## Capacity limits
 
@@ -53,9 +55,9 @@ The [C++ API](api.md#capacity-defaults-and-named-setters) provides named fluent 
 
 Capacity limits bind at session creation and are recorded in the Registry. Configuration values must fit the build's supported ceilings and the [mapped layout's ranges and byte accounting](mapped-format.md). Source and Publishing Queue Set capacities together must fit 65,535 IDs. The initial declarations and activation resources must fit those limits and the session byte cap before creation can succeed. Registry names, documentation, and schema Field lists consume log arena bytes separately from the reserved application string pool.
 
-Adding a queue consumes one queue entry and one membership in its Source Queue Set. Referencing that queue from a Publishing Queue Set consumes a membership in that publishing set. Multiple publishing references count independently. Runtime registration can use remaining capacity. Retained historical identities and schema versions continue to consume their entries.
+Adding a queue consumes one queue entry and one membership in its Source Queue Set. Referencing that queue from a Publishing Queue Set consumes a membership in that publishing set. Multiple publishing references count independently. New registration can use remaining capacity before messaging seals the catalog. Retained historical identities and schema versions continue to consume their entries.
 
-The ring's configured slot count bounds its live offset index. Recover-from-log delivery continues through retained history after ring wraparound. This contract introduces no separate pending-delivery count limit. Exhausting the log byte limit returns a log-full result.
+The Queue's configured slot count is a logical transport-credit bound, not permission to overwrite an outstanding obligation. A full Queue returns known-unaccepted `QueueFull` backpressure: no message is recorded and the caller can retry the same eligible issued ID after credit returns. Credit is separate from certified processing progress. Accepted immutable message bytes remain in the producer log after credit or acknowledgment; exhausting its byte or publication-count bound returns `LogFull`. Several outgoing Queues share that producer resource bound.
 
 ## Optional defaults
 
@@ -66,10 +68,11 @@ Per-entity settings override their corresponding configuration defaults.
 | `defaults.queue.ring_capacity` | `1024` | Positive integer for `two_plane` storage. |
 | `defaults.queue.delivery` | `recover_from_log` | `recover_from_log`, `allow_loss`. |
 | `defaults.source_set.selection` | `strict` | `strict`, `fair`, `weighted_random`. |
+| `defaults.source_set.acknowledgment` | `required` | `required`, `none`. Both retain message recording/replay. |
 | `defaults.source_set.wait` | `spin` | `spin`, `eventfd`. |
 | `defaults.publishing_set.acceptance` | `all_destinations` | `all_destinations`, `partial`. |
 
-These are the agreed defaults. A selected policy must be supported by the build, platform, and Session's recorded capabilities. The current native implementation accepts `two_plane`, either delivery policy, `strict`, `spin`, and `all_destinations`; other known choices return `UnsupportedPolicy`. The planned eventfd policy is Linux-specific. Allowed loss requires the `0x8` capability included in new Sessions; existing 2.2/`0x7` Sessions retain recovery delivery and reject requests for allowed-loss defaults or Queues before registration writes.
+These are the agreed defaults. The current implementation executes `two_plane`, `recover_from_log`, `strict`, `spin` and either acknowledgment mode. `allow_loss`, alternative selection/waits, segmented storage and Publishing acceptance/retry remain unsupported runtime behavior. Publishing topology may still be declared and inspected; that does not implement publishing delivery. Unsupported choices produce explicit errors rather than selecting a legacy engine. The planned eventfd wait is Linux-specific.
 
 ## Tasks
 
@@ -79,7 +82,7 @@ A thread Task also specifies `process`, naming its parent process Task. A proces
 
 Programmatic Task registration is implemented in step 2.6. Its descriptor uses the parent's typed Task ID, and the parent must already be a registered Process Task; it need not be attached yet. Exact re-registration compares name, kind, parent, and documentation, preserving the original registration metadata. A different descriptor under that name returns `Conflict`. File-based creation resolves parent names and registers Process Tasks before their Threads, independently of declaration order.
 
-A Task may produce and consume. Applications coordinate sending threads that share a producer endpoint, including overlapping publishing destinations.
+A Task may produce and consume. Individual Process-Task producer operations are serialized through their shared local owner. Applications preserve their intended ID-issuance/send order and coordinate mutable input/output buffers and access to a common Source. A Thread Task attaches on its owning thread while its parent Process claim is held; its handles retain that parent claim. After fork, a child must exec before any Angaria API use, including a fresh Session attachment.
 
 ## Source Queue Sets
 
@@ -91,9 +94,10 @@ Each `[[source_sets]]` entry contains the following keys.
 | `owner` | Required consumer Task reference. |
 | `selection` | Optional override of the source selection default. |
 | `wait` | Optional override of the wait default. |
+| `acknowledgment` | Optional `required` or `none`, overriding `defaults.source_set.acknowledgment`. |
 | `random_seed` | Optional nonnegative integer for `weighted_random`. Omission generates an effective seed when the set is created and records it with policy settings. Reattachment reads the recorded seed. This key is an error for other selection policies. |
 
-Queue declarations provide membership and priority. The loader checks those relationships together. A set owns at most one in-flight delivery under this initial contract, and its owner must acknowledge or release it before receiving another delivery. Separate Source Queue Sets have independent in-flight state.
+Queue declarations provide membership and priority. The loader checks those relationships together. With `required`, a set owns at most one in-flight Delivery. Its owner acknowledges, releases or closes that pin before proceeding; repeated receive keeps the same token. With `none`, receive returns MessageView and no token obligation, and the next receive attempt ends the previous borrow. Both modes can copy a valid view to an owning Message with its complete observed header. Separate Sources have independent progress. Current public receiving requires one Active input Queue per Source; multiple-input scheduling is milestone 5.
 
 Steps 2.8–2.9 implement programmatic Queue/Queue Set registration, effective policy inspection, membership discovery, draft adoption/assignment, and activation. Source and Publishing names/IDs share one namespace. Creating or moving a Queue commits its definition and inverse Source memberships together. Exact retries compare resolved values, and a Source registration retry remains idempotent after Queues join it. Drafts may be incomplete for later programmatic setup; TOML declarations require the complete references shown here. The step 2.10 loader resolves and validates them before application.
 
@@ -134,7 +138,7 @@ Applications may register definitions programmatically within the same reserved 
 
 Step 3.3 adds version-2 `int8`, `bool`, `bits` with width 8/16/32/64, `enum` with an explicit integer base and closed value/label mapping, and `chars` with an exact positive ASCII byte size. The [logical Field contract](logical-fields.md#toml-version-2) specifies all keys, strict validation, and decimal-string enum values covering the full uint64 range. The [complete configuration](../examples/primer/logical-fields.toml) is demonstrated in [primer lesson 10](primer.md#10-encode-logical-fields-and-preserve-an-output-buffer).
 
-New Sessions use mapped format 2.2/`0xf`, including logical-Field support, native direct publication, and allowed-loss capability, even when their TOML uses version 1 and their default delivery is recovery. TOML versions 1 and 2 both accept `allow_loss` for `defaults.queue.delivery` or an individual Queue's `delivery` override. Existing format-2.0 Sessions retain scalar registration and reject new logical/int8 registrations without mutation. Existing 2.2/`0x7` Sessions remain usable without an in-place capability upgrade. Attachment remains validation-only: supplied declarations do not register, replace, or reinterpret recorded definitions. Read the attached Session's Registry to obtain its authoritative Field meanings.
+Current Sessions use mapped format 3.0 and synchronization revision 2. TOML configuration versions 1 and 2 remain independent of native storage version. Old native Sessions are rejected rather than upgraded. Attachment remains validation-only for supplied declarations; it does not replace definitions or reinterpret the exact Field meanings recorded by the Session.
 
 ## Registration and activation
 
@@ -142,39 +146,31 @@ A new session validates the complete configuration and resolves defaults before 
 
 Exact-match re-registration is idempotent. A conflicting registration returns a specific error. Committed identities remain stable and are not reused for another entity during the session. Schema versions remain immutable.
 
-Runtime additions are allowed within reserved capacity through atomic Registry updates. A draft queue can be created and assigned to a Source Queue Set before activation. Sending and receiving require active entities with complete ownership and membership. Active Source and Publishing Queue Sets have at least one member. Activation depends on complete definitions and allocated resources. A complete configured topology can be activated during session creation while its producer and consumer processes are offline. Empty sets remain draft until complete. Draft entities support subsequent programmatic setup.
+Before messaging is sealed, additions within reserved capacity use atomic Registry updates. A draft queue can be created and assigned to a Source Queue Set before activation. Sending and receiving require active entities with complete ownership and membership. Active Source and Publishing Queue Sets have at least one member. Activation depends on complete definitions and allocated resources. A complete configured topology can be activated during session creation while its producer and consumer processes are offline. Empty sets remain draft until complete. Draft entities support subsequent programmatic setup.
 
 Ownership adoption is allowed while an entity is draft. Once active, queue producer/source assignments and Source/Publishing Queue Set owners remain fixed under this initial contract. A replacement Task attaches to the same logical ownership with a new incarnation after the former claim is released. Competing live claims return ownership-busy.
 
 Programmatic adoption requires a nonzero registered target Task, which may be offline. Source assignment can explicitly unassign a draft Queue by passing a zero Source ID. Activation order is Source, then its Queues, then Publishing sets. A Queue's activation budget includes its ring, definition, manifest, redo, and padding; insufficient space leaves it draft. Active Publishing destination replacement requires its owning actor, a nonempty list, and Active Queues owned by that producer. Exact unchanged operations remain no-ops at exhausted capacity/log/counters. Direct Queue sending and single-Queue Source receiving are implemented; multi-Queue selection follows in milestone 5 and Publishing acceptance in milestone 6.
 
-Source membership may gain a newly registered queue through an atomic topology update. Publishing membership changes occur with no publication call in progress for that set and create a new topology generation. The update validates all destination ownership and capacity constraints before commit. Previously committed destination snapshots retain their meaning.
+Before messaging admission, Source membership and Publishing destination edits validate and commit their definitions together. After the first successful endpoint opening or publication-ID issuance seals the catalog, new registrations and topology edits are rejected. Exact unchanged registration retries remain idempotent. Register every Task, Field, exact schema and connection before starting messaging; late schema registration cannot silently invalidate an established endpoint's decoder cache.
 
-## Policy binding and scheduling
+## Messaging admission and policy binding
 
-The [milestone-4 transport review](native-transport.md#native-compatibility-and-required-capabilities) specifies native delivery and allowed-loss capability admission. Step 4.8 enables `allow_loss` through the common programmatic/TOML validation path and the required capability recorded at Session creation. This requires no TOML schema or mapped-format minor change. Unknown required capabilities still reject attachment before interrupted journal recovery.
+Session storage, entity capacities, producer-log bounds and policy defaults bind at Session creation. Entity overrides resolve before activation. The first successful endpoint opening or publication-ID issuance admits messaging and seals a checked catalog. All exact schemas and outgoing Queue bindings are then cached under that authority. New schema registration or topology edits require another fresh development Session; the current runtime provides no live reconfiguration engine.
 
-Session storage and capacity settings bind at session creation. Queue delivery, Source selection/wait, and Publishing acceptance choices resolve from explicit values and defaults before entity activation. Active policy choices are fixed under this initial contract. A changed policy uses a new entity with the desired configuration.
+Established ID issuance, send/status, receive, acknowledge/release/close and committed-acknowledgment watermark reads operate on producer/connection resources without the Session administrative gate. Cold setup, Task claims, catalog operations and admission still use administrative coordination. A full or paused independent connection must not become a global Session messaging gate.
 
-Strict selection prefers the largest priority and selects equal-priority available queues round robin. Priority zero is the lowest strict priority.
+Strict single-input selection is implemented now. The priority and fair/weighted-random names retain their planned multi-input meanings for milestone 5; defining them in a header or TOML vocabulary does not enable those runtimes. Publishing all/partial acceptance and retry follow milestone 6. Their metadata can be registered during unsealed setup, while public publishing messaging remains unsupported.
 
-At the start of a fair-selection round, every member queue receives a message budget equal to its positive priority. Each newly selected delivery consumes one credit, whether its payload comes from the ring or retained log. Re-reading the current in-flight delivery consumes no additional credit. Reconstructing state during recovery does not itself consume credit.
+## Acknowledgment, credit and replay
 
-Eligible queues with remaining credit receive service in descending priority, with round-robin ties. Empty queues do not delay a new round. Once all currently available queues exhaust their credits, budgets reset. An existing queue that becomes available during a round uses its remaining budget. A newly registered member starts with its full priority budget for the current round.
+`required` receives a Delivery token for the exact consumer claim, Source, Queue, Queue sequence and issuance. Acknowledgment commits processing progress; release or close leaves unfinished work available for another issuance. Repeated receive retains the current pin. A stale token cannot finish a new issuance. Consumer replacement can redeliver work not known to be acknowledged.
 
-Weighted-random selection chooses among available queues in proportion to their positive priorities. Receiving the same in-flight delivery again does not perform a new random selection. Detailed algorithm and distribution checks are delivered in milestone 5.
+`none` receives MessageView without a token. Returning Queue credit permits further sending but does not certify processing. A restarted or reopened unacknowledged consumer can read accepted messages again from the retained log. This is distinct from configurable stale-message loss, which is unsupported here.
 
-## Acknowledgment and overrun
+Accepted public DestinationOutcome values expose their optional `_queueSequence`. For acknowledged Queues, `QueueWriter::acknowledged_sequence()` supplies a committed processing lower bound that may lag after interruption. Compare the Queue sequence with the watermark from that same Queue, not the producer's PublicationId sequence, which can interleave several outgoing Queues. Unacknowledged Queues reject this watermark query with `UnsupportedPolicy`.
 
-Delivery ordering and skipped ranges use queue-local sequence numbers. Receive timeouts use a monotonic clock.
-
-A receive issues a token identifying the selected delivery and its consumer claim. Acknowledgment requires that exact current token. A successful acknowledgment advances that destination's progress and releases the in-flight slot. An invalid or stale token fails without advancing progress.
-
-Re-reading an in-flight delivery returns the same delivery. Explicit release, endpoint closure, or Task termination before acknowledgment leaves the delivery pending. A replacement can receive it again under the queue's delivery policy.
-
-With `allow_loss`, an issued delivery's payload remains pinned until acknowledgment or release. Ring overwrite does not invalidate an already issued payload. After release or consumer replacement, apply the current overrun/loss rules before selecting the next delivery. A fresh receive can mark the contiguous overwritten pending prefix Lost and return a `DeliveryGap` with the Queue and skipped sequence range. It preserves the Queue's last actual acknowledgment time and any historical consumer/dequeue tags. The next receive starts at the first retained nonterminal sequence. Loss uses reserved progress state at the log byte cap, without appending records or reclaiming message history and payloads; it does not free capacity for new sends.
-
-With `recover_from_log`, retained publication and acknowledgment state reconstructs pending deliveries in queue order. Required unacknowledged records remain retained. The configured log capacity provides the resource bound. The [mapped layout](mapped-format.md) and [journal protocol](concurrency.md) reserve progress storage so acknowledgment, release, issuance, and replacement attachment remain possible when publication storage is full. Initial runtime mutations use a blocking session gate; there is no end-to-end lock-free guarantee.
+Neither returned credit nor processing acknowledgment erases accepted messages or reclaims producer-log space. LogArchive captures accepted prefixes for inspection/replay without manufacturing delivery tokens, changing receipts or reconstructing original consumer execution order. Flat export contains ordinary portable message records; retain the matching catalog for decoding. See [primer lessons 16 and 18](primer.md#16-receive-recorded-messages-without-acknowledgments).
 
 ## Validation and converters
 

@@ -1,3 +1,4 @@
+#include "public_runtime_storage.h"
 #include "runtime_state.h"
 
 #include "angaria/detail/record_layout.h"
@@ -117,6 +118,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Task registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       runtime_value(mapped::validate_task_descriptor(descriptor));
       const auto tasks = runtime_tasks(access);
       const auto existing = std::find_if(tasks.begin(), tasks.end(), [&](const auto& task)

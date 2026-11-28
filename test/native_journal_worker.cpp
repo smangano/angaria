@@ -37,8 +37,6 @@ namespace
     return angaria::test_support::make_plan(base, configuration, append, "worker");
   }
 
-  using angaria::test_support::make_publication_plan;
-
   // Report the selected checkpoint and remain alive there until the parent
   // kills us. Returning from the callback would let the operation progress and
   // make the observed crash state depend on timing instead of the chosen cut.
@@ -77,7 +75,7 @@ int main(int argc, char** argv)
   {
     if (argc != 5)
     {
-      throw std::runtime_error("usage: native_journal_worker fixed|append|publication|recover directory checkpoint index");
+      throw std::runtime_error("usage: native_journal_worker fixed|append|recover directory checkpoint index");
     }
     // Bound worker lifetime even if the parent fails before issuing SIGKILL.
     ::alarm(8);
@@ -93,11 +91,6 @@ int main(int argc, char** argv)
       // The same hook can stop recovery itself, testing repair after another
       // interrupted repair rather than only after an interrupted writer.
       require_value(journal.recover(guard));
-    }
-    else if (mode == "publication")
-    {
-      const auto base = require_value(journal.snapshot(guard));
-      require_value(journal.execute(guard, make_publication_plan(base)));
     }
     else if (mode == "fixed" || mode == "append")
     {

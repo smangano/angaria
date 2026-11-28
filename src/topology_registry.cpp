@@ -1,4 +1,5 @@
 #include "topology_append.h"
+#include "public_runtime_storage.h"
 
 #include "registry_access.h"
 #include "topology_policy.h"
@@ -83,6 +84,7 @@ namespace angaria::detail
     {
       return left._name == right._name && left._owner == right._owner &&
              left._selection == effective._selection && left._wait == effective._wait &&
+             left._acknowledgment.value_or(AcknowledgmentMode::Required) == effective._acknowledgment &&
              left._randomSeed == right._randomSeed && left._doc == right._doc;
     }
 
@@ -104,6 +106,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       runtime_value(mapped::validate_source_set_descriptor(descriptor));
       const auto sessionDefinition = runtime_session_definition(access);
       const auto effective = resolve_source(descriptor, sessionDefinition._options);
@@ -137,6 +140,7 @@ namespace angaria::detail
       definition._descriptor = descriptor;
       definition._descriptor._selection = effective._selection;
       definition._descriptor._wait = effective._wait;
+      definition._descriptor._acknowledgment = effective._acknowledgment;
       definition._registration = registration(prepared);
       mapped::JournalRecord record;
       record._kind = 4;
@@ -163,6 +167,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       runtime_value(mapped::validate_queue_descriptor(descriptor));
       const auto sessionDefinition = runtime_session_definition(access);
       const auto effective = resolve_queue(descriptor, sessionDefinition._options,
@@ -274,6 +279,7 @@ namespace angaria::detail
       check_registry_actor(session, actor, "Registration requires an actor-bound Registry");
       RuntimeAccess access(std::move(session), true, injector);
       runtime_check_task(access, actor);
+      runtime_require_unsealed(access);
       runtime_value(mapped::validate_publishing_set_descriptor(descriptor));
       const auto sessionDefinition = runtime_session_definition(access);
       const auto acceptance = resolve_publishing(descriptor, sessionDefinition._options);

@@ -1,5 +1,7 @@
 # Running the 1:1 IPC comparison
 
+**Historical pre-admission guide.** Run the commands below from the [frozen pre-admission source](https://github.com/smangano/angaria/tree/8bcd30810b55a69d00eeed1625a3018e3ced1527). The superseded public messaging adapter and current-log SPSC experiment are retired from the current build. For both current public delivery modes, use the [public runtime performance guide](public-runtime-performance.md).
+
 Milestone 4 step **4.28**, framework **0.4.30**, implements phase 1 of the [comparison plan](nanomsg-comparison-plan.md). One producer and one consumer run as independent local processes. A Python coordinator establishes the connection, checks clocks, drains preload messages, and starts each measured batch. A **cohort** is the finite batch of measured messages in one fresh run.
 
 The two profiles provide different guarantees:

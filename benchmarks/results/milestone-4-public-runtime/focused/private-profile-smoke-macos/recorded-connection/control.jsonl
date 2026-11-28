@@ -1,0 +1,30 @@
+{"direction": "receive", "event": "CONNECTED", "received_ns": 158553686673000, "role": "producer"}
+{"direction": "receive", "event": "CONNECTED", "received_ns": 158553688219000, "role": "consumer"}
+{"after_ns": 158553688250000, "before_ns": 158553688247000, "command": "CLOCK 1", "direction": "send", "role": "producer"}
+{"direction": "receive", "event": "CLOCK", "received_ns": 158553688357000, "role": "producer"}
+{"after_ns": 158553688382000, "before_ns": 158553688380000, "command": "CLOCK 1", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "CLOCK", "received_ns": 158553688410000, "role": "consumer"}
+{"after_ns": 158553688426000, "before_ns": 158553688424000, "command": "CLOCK 2", "direction": "send", "role": "producer"}
+{"direction": "receive", "event": "CLOCK", "received_ns": 158553688451000, "role": "producer"}
+{"after_ns": 158553688465000, "before_ns": 158553688464000, "command": "CLOCK 2", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "CLOCK", "received_ns": 158553688487000, "role": "consumer"}
+{"after_ns": 158553688500000, "before_ns": 158553688498000, "command": "CLOCK 3", "direction": "send", "role": "producer"}
+{"direction": "receive", "event": "CLOCK", "received_ns": 158553688522000, "role": "producer"}
+{"after_ns": 158553688535000, "before_ns": 158553688533000, "command": "CLOCK 3", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "CLOCK", "received_ns": 158553688557000, "role": "consumer"}
+{"after_ns": 158553688572000, "before_ns": 158553688570000, "command": "PRELOAD", "direction": "send", "role": "producer"}
+{"after_ns": 158553688583000, "before_ns": 158553688581000, "command": "PRELOAD", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "DRAINED", "received_ns": 158553688609000, "role": "consumer"}
+{"direction": "receive", "event": "DRAINED", "received_ns": 158553688627000, "role": "producer"}
+{"after_ns": 158553688643000, "before_ns": 158553688641000, "command": "READY", "direction": "send", "role": "producer"}
+{"after_ns": 158553688652000, "before_ns": 158553688650000, "command": "READY", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "READY", "received_ns": 158553688672000, "role": "producer"}
+{"direction": "receive", "event": "READY", "received_ns": 158553688692000, "role": "consumer"}
+{"after_ns": 158553688709000, "before_ns": 158553688707000, "command": "START 158553788705000", "direction": "send", "role": "producer"}
+{"after_ns": 158553688718000, "before_ns": 158553688716000, "command": "START 158553788705000", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "DONE", "received_ns": 158553799601000, "role": "producer"}
+{"direction": "receive", "event": "DONE", "received_ns": 158553799665000, "role": "consumer"}
+{"after_ns": 158553799702000, "before_ns": 158553799696000, "command": "FINISH", "direction": "send", "role": "producer"}
+{"after_ns": 158553799727000, "before_ns": 158553799723000, "command": "FINISH", "direction": "send", "role": "consumer"}
+{"direction": "receive", "event": "REPORT", "received_ns": 158553800008000, "role": "consumer"}
+{"direction": "receive", "event": "REPORT", "received_ns": 158553800094000, "role": "producer"}

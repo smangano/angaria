@@ -192,12 +192,10 @@ namespace
     const auto payload = std::get<0>(std::move(encode_result));
     MessageHeader header;
     header._schema = codec.schema();
-    auto next_publication_id_result = producer.next_publication_id();
-    if (const auto* error = std::get_if<Error>(&next_publication_id_result))
-    {
-      return *error;
-    }
-    header._publication = std::get<0>(std::move(next_publication_id_result));
+    // Application-chosen capture-local numbering leaves Registry setup open
+    // for this metadata-evolution lesson. These are not issued transport IDs
+    // or Queue acceptances; never mix them into producer-log deduplication.
+    header._publication = PublicationId{producer.claim(), writer.records_written() + 1};
     // Fixed application-chosen timestamps make the walkthrough reproducible.
     // They do not establish native acceptance or delivery times.
     header._publishedAt = UtcTimestamp{std::chrono::nanoseconds{

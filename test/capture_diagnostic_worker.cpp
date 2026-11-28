@@ -57,10 +57,12 @@ namespace
       auto writer = angaria::test_support::require_value(MessageCaptureWriter::create(output, 81, 161));
       MessageHeader header;
       header._schema = control;
-      header._publication = angaria::test_support::require_value(created._creator.next_publication_id());
+      // Test-only portable records have capture-local IDs, not transport-issued
+      // identities. Keep metadata setup unsealed for the next schema fixture.
+      header._publication = PublicationId{created._creator.claim(), writer.records_written() + 1};
       angaria::test_support::require_value(writer.append(header, {}));
       header._schema = schema;
-      header._publication = angaria::test_support::require_value(created._creator.next_publication_id());
+      header._publication = PublicationId{created._creator.claim(), writer.records_written() + 1};
       header._payloadBytes = 1;
       angaria::test_support::require_value(writer.append(header, std::array{invalid}));
       output.close();

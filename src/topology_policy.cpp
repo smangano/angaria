@@ -25,6 +25,11 @@ namespace angaria::detail
   {
     const auto selection = descriptor._selection.value_or(options._defaults._selection);
     const auto wait = descriptor._wait.value_or(options._defaults._wait);
+    const auto acknowledgment = descriptor._acknowledgment.value_or(options._defaults._acknowledgment);
+    if (acknowledgment != AcknowledgmentMode::Required && acknowledgment != AcknowledgmentMode::None)
+    {
+      runtime_fail(ErrorCode::InvalidArgument, "source_set.acknowledgment", "Unknown acknowledgment mode");
+    }
     if (selection != SelectionPolicy::WeightedRandom && descriptor._randomSeed)
     {
       runtime_fail(ErrorCode::InvalidArgument, "source_set.random_seed", "A random seed requires weighted-random selection");
@@ -33,7 +38,7 @@ namespace angaria::detail
     {
       runtime_fail(ErrorCode::UnsupportedPolicy, "source_set.policy", "Source policy is not implemented by this native profile");
     }
-    return SourcePolicy{selection, wait};
+    return SourcePolicy{selection, wait, acknowledgment};
   }
 
   AcceptancePolicy resolve_publishing(const PublishingQueueSetDescriptor& descriptor, const SessionOptions& options)

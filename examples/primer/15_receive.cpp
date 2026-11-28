@@ -77,7 +77,7 @@ namespace
     queue._name = "FeedToStrategy";
     queue._producer = created._creator.claim()._task;
     queue._sourceSet = source_id;
-    queue._ringCapacity = 2;
+    queue._ringCapacity = 3;
     auto register_queue_result = registry.register_queue(queue);
     if (const auto* error = std::get_if<Error>(&register_queue_result))
     {
@@ -171,8 +171,8 @@ namespace
       }
     }
 
-    // Three messages exceed the two-slot ring. Retained history still delivers
-    // sequence 1 first; replacing a cache entry never acknowledges a message.
+    // All three accepted messages fit the reserved logical Queue. Receiving
+    // starts at its oldest retained sequence; credit is not an acknowledgment.
     auto attach_task_result = created._session.attach_task("Strategy");
     if (const auto* error = std::get_if<Error>(&attach_task_result))
     {
@@ -200,7 +200,7 @@ namespace
     {
       throw std::runtime_error("Received header is missing the expected publication/delivery context");
     }
-    std::cout << "Recovered oldest Queue sequence after ring wrap: 1\n";
+    std::cout << "Received oldest retained Queue sequence: 1\n";
 
     // Copy while the borrow is valid. The copy keeps every header field and
     // owns independent bytes and schema definitions; it owns no delivery token.
@@ -272,7 +272,7 @@ namespace
       return *error;
     }
 
-    std::cout << "Closing an unacknowledged Source allows redelivery.\n";
+    std::cout << "Closing before acknowledgment allows redelivery.\n";
     auto receive_delivery_result_5 = receive_delivery(reopened);
     if (const auto* error = std::get_if<Error>(&receive_delivery_result_5))
     {

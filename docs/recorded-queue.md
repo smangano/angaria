@@ -1,5 +1,7 @@
 # Recorded point-to-point delivery
 
+**Current status — 0.4.39:** these connections now serve the public runtime. Shared Task log ownership, cached exact schemas, authoritative Process/Thread claims and TOML selection are implemented. The public profile remains fixed-topology with one Queue per Source. See [public runtime admission](public-runtime-admission.md). The earlier private-step scope descriptions below record their original qualification boundaries.
+
 Framework **0.4.35**, milestone step **4.33**, implements workstream step 4 of the [independent messaging plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). The private [RecordedProducer and RecordedConsumer](../src/recorded_queue.h) endpoints connect the [producer-owned log](producer-log.md) to a bounded descriptor ring. **Recorded/unacknowledged** means every accepted message remains in the log, while receiving it creates no application-processing acknowledgment obligation.
 
 Step **4.34**, framework **0.4.36**, qualifies workstream step 5's process restart, log catch-up and connection independence. The [restart and independence section](#restart-and-connection-independence) describes the tested boundaries and the limits of this private profile.
@@ -16,7 +18,7 @@ Before public admission, outbound Queue endpoints must share one Task-owned prod
 
 `RecordedQueueOptions` supplies a **sealed catalog**: the Registry/schema/topology snapshot fixed before messaging, with its exact revision, active Queue/Source identities and actual Field/message definitions. Opening resolves and retains an exact Binary codec once. It checks selected ownership, membership, policy, schema shape, revision and stored bindings. The schema-definition reference is supplied by the checked catalog owner; a caller-created `RegistrySnapshot` has no independent Session identity or proof of origin. These checks do not authenticate forged snapshots with matching revisions or same-size replacement definitions. Supplying the correct immutable catalog is an explicit private-layer precondition; public admission must establish that authority.
 
-`create_recorded_queue` is offline bootstrap with existing parent directories. It creates the producer data/owner files and physically reserves a connection file before publishing the resources. A failed unpublished bootstrap is discarded as a staging unit. The producer's **committed tail**, the atomic end of its immutable accepted records, remains the sole acceptance authority. See the [glossary](glossary.md#proposed-independent-messaging-protocol) for producer stream, committed tail, publication capacity and logical credit.
+Public bootstrap first creates one producer log per Task, then calls `create_recorded_connection` for each outgoing connection so writers share the same log owner. The private convenience `create_recorded_queue` combines producer and connection creation for one-connection fixtures. Both use existing parent directories; creation is offline bootstrap. It creates the producer data/owner files and physically reserves a connection file before publishing the resources. A failed unpublished bootstrap is discarded as a staging unit. The producer's **committed tail**, the atomic end of its immutable accepted records, remains the sole acceptance authority. See the [glossary](glossary.md#independent-messaging-protocol) for producer stream, committed tail, publication capacity and logical credit.
 
 The producer retains a native lifetime claim on the actual log inode; the consumer claims the actual connection inode. An inode identifies the underlying filesystem object, independently of a path name. Separate fork-registered claim descriptors prevent inherited data mappings from retaining a parent's claim. A paused owner cannot be displaced by timeout. Duplicate owners return `OwnershipBusy`; foreign-thread and fork-inherited calls return `WrongOwner` before data operations. Integrated public Task attachment and lifecycle remain later work.
 
@@ -34,19 +36,22 @@ The native file has a 4,096-byte prefix followed by `capacity * 64` descriptor b
 | 16 / 24 | 8 each | Session identity high/low halves. |
 | 32 / 34 / 36 / 38 | 2 each | Queue, producer Task, consumer Task and Source Queue Set IDs. |
 | 40 | 8 | Sealed catalog revision. |
-| 48 / 52 | 2 / 4 | Message type and exact schema version. Bytes 50–51 are zero. |
-| 56 / 64 | 8 each | Schema-definition reference and Queue topology revision. |
+| 48 / 52 | 2 / 4 | First canonical binding's message type and exact schema version. Bytes 50–51 are zero. |
+| 56 / 64 | 8 each | First binding's schema-definition reference and Queue topology revision. |
 | 72 / 80 | 8 each | Nonzero connection generation and ring capacity. |
 | 88 / 96 | 8 each | Producer log's device/inode identity. |
 | 104 / 112 | 8 each | Producer log byte reservation and publication capacity. |
 | 120 | 4 | Qualified native ABI profile. |
 | 124 / 126 | 2 each | Synchronization revision 2 and atomic width 8. |
-| 128 | 8 | Exact Binary payload size. |
+| 128 | 8 | First binding's exact Binary payload size. |
 | 136 | 8 | Required feature mask: 1 for recorded/unacknowledged, 3 for recorded with acknowledged progress. |
 | 144 | 8 | Complete connection file length. |
 | 152 / 160 | 8 each | Connection file's own device/inode identity. |
 | 168 / 176 | 8 each | Acknowledged progress file device/inode; zero for unacknowledged bindings. |
-| 184 | 72 | Reserved zero. |
+| 184 / 192 | 8 each | Complete canonical schema-binding count and fingerprint. Public admission supplies every exact schema. |
+| 200 | 56 | Reserved zero. |
+
+Public bindings are sorted by message type/version. The fingerprint folds each binding's type, version, definition reference and payload size as four little-endian 64-bit words, using FNV-1a seed `14695981039346656037` and multiplier `1099511628211` with unsigned wrap. It detects a mismatched complete binding list; validated catalog authority and revision establish its provenance. The private one-schema fixture form leaves count/fingerprint zero. Public reopening reconstructs and checks the complete nonzero binding header; it does not admit the earlier private header as an alternative public format.
 
 The **connection generation** distinguishes the fixed checked connection setup; it does not advance on ring wrap or owner replacement. The file is not reconfigured while endpoints are live. Unsupported format, native ABI, synchronization, atomic-width or feature requirements return `UnsupportedPolicy` before control-word binding or ownership-state writes. Malformed magic returns `IoError`; a supported-format header with different context or reserved bytes returns `ConfigurationMismatch` before ownership-state writes.
 

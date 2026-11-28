@@ -1,22 +1,18 @@
 # A programmer's first guide to Angaria
 
-The [complete public interface review](public-interface.md) shows the intended application and debugging surface through 1.0, including features still to be built. Its status table tracks implementation. The seventeen lessons here use implemented APIs. Framework **0.4.13**, milestone 4 step 4.11, adds [measurements](native-performance.md) and a [completion audit](milestones/milestone-4-completion.md) for review before integration. Lesson 17 runs a [native multi-process market monitor](native-pipeline.md) after the earlier send, receive, allowed-loss, and [failure qualification](native-qualification.md) steps.
+Angaria helps a small group of C++ programs describe how they communicate. A shared **Registry** records participants, message schemas and connections. Queues carry recorded messages between those participants.
 
-Angaria helps a small group of C++ programs describe how they will communicate. Its design combines a shared **Registry**, which records the participants and their connections, with queues and policies that will control message delivery.
+Framework **0.4.39**, milestone step **4.37**, admits the [independent messaging runtime](independent-messaging-protocol.md) through the public API. The eighteen lessons below use public headers and real public calls, with explicit configuration and error handling. The [complete interface review](public-interface.md) also describes future methods; its implementation table distinguishes those plans from runnable features.
 
-The runnable lessons create persistent Sessions, register definitions, build connections, claim endpoints, encode messages, and inspect capture files. Lesson 14 sends into a native Queue and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, and saves a message, then closes and reopens its Source. Lesson 16 configures stale-message loss, handles gaps, and protects a message already being processed. Lesson 17 connects Feed, Strategy, and Audit as independent processes, including backlog and replacement. Angaria is incomplete and may change incompatibly before **1.0.0**.
+Lessons 1–13 introduce Sessions, Tasks, schemas, connections, encoding and capture files. Lesson 14 sends to an offline consumer and looks up acceptance after producer replacement. Lesson 15 receives, releases, acknowledges, saves a copy and reopens a Source. Lesson 16 explicitly selects recorded, unacknowledged delivery and demonstrates replay after reopening. Lesson 17 connects Feed, Strategy and Audit as independent processes, including retained backlog and process replacement. Lesson 18 replays accepted messages from a frozen log view and exports an ordinary capture.
 
-You can run every example in this guide today. Some additional public methods remain declarations for future steps; the separate full-interface review is compile-only. A declaration alone does not make an operation runnable.
+**Register the complete catalog before starting messaging.** Register all Tasks, Fields, exact message schemas, Queues and Sources, then activate the connections. The first endpoint opening or publication-ID issuance seals that setup. Established send, receive, status lookup and acknowledgment use the producer-owned log and connection resources without acquiring the Session's administrative gate. Multiple outgoing Queues of one Task share its producer log; a message's schema identity selects its exact registered decoder.
 
-The [independent messaging protocol](independent-messaging-protocol.md) is a design for the next runtime, with producer-owned recording and optional acknowledgments. It is not implemented by these lessons yet. Before 1.0, storage and APIs can change without backward compatibility; use matching programs and libraries and recreate development Sessions after a breaking change. The lessons will switch when the replacement is runnable.
+Acknowledgment remains the default. It returns `Delivery`, which contains a borrowed `MessageView` and a processing token. An explicitly unacknowledged Source returns `MessageView` directly. Returning transport credit makes room for a later message; it does not prove the application processed an earlier one or erase its recorded bytes. Both modes retain accepted messages for replay. A replay cut is a fixed boundary: publications accepted afterward do not appear in that replay.
 
-Steps **4.31–4.33** add private [producer-log byte codecs](producer-log-format.md), [mapped append/recovery/replay](producer-log.md) and [recorded point-to-point endpoints](recorded-queue.md), not a new public application messaging API. A replay cut is a fixed boundary in a producer's accepted message history: messages accepted later are absent from that replay. Returning transport credit frees a small descriptor slot for another message; it does not certify that the application processed the message or erase its recorded bytes. These building blocks will support the future public runtime and replay interface. The seventeen programs below still use the current public runtime and its acknowledged default; no private endpoint, codec or log setup is required to run them.
+Angaria is incomplete and may change incompatibly before **1.0.0**. This runtime uses mapped format **3.0** and synchronization revision **2**. Use matching programs and libraries and create fresh development Sessions after this breaking change; unsupported old formats are rejected. Configurable stale-message loss, multiple-input Source selection, Publishing fan-out, additional waits and log reclamation remain later work. Selecting an unavailable policy returns `UnsupportedPolicy`.
 
-Step **4.34**, framework **0.4.36**, adds [restart and connection-independence tests](recorded-queue.md#restart-and-connection-independence) for those private endpoints. The tests stop programs while they send or receive and check that accepted messages remain replayable and other connections can keep working. A restarted consumer can receive an unacknowledged message again; freeing transport credit does not prove the application finished its work. The runnable lessons below will adopt the replacement once its public API integration is ready.
-
-Step **4.35**, framework **0.4.37**, adds [acknowledged progress](recorded-acknowledged-progress.md) to the private replacement. Receiving gives the consumer a delivery token. Repeating that receive keeps the same token until the application acknowledges or releases it. Acknowledgment records completion; release makes the message available again with a new token. If a consumer stops before acknowledging, its replacement can receive the message again. The private progress file keeps these decisions separate from the message log and from transport credit. The public examples below continue to use the implemented public API; their eventual replacement is a later step.
-
-Step **4.36**, framework **0.4.38**, measures both private delivery modes in [longer, warmed performance comparisons](end-to-end-qualification.md). The report distinguishes receiving a message from acknowledging its processing, and shows how a slow consumer affects latency and throughput. These benchmarks qualify the replacement machinery; the public lessons below continue to use the current implemented API until public admission.
+The [public runtime performance guide](public-runtime-performance.md) compares both modes with nanomsg using live warmup, latency, completed throughput and retained timing evidence. Those results qualify the measured workload, rather than establishing a capacity or latency guarantee for every application.
 
 ## A few ideas before the code
 
@@ -37,6 +33,8 @@ Angaria gives communication roles their own names and identities:
 | **Message schema** | A message type and version with an ordered list of registered Fields. |
 
 A Task ID identifies a registered role inside a Session. It is different from the operating system's process ID, or PID. A restarted `Feed` process keeps the registered `Feed` Task ID but receives a new claim **incarnation**, a counter that distinguishes this attachment from its predecessors.
+
+A child created with `fork` must exec before calling Angaria, including before a fresh `Session::attach`. Launch independent applications as new executables, as the walkthrough coordinators do; inherited native library state is not a supported shortcut.
 
 For example, a feed and an order generator can each have their own queue in a risk consumer's Source Queue Set. Each queue still has one producer. Threads sharing a producer role must coordinate operations on a common queue. The [glossary](glossary.md) and [API contract](api.md) provide more detail once these ideas become familiar.
 
@@ -61,7 +59,7 @@ cmake -S . -B build-primer -DBUILD_TESTING=OFF
 cmake --build build-primer --parallel
 ```
 
-The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The seventeen targets are named `angaria_primer_01_session` through `angaria_primer_17_native_pipeline`, matching their source filenames. Lesson 17 also compiles the two role source files in `examples/primer/native_pipeline/`. The generic inspection tool is `angaria_inspect`.
+The commands below assume the first build directory, `build`. Substitute `build-primer` if you used the second. The eighteen targets are named `angaria_primer_01_session` through `angaria_primer_18_log_replay`, matching their source filenames. Lesson 17 also compiles the two role source files in `examples/primer/native_pipeline/`. The generic inspection tool is `angaria_inspect`.
 
 Examples 1–5, 9, and 11–15 need a directory that **does not exist yet**. Create a temporary parent directory once, then give each program a different child path:
 
@@ -192,15 +190,12 @@ New topology entities start in **Draft** state. Drafts allow setup to assemble c
 
 1. Register the Tasks, Source Queue Set, Queue, and Publishing Queue Set.
 2. Activate the Source, whose member queues must already be fully configured.
-3. Activate the Queue, which requires an Active Source and allocates its initial ring.
+3. Activate the Queue, which requires an Active Source.
 4. Activate the Publishing set, whose destination queues must be Active.
-5. Attach the owning Tasks and open their endpoints.
 
-A **ring** is bounded storage reused in a cycle. Later delivery code will use each queue's ring to reference messages in the log. At this step, activation allocates it without delivering messages.
+This lesson prints identities returned by registration and reads Source membership through the Registry. It does not open messaging endpoints before message schemas exist. A **ring** is bounded storage reused in a cycle; the runtime uses small ring descriptors alongside retained producer-log records when messaging starts.
 
-The example opens a `QueueWriter`, a `SourceQueueSet`, and a `PublishingQueueSet` and prints their identities. Opening checks both activation and ownership: a Draft entity returns `NotActive`, and another Task's endpoint returns `WrongOwner`. A Source can have one open handle per live claim; a second open returns `OwnershipBusy`.
-
-For a compact introduction, this program holds both producer and consumer roles in one OS process. A Task name does not require a separate executable. Example 6 launches the roles independently.
+After the complete schema catalog is registered, the owning Tasks can open their QueueWriter and SourceQueueSet handles, as lessons 14–17 demonstrate. Opening checks activation and ownership. The first endpoint opening seals the catalog; a Task cannot silently attach an endpoint to a changed setup afterward. Publishing delivery remains a later milestone even though its topology can already be registered and activated.
 
 ## 5. Build a bounded network and change a destination
 
@@ -231,7 +226,7 @@ This demonstrates a live topology update. Direct sends already retain their orig
 
 The configuration records higher priority for orders than quotes at `RiskInputs`, plus the default strict selection, spin waiting, log recovery, and all-destination acceptance policies. These are currently validated configuration choices. The example cannot demonstrate receiving priorities, busy waiting, recovery of a message, or acceptance across destinations yet.
 
-The implemented log-recovery default lets a lagging consumer find retained deliveries after its ring entries have been overwritten. Configured allowed loss can instead skip stale pending deliveries while reporting the gap; lessons 15 and 16 demonstrate both. Publishing Queue Set acceptance remains planned: all-destination acceptance will require every destination to accept a publication, and configurable partial acceptance will report which destinations accepted and which rejected it. Multiple-input selection and additional waiting policies also follow later milestones.
+Accepted messages remain in the producer log for replay. Logical Queue capacity bounds outstanding transport credit; a full Queue rejects a new send with `QueueFull`, without recording that publication. A caller can retry the same eligible ID after a consumer returns credit. Lesson 15 demonstrates acknowledged progress, and lesson 16 demonstrates recorded, unacknowledged delivery. Publishing Queue Set acceptance remains planned: all-destination acceptance will require every destination to accept a publication, and configurable partial acceptance will report which destinations accepted and which rejected it. Multiple-input selection and additional waiting policies also follow later milestones.
 
 ## 6. Coordinate independent programs
 
@@ -241,7 +236,7 @@ Read [06_processes.cpp](../examples/primer/06_processes.cpp). This executable ha
 angaria_primer_06_processes <init|inspect|producer|consumer> <session-directory> [--hold]
 ```
 
-Only `init` creates a new directory. The other modes attach to that existing Session. `--hold` is valid for `producer` and `consumer`; it keeps endpoint handles alive until Enter or end-of-input. Without it, each mode prints its information and exits, which also makes it suitable for automated checks.
+Only `init` creates a new directory. The other modes attach to that existing Session. `--hold` is valid for `producer` and `consumer`; it keeps the Task claim alive until Enter or end-of-input. Without it, each mode prints its information and exits, which also makes it suitable for automated checks.
 
 Initialize once in your original terminal:
 
@@ -281,9 +276,9 @@ The inspector uses a read-only Registry view and claims neither Task. Attaching 
 
 Press Enter in terminal B, then run its producer command again. It now prints `READY producer incarnation=2`. The logical Task ID stays the same. Press Enter to close that replacement and the consumer in terminal A, then inspect once more from terminal C. The definitions remain available after both roles close; their attachment status now reports offline.
 
-The example intentionally lets the original Task variable close while endpoint handles remain alive. Those handles retain the claim, which explains why the second producer cannot attach until they close. Normal process termination also releases the native claim lock; recorded PID information is diagnostic rather than the authority for deciding ownership.
+Each running role keeps its Task handle alive while it prints READY and waits. That exclusive claim explains why a second producer cannot attach. This metadata-only lesson opens no messaging endpoints and does not seal the catalog. Normal process termination releases the native claim lock; recorded PID information is diagnostic rather than the authority for deciding ownership.
 
-The producer reserves a publication identity, consisting of its claim and a sequence number. Reserving an identity does not publish a message. This walkthrough demonstrates separate processes sharing the Registry and enforcing endpoint ownership. Lessons 14–17 build on this setup with actual producer-to-consumer delivery.
+This walkthrough demonstrates separate processes sharing the Registry and enforcing Task ownership. Publication identity issuance begins with actual messaging in lesson 14, after the complete schema catalog is registered. Lessons 14–17 build on this setup with actual producer-to-consumer delivery.
 
 ## 7. Move setup into a TOML file
 
@@ -359,7 +354,7 @@ As with ordinary attachment, validation may finish interrupted recovery and writ
 
 For an ordinary mistake, change `source_set = "ConsumerInputs"` in a copy to an unknown name. The error identifies the offending key path and reference. A misspelled key, a quoted number where an integer is required, or an out-of-range priority also fails explicitly. Syntax errors include the filename and the parser's line information where available. An unsuccessful creation does not publish a partially configured Session.
 
-Known policies can still be unavailable. For example, weighted-random Source selection returns `UnsupportedPolicy` until milestone 5 implements it. Both `recover_from_log` and `allow_loss` are supported in new Sessions; this lesson keeps the default recovery behavior, while lesson 16 demonstrates optional loss. The [configuration contract](configuration.md) lists the complete schema and the current implementation boundary.
+Known policies can still be unavailable. For example, weighted-random Source selection returns `UnsupportedPolicy` until milestone 5 implements it. `recover_from_log` is supported by this runtime. `allow_loss` is recognized as a planned policy and returns `UnsupportedPolicy`; lesson 16 instead demonstrates the supported `acknowledgment = "none"` option. The [configuration contract](configuration.md) lists the complete schema and the current implementation boundary.
 
 ## 8. Share a Registry and inspect its history
 
@@ -551,7 +546,7 @@ The 11 bytes are one Boolean byte, two flag bytes, one enum byte, six ASCII byte
 
 Field definitions remain immutable. Changing an enum mapping, width, or logical meaning requires a new Field ID and name, followed by a new message-schema version referencing it. A new message version alone cannot edit a Field used by earlier schemas. The existing base codes 0 through 25 retain their meanings; signed int8 adds code 26.
 
-New Sessions use mapped format 2.2/`0xf`, including required logical-Field, native-delivery, and allowed-loss support. Existing format 2.1 Sessions retain logical Fields; existing 2.0 Sessions retain scalar behavior and reject added logical Fields or int8 with `UnsupportedPolicy`. Their format is never upgraded in place. Framework version, TOML version, and mapped-format version have separate purposes; the [logical Field contract](logical-fields.md) explains the bounds, ownership, and compatibility rules.
+Current Sessions use mapped format **3.0** and synchronization revision **2**, including the registered logical Fields described here. Older mapped formats are rejected; this pre-1.0 runtime supplies no in-place upgrade or old-format reader. Framework version, TOML configuration version and mapped-format version have separate purposes.
 
 This example constructs and validates payloads in application memory. Lesson 11 adds a portable message envelope; Queue delivery follows its roadmap milestones.
 
@@ -655,7 +650,7 @@ Read [12_capture.cpp](../examples/primer/12_capture.cpp), then run these two pro
 
 A **capture** is a saved sequence of portable message records. This example writes four records into an ordinary binary file. The application's Session directory retains the Registry definitions needed to interpret them. Keep both the capture file and that source Session directory.
 
-The first program creates a new workspace exclusively. Inside it, the program creates `session` and `capture.angcap`, registers the application Fields and message schemas, issues publication identities, and writes through `MessageCaptureWriter`:
+The first program creates a new workspace exclusively. Inside it, the program creates `session` and `capture.angcap`, registers the application Fields and message schemas, and writes through `MessageCaptureWriter`. It constructs application-chosen identities from the Task claim and the next record number in this capture:
 
 ```cpp
 auto writer_result = MessageCaptureWriter::create(output, 1024, 4096);
@@ -665,6 +660,7 @@ if (const auto* error = std::get_if<angaria::Error>(&writer_result))
   return 1;
 }
 auto writer = std::get<MessageCaptureWriter>(std::move(writer_result));
+header._publication = PublicationId{producer.claim(), writer.records_written() + 1};
 auto append_result = writer.append(header, payload);
 if (const auto* error = std::get_if<angaria::Error>(&append_result))
 {
@@ -673,7 +669,7 @@ if (const auto* error = std::get_if<angaria::Error>(&append_result))
 }
 ```
 
-The first limit bounds one complete record; the second bounds the complete capture. The file contains the same 80-byte-header records from lesson 11, one after another. Ordinary capture writes do not have the native Session's transaction journal: an I/O failure may leave an incomplete final record. The reader reports that error instead of guessing where a later record might begin.
+The first limit bounds one complete record; the second bounds the complete capture. The file contains the same 80-byte-header records from lesson 11, one after another. These capture-local identities are not obtained from `Task::next_publication_id()`, do not establish Queue acceptance, and must not be mixed with the native producer log's issuance/deduplication namespace. Constructing them leaves Registry setup unsealed. Ordinary capture writes do not have a native transaction journal: an I/O failure may leave an incomplete final record. The reader reports that error instead of guessing where a later record might begin.
 
 The producer prints a Session identity that changes each time you make a new workspace, followed by these fixed lines:
 
@@ -742,7 +738,9 @@ Next, a producer attaches to `Feed` and writes Quote and Heartbeat records. Only
 | `new/capture.angcap` | v2: quantity `8`, price `-3` | 2 |
 | `restart/capture.angcap` | v1: price `-4`, quantity `9` | 3 |
 
-Each producer issues publication sequences `1` and `2` for its Quote and Heartbeat. A sequence starts again for a new incarnation. The full publication identity includes both values, so records from the terminated producer remain distinguishable from records written by its replacement.
+Each capture writer chooses record sequences `1` and `2` for its Quote and Heartbeat, using `PublicationId{feed.claim(), writer.records_written() + 1}`. These application-chosen identities preserve the actual Task incarnation, so the three completed captures remain distinguishable across replacement. They are not transport-issued IDs and must not be mixed into the native producer log's issuance/deduplication namespace.
+
+This is a metadata-evolution and portable-file lesson. It never calls `Task::next_publication_id()` or opens messaging endpoints, so the Registry remains unsealed when the updater adds Quote v2. Native messaging instead requires every schema version to be registered before the first endpoint opening or publication-ID issuance; lessons 14–18 use that setup boundary.
 
 When released, the waiting reader uses its original catalog to inspect both v1 captures. It rejects v2 with `NotFound`, because that definition was not present when the catalog was copied. Adding v2 to the Session never silently changes an existing inspector's definitions or the meaning of v1 bytes. A newly created inspector can discover the added version.
 
@@ -834,7 +832,7 @@ Read [15_receive.cpp](../examples/primer/15_receive.cpp), then run:
 ./build/angaria_primer_15_receive "$primer_workspace/15-receive"
 ```
 
-This program sends three Quotes before Strategy attaches. The Queue's ring holds references to only two messages, but the first Quote remains in the retained log. Receiving starts at Queue sequence 1. A **Queue sequence** records acceptance order for that connection, while a PublicationId identifies a producer's request.
+This program sends three Quotes before Strategy attaches. Its logical Queue capacity is three, so all three fit while the consumer is offline. Receiving starts at the oldest retained message, Queue sequence 1. A **Queue sequence** records acceptance order for that connection, while a PublicationId identifies a producer's request.
 
 Open the consumer's Source once, then inspect the receive result:
 
@@ -889,7 +887,7 @@ else
 }
 ```
 
-The full program also checks Error and unexpected alternatives. Normal application code handles Delivery, ReceiveTimeout, and Error separately, and DeliveryGap when configured for allowed loss in lesson 16. A receive without a timeout makes one nonblocking availability attempt; it can time out if the gate is busy. A positive timeout repeatedly checks until its monotonic deadline. Negative or overflowing timeouts are errors.
+The full program checks Error and unexpected alternatives. An acknowledged Source returns Delivery; an explicitly unacknowledged Source returns MessageView, as lesson 16 shows. ReceiveTimeout means the operation found no available message before its deadline. A receive without a timeout makes one nonblocking attempt; a positive timeout repeatedly checks until its monotonic deadline. Established receive does not acquire the Session administrative gate. Negative or overflowing timeouts are errors. DeliveryGap remains a type for later configured-loss support; that policy is currently rejected.
 
 A Delivery exposes two different things: `_message` borrows bytes, and `_token` identifies the current acknowledgment obligation. Its MessageHeader includes the original publication identity/time and destination Queue, Queue sequence, consumer claim, enqueue time, and dequeue time. The example verifies those fields instead of interpreting timestamps hidden inside the payload.
 
@@ -902,7 +900,7 @@ Next it receives sequence 2 and calls `inputs.close()` without acknowledging. Cl
 Expected output:
 
 ```text
-Recovered oldest Queue sequence after ring wrap: 1
+Received oldest retained Queue sequence: 1
 Release redelivered the same publication with a new token.
 Closing an unacknowledged Source allows redelivery.
 Final receive: timeout.
@@ -914,40 +912,34 @@ Keep a borrowed payload alive only while its delivery remains in flight. Acknowl
 
 Explicit close lets you see cleanup errors. Once a valid close begins, that handle accepts only close retries. A failed close retains its reservation, preventing a second opening from bypassing unfinished cleanup. Destruction and move assignment attempt cleanup too; if it fails, the Task must settle a preallocated deferred marker before further delivery/progress. The [receive contract](native-receive.md) explains these recovery rules in detail.
 
-## 16. Skip stale pending data and handle gaps
+An accepted destination result also has optional `_queueSequence`. For an acknowledged Queue, `writer.acknowledged_sequence()` returns a committed processing lower bound. Compare that bound with the accepted sequence from the **same Queue**; PublicationId's sequence belongs to the producer and can interleave several outgoing Queues. The watermark can lag after interruption, so a smaller value means completion has not yet been observed, rather than proving failure. An unacknowledged Queue has no certified processing watermark and returns `UnsupportedPolicy` for that query. Always check the Result before reading its value.
 
-Some applications need every message. Others, such as a display of current prices, may prefer recent data after falling behind. **Allowed loss** is a Queue policy that lets the consumer skip pending messages whose ring entries have been overwritten. Recovery from the log remains the default for every Queue that does not choose this policy.
+## 16. Receive recorded messages without acknowledgments
 
-Read [16_allowed_loss.cpp](../examples/primer/16_allowed_loss.cpp) and [allowed-loss.toml](../examples/primer/allowed-loss.toml), then run:
+Read [16_unacknowledged.cpp](../examples/primer/16_unacknowledged.cpp) and [unacknowledged.toml](../examples/primer/unacknowledged.toml), then run:
 
 ```sh
-mkdir "$primer_workspace/16-allowed-loss"
-cp examples/primer/allowed-loss.toml "$primer_workspace/16-allowed-loss/settings.toml"
-./build/angaria_primer_16_allowed_loss "$primer_workspace/16-allowed-loss/settings.toml"
+mkdir "$primer_workspace/16-unacknowledged"
+cp examples/primer/unacknowledged.toml "$primer_workspace/16-unacknowledged/settings.toml"
+./build/angaria_primer_16_unacknowledged "$primer_workspace/16-unacknowledged/settings.toml"
 ```
 
-The TOML file explicitly keeps the default `delivery = "recover_from_log"`, sets a ring capacity of two, and overrides just the Ticks Queue with `delivery = "allow_loss"`. The program calls `Session::create_from_file` and checks its Result before using the Session. An equivalent public QueueDescriptor can set `_delivery = DeliveryPolicy::AllowLoss`; both configuration paths apply the same validation.
+The TOML file keeps the Session default `acknowledgment = "required"`, then overrides ConsumerInputs with `acknowledgment = "none"`. It explicitly reserves producer-log bytes and publication count. The program calls `Session::create_from_file`, checks each Result and uses the same public QueueWriter, Task and SourceQueueSet types as the previous lessons.
 
-First the Feed sends sequences 1, 2, and 3 while the Consumer is offline. Only 2 and 3 still have ring entries. When the Consumer opens ConsumerInputs, receive returns a `DeliveryGap` for the inclusive range 1..1. A gap has a Queue identity and first/last sequence numbers. It has no message bytes or token to acknowledge. The next receive offers sequence 2.
-
-The Consumer keeps sequence 2 in flight while the Feed sends 4 and 5. Even though its ring entry has now been overwritten, repeated receive returns the same token and payload address. That **pin** protects the borrowed message until the Consumer finishes with it. The program releases sequence 2 rather than acknowledging it. Release makes it Pending again; the next receive can now report the stale range 2..3. Finally, the Consumer receives and acknowledges sequences 4 and 5.
+A receive from this Source returns `MessageView` directly. There is no processing token and no acknowledgment call. The view still has the same standard `MessageHeader`, including publication identity, exact schema, Queue and Queue sequence. Copy the message while its borrow is valid if the application needs it later. The program closes its Source, checks that the owning copy preserved the complete observed header and payload, then decodes that copy after all handles have closed.
 
 Expected output:
 
 ```text
-Configured delivery: allow_loss (ring capacity 2).
-Gap: 1..1
-Received after gap: 2
-In-flight sequence 2 survives ring overwrite.
-Gap after release: 2..3
-Received retained sequences: 4,5
-Final receive: timeout.
-Default delivery remains recover_from_log.
+Configured acknowledgment: none; accepted messages remain recorded.
+Unacknowledged receive: Queue sequence 1.
+A MessageView has no acknowledgment token.
+Owning copy preserves every header field.
+Reopening can replay the same unacknowledged publication.
+Saved copy after all handles close: PriceTicks=12345
 ```
 
-Use a gap to update application state: a display might mark its older value stale until the next tick arrives. The complete program checks each ReceiveResult alternative and each fallible public call explicitly. Its application-specific send function also resolves an uncertain send using the original PublicationId instead of silently sending a second publication.
-
-Loss is committed before its gap is returned. If the consumer dies between those events, a replacement continues after the lost prefix; the gap is not delivered again. Loss does not revoke an in-flight message, acknowledge application work, or free physical log bytes. Like acknowledgment, it changes the delivery obligation using reserved progress storage. [The receive contract](native-receive.md#configured-allowed-loss) explains these boundaries.
+Unacknowledged delivery does not certify application completion. Reopening can deliver retained messages again. The example observes that same publication after reopening rather than assuming that freeing Queue credit erased it. A Message owns bytes and its observed header; it does not acquire an acknowledgment obligation. Stale-message loss is a separate planned policy, not a consequence of choosing unacknowledged delivery.
 
 ## 17. Connect Feed, Strategy, and Audit through native Queues
 
@@ -972,17 +964,53 @@ python3 test/native_pipeline.py ./build/angaria_primer_17_native_pipeline \
 
 The `17-market` path must not exist yet. The coordinator copies the TOML file, starts real application processes, waits for their readiness messages, and retains their Session and transcripts in that workspace. The two Queues carry the messages; process pipes only coordinate the walkthrough.
 
-Feed first sends four Quotes into a ring of two while Strategy is offline. Strategy still receives Queue sequence 1 from the log. The coordinator terminates that Strategy after it borrows the first message and before it forwards anything, then replaces Feed and Strategy. Replacement Feed's publication sequence restarts in a new incarnation; Queue sequence continues. Audit and replacement Strategy then run together to process all six Quotes.
+Feed first sends four Quotes into its sixteen-slot Queue while Strategy is offline. Those accepted messages remain recorded, and Strategy starts at Queue sequence 1. The coordinator terminates that Strategy after it borrows the first message and before it forwards anything, then replaces Feed and Strategy. Replacement Feed's publication sequence restarts in a new incarnation; Queue sequence continues. Audit and replacement Strategy then run together to process all six Quotes.
 
 Two Quote versions have the same 16-byte length but opposite Field order. Strategy selects the exact schema in the received MessageHeader, copies the full header and bytes, and decodes that owning Message. It also releases its first input, receives a new token, rejects the stale old token, forwards a known-accepted PriceAlert, and only then acknowledges the input. Audit follows the original Feed Task/incarnation/sequence and input Queue sequence through each derived alert.
 
 Sending an alert and acknowledging its input are separate commits. This walkthrough terminates Strategy before any output, so replacement has no earlier output to duplicate. A crash between output acceptance and input acknowledgment can repeat application work. The [full walkthrough](native-pipeline.md) explains that boundary, expected values, header reports, cold acceptance lookup, and manual commands for running each role yourself. The five-process trading simulation with Publishing and selection policies remains its later milestone.
 
+## 18. Replay accepted messages and export a capture
+
+Read [18_log_replay.cpp](../examples/primer/18_log_replay.cpp). It uses the public [angaria/log.h](../include/angaria/log.h) API. Begin with a fresh run of lesson 15, which accepts and acknowledges three Quotes, then inspect those accepted messages again:
+
+```sh
+./build/angaria_primer_15_receive "$primer_workspace/18-log-session"
+./build/angaria_primer_18_log_replay "$primer_workspace/18-log-session" \
+    "$primer_workspace/18-quotes.angcap"
+./build/angaria_inspect "$primer_workspace/18-log-session" \
+    "$primer_workspace/18-quotes.angcap"
+```
+
+The Session path must be fresh for the first command, and the export path must not exist. The replay program refuses an occupied file or symlink so it cannot overwrite a catalog or earlier capture. The existing inspector should print PriceTicks values 12345, 12346 and 12347 using the Session's exact Quote schema.
+
+A **log archive** is a frozen view of accepted producer records. `LogArchive::capture_live` can take that view while producers continue working, without attaching a Task or acknowledging consumer work. The archive takes a separate committed boundary for each producer. These boundaries form a **vector of cuts**: they are not one global instant across all producers.
+
+The program obtains the archive's catalog, calls `publications()` for a cursor, and repeatedly calls `read_next()`. Each result is an owning LogRecord with its Message and accepted destination context, or an empty optional at the captured end. That empty result is not a live receive timeout: later messages belong to a newer capture. Optional filters select a producer, exact schema or accepted Queue.
+
+The loop reads each message's standard publication header, compiles the exact schema from the captured catalog and decodes its payload. Accepted destination rows show Queue identities, Queue sequences and enqueue times. They do not invent consumer observations or processing receipts. Between producer streams, this API uses Task-ID order; within a producer and each Queue, it preserves accepted record order.
+
+The program also calls `rewind()`, then verifies that it reads the same first publication again. Rewind returns to the same frozen input. It does not ask live consumers to redeliver, produce a DeliveryToken, erase acknowledgments or include newer traffic.
+
+Among the output are these lines:
+
+```text
+Replayed publications: 3
+Rewind preserved the captured input
+Exported flat message capture
+```
+
+The source checks every fallible call explicitly. ArchiveLimits bound native record bytes, configured producer publication capacities and the sum of fixed producer-file reservations before mapping them. These are conservative resource limits, not exact resident-memory measurements. `archive.inspect(stream)` can also decode Field names/types/values directly, preserving the native accepted-destination summary. `_maxTextBytes` defaults to 16 MiB for all rendered units; an output-capacity error leaves only complete units. The schema inspector separately keeps its default 16 MiB catalog budget. Owning records survive cursor/archive/Session closure; an archive reading its backing files requires those files to remain in place.
+
+The exported file contains ordinary flat portable message records: publication headers and payloads. Keep its matching exact catalog for interpretation. It is not a self-contained catalog bundle, receipt snapshot or execution trace. Message replay can feed application processing code again, but the message log cannot reconstruct the exact order in which independent consumers invoked handlers. Optional execution tracing, advanced replay pacing/checkpoints and republishing remain later APIs.
+
+CTest's [log_replay_example.py](../test/log_replay_example.py) runs these same three public programs, checks their three actual accepted records and exact values, tests rewind, and verifies that occupied export paths preserve their existing files and symlinks.
+
 ## What comes next
 
-New Sessions use format 2.2 with native delivery and the separate allowed-loss capability (`0xf`), even when all initial Queues use recovery delivery. Existing core (`0x7`) Sessions continue recovery delivery but reject allowed-loss defaults or Queue registration. Existing 2.0/2.1 Sessions retain their supported operations and reject native delivery; no profile is upgraded in place. Milestone 4 currently selects from at most one Active Queue per Source. A Source with no Active Queue can time out; multiple Active inputs return UnsupportedPolicy for fresh selection. An already borrowed delivery can still be finished if topology grows. Milestone 5 adds selection among those inputs.
+The public runtime now uses producer-owned recording and independent connection progress. A Source currently receives from one Active Queue; milestone 5 adds selection among multiple inputs. A Task can already own several outgoing Queue endpoints sharing one producer log, and its exact schema is selected from each MessageHeader.
 
-Acknowledgment and configured loss end delivery obligations; they do not reclaim physical append space. Reserved receipt progress, cleanup, and owner replacement can finish at a full log. Later milestones add fan-out/retry, eventfd waiting, storage reclamation, advanced Fields, and message replay.
+Acknowledgment changes certified processing progress without reclaiming immutable message bytes. Reserved progress and owner replacement can work while the producer log is full, subject to their own storage and counter checks. Later milestones add Publishing fan-out/retry, more wait policies, configured stale-data loss, storage reclamation and advanced replay controls. Accepted messages are already retained for replay.
 
 ## Understand bounds and ordinary failures
 
@@ -1002,6 +1030,7 @@ The log stores persistent definitions and updates. Registry entries can fit with
 | `Conflict` | A name or identity is already registered with a different definition, or a publication ID was reused for different content. Inspect it; repeating the changed registration will not edit it. |
 | `SchemaConflict` | An immutable message schema disagrees with the requested definition. Register an appropriate new version. |
 | `CapacityExceeded` | A reserved entity/membership count or a sequence/operation counter is exhausted. Use the error path/message to distinguish them. |
+| `QueueFull` | The connection has no transport credit. This publication was not accepted; let the consumer make progress and retry the same eligible ID. |
 | `LogFull` | The bounded log cannot hold the required append. Count capacity alone is insufficient. |
 | `IoError` | A native file operation or stored-state check failed. Inspect its path and message; an OS growth limit can fail even when the Session's byte budget has room. |
 | `OutcomeUnknown` | The caller could not establish the operation's final outcome. Keep the original publication identity or delivery-cleanup context and resolve recovery before deciding what to do next. |
@@ -1009,7 +1038,7 @@ The log stores persistent definitions and updates. Registry entries can fit with
 
 Exact registration retries are useful because they preserve the existing definition without appending another copy. In contrast, repeated topology edits can consume log space. Claims and incarnation replacement use reserved state, allowing Task replacement even when append space is exhausted.
 
-Keep the Session's files and lock files in place while programs use it. Angaria checks that their names still refer to the expected files after taking its mutation gate. If another program deletes or replaces `mutation.lock` while someone holds that old lock, receive can time out and a blocking operation can keep waiting before Angaria can report `IoError`. Obtaining the lock still requires the file checks to pass before the operation can use the gate. Step **4.23**, version **0.4.25**, [removes only a repeated check before that lock attempt](performance-gate-resources.md); your application uses the same calls and error handling.
+Keep the Session's catalog, producer, connection, progress and lock files in place while programs use them. Administrative coordination checks protect setup and catalog operations; established messaging uses its admitted resources without that gate. Live file deletion/replacement and log rotation are outside the current supported lifecycle.
 
 ### When an operation is interrupted
 
@@ -1021,25 +1050,23 @@ For receiving, keep the `DeliveryToken` for the current borrow and acknowledge a
 
 After an uncertain acknowledgment or release, stop reading the earlier borrowed payload. Settle the Source through receive or explicit close/retry before borrowing again. Do not use an old token to finish a replacement's issuance. If independent storage is needed, copy the Message while its view is still valid, as lesson 15 demonstrates.
 
-`LogFull` stops a fresh append; it does not stop reserved acknowledgment, release, loss, or claim replacement. Those operations can still fail for I/O or counter exhaustion. In particular, the Session-wide operation generation must have room even for a mutation that appends no bytes. Consumer replacement can reset its Source issuance context; it does not reset the Session's operation generation or free log bytes.
+`LogFull` stops a fresh producer-log append. It does not by itself prevent reserved acknowledgment, release or claim replacement; those operations have their own I/O and counter limits. Consumer replacement does not free accepted message bytes. Processing progress is consumer-owned and does not append a Session transaction for each acknowledgment.
 
 The [qualification guide](native-qualification.md) shows how tests combine ring wrap, producer/consumer death, repeated recovery, full logs, final counter values, and an actual OS refusal to grow the file. Its private crash hooks and boundary edits are test techniques. Continue using the public setup and error handling shown by the runnable lessons.
 
 ## Reading performance measurements
 
-The [measurement guide](native-performance.md) shows how to measure the implemented transport. A **latency** is the time one operation takes; **throughput** is the number of completed operations per second. These depend on the machine, retained history, payload size, and competing Tasks. A small payload alone does not make a send cheap: Angaria also validates history and records acceptance under a shared gate.
+A **latency** is the time one operation takes; **throughput** is the number of completed operations per second. A **p50** is the middle latency in one run. A **p99** is a latency at or below which at least 99% of that run's messages completed; it can miss a rare but severe pause, so the retained results also include maxima and longer-stream p99.9.
 
-The benchmark separates ordinary public API calls from an instrumented private engine profile. The latter helps explain time spent waiting for the gate, growing the file, and committing work. It is a research tool rather than another application lesson. Its clock reads and observation callbacks add overhead. Use the seventeen programs above to learn the public API.
+The [public runtime performance guide](public-runtime-performance.md) measures the same Session/Task/QueueWriter/SourceQueueSet API taught here, including ordinary identity issuance, acceptance lookup, complete payload verification and selected processing acknowledgments. It compares recorded/unacknowledged and recorded/acknowledged Angaria with nanomsg on the same host and build. Warmup and measured populations stay separate. The [earlier private qualification](../benchmarks/results/milestone-4-end-to-end/README.md) records the pre-admission baseline; historical Session-gated diagnostics remain evidence about that superseded implementation.
 
-Acknowledgment and other reserved progress operations do not append log bytes. They can still allocate ordinary process memory, map or read files, wait for the gate, or fail on I/O or exhausted counters. Neither these measurements nor a passing test promises a maximum latency or power-loss durability.
+Queue capacity affects both throughput and queued latency. A slow consumer can fill its connection, making producers wait or return QueueFull. The default spin policy consumes CPU while waiting. Tests measure CPU and VM faults as supporting evidence, while the primary results remain delivery latency, consumer ACK-return latency and completed throughput. Different machines, history, message sizes and competing Tasks can change these results.
 
-A finite receive can time out while a producer is competing for that same gate. The timeout does not prove that no message will arrive later. Continue your application's receive loop as needed; a later poll can still receive the publication after the producer accepts it.
-
-The [detailed diagnostics guide](performance-diagnostics.md) explains the investigation of these costs. The [recorded findings](performance-diagnostics-findings.md) show why repeatedly checking old messages makes even small operations slow, and how idle consumers can delay producers. It separates work such as scanning history, checking definitions, mapping files, and waiting for the gate. Diagnostic collection is an optional research build; your application continues using the public API taught here. It adds no new application lesson or delivery behavior. Step **4.13**, version **0.4.15**, [reuses record information already checked during an operation](performance-prefix-reuse.md), reducing repeated file work. Applications use the same API. The remaining history checks and shared gate still prevent a bounded-latency promise. Step **4.14**, version **0.4.16**, [reads that history through bounded mapped windows](performance-prefix-windows.md), reducing repeated file operations while still checking every record. Application code and payload lifetimes stay the same. Step **4.15**, version **0.4.17**, [gives queued local blocking operations a handoff opportunity](performance-gate-handoff.md) instead of letting polls repeatedly overtake them. A receive can still time out while blocking work is waiting, and this preference does not give every caller a bounded wait. Step **4.16**, version **0.4.18**, [reuses small file mappings while an operation reads metadata](performance-runtime-windows.md). Angaria still checks the same records and reads current state; your application uses the same API and owns copies in the same way. Step **4.17**, version **0.4.19**, [avoids checking the same history twice before an operation's first commit](performance-operation-validation.md). Angaria holds its mutation gate between the first check and that attempt; later operations and retries check history again. Your program uses the same API. Step **4.18**, version **0.4.20**, [avoids repeating delivery-history validation between receive selection and issuance](performance-receive-validation.md). The operation keeps its mutation gate throughout, checks live ownership and receipt state, and uses the same public API. Step **4.19**, version **0.4.21**, [uses the Queue's stored location to find its oldest pending message](performance-delivery-lookup.md). Angaria still checks all retained history, but avoids searching that history a second time during issuance. Your program uses the same receive calls and owns copies in the same way. Step **4.20**, version **0.4.22**, [avoids loading the same Task and Queue/Source definitions repeatedly during one operation](performance-definition-reuse.md). Angaria still checks the complete history and current delivery state. Your application uses the same API. Step **4.21**, version **0.4.23**, [shares freshly checked schema definitions while preparing a message](performance-payload-preparation.md). It avoids loading the same Fields again when building the object that interprets the payload. Your send/receive calls and message lifetimes stay the same. Step **4.22**, version **0.4.24**, [reuses small temporary buffers while checking stored history](performance-prefix-buffers.md). Angaria checks the same records and still owns message copies in the same way; applications need no new API calls.
+Established messaging does not acquire the Session administrative gate. A receive timeout still does not prove that no message will arrive later; a producer can accept a publication after that poll. Continue the application's receive loop as needed. A passing test or a finite benchmark does not establish a maximum latency or endless log capacity.
 
 ## How this guide will grow
 
-The learning sequence completes milestone 3 and introduces native sending and receiving in milestone 4: TOML setup, independent-process Registry use, current/historical snapshots, scalar and logical payloads, and portable capture exchange with generic exact-version inspection across producer replacements. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
+The current learning sequence covers TOML setup, independent-process Registry use, current/historical definitions, scalar/logical payloads, public recorded messaging with both acknowledgment modes, header-preserving copies, and accepted-log replay/export with exact-schema inspection. Planned YAML, JSON, and XML converters will produce TOML for the common loader.
 
 The [roadmap](../ROADMAP.md) is the authority for upcoming features:
 

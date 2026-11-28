@@ -1,6 +1,5 @@
-#include "topology_state.h"
+#include "public_runtime.h"
 #include "registry_access.h"
-#include "publication_runtime.h"
 #include "source_runtime_state.h"
 
 #include <memory>
@@ -8,7 +7,6 @@
 #include <stdexcept>
 #include <utility>
 #include <variant>
-
 #include <unistd.h>
 
 namespace angaria::detail
@@ -18,6 +16,8 @@ namespace angaria::detail
   public:
     std::shared_ptr<TaskState> _task;
     QueueId _id{};
+    recorded::RecordedProducer _producer;
+    std::uint64_t _revision{};
   };
 
   class PublishingQueueSetState
@@ -29,32 +29,12 @@ namespace angaria::detail
 
   namespace
   {
-    template <typename Loaded, typename Id>
-    const Loaded& find_endpoint(const std::vector<Loaded>& entries, Id id)
-    {
-      return require_registered_entity(entries, id, "endpoint.id", "Endpoint identity must be nonzero",
-                                         "Endpoint identity is not registered with this kind");
-    }
-
-    template <typename Loaded>
-    void check_endpoint(const Loaded& loaded, TaskId owner, const std::shared_ptr<TaskState>& task)
-    {
-      if (loaded._definition._state != EntityState::Active)
-      {
-        runtime_fail(ErrorCode::NotActive, "endpoint.state", "Endpoint requires an Active entity");
-      }
-      if (owner != task->_claim._task)
-      {
-        runtime_fail(ErrorCode::WrongOwner, "endpoint.owner", "Acting Task does not own this endpoint");
-      }
-    }
-
     template <typename State>
     auto endpoint_id(const std::shared_ptr<State>& state)
     {
       try
       {
-        runtime_check_task(state ? state->_task : nullptr);
+        runtime_check_messaging_owner(state ? state->_task : nullptr);
         return state->_id;
       }
       catch (...)
@@ -65,41 +45,46 @@ namespace angaria::detail
 
     PublicationReport publication_error(PublicationId publication, ErrorCode code)
     {
-      PublicationReport report;
-      report._publication = publication;
-      report._status = code == ErrorCode::OutcomeUnknown ? PublicationStatus::OutcomeUnknown : PublicationStatus::Rejected;
-      report._error = code;
-      return report;
+      const auto status = code == ErrorCode::OutcomeUnknown || code == ErrorCode::IoError ?
+          PublicationStatus::OutcomeUnknown : PublicationStatus::Rejected;
+      return {publication, status, 0, {}, 0, code};
     }
 
-    Result<PublicationOutcome> own_publication_report(const PublicationReport& report,
-                                                       std::vector<DestinationOutcome> destinations)
+    Result<PublicationOutcome> own_report(const PublicationReport& report, std::vector<DestinationOutcome> outcomes)
     {
       if (report._error != ErrorCode::None)
       {
-        return Error{report._error, "Publication operation could not establish a usable outcome", "publication"};
+        return Error{report._error, "Publication operation did not establish an outcome", "publication"};
       }
-      AcceptanceStatus status;
-      switch (report._status)
-      {
-      case PublicationStatus::Accepted:
-        status = AcceptanceStatus::Accepted;
-        break;
-      case PublicationStatus::Partial:
-        status = AcceptanceStatus::Partial;
-        break;
-      case PublicationStatus::Rejected:
-        status = AcceptanceStatus::Rejected;
-        break;
-      case PublicationStatus::OutcomeUnknown:
-      default:
-        return Error{ErrorCode::OutcomeUnknown, "Publication outcome requires recovery and lookup", "publication"};
-      }
-      destinations.resize(report._destinations.size());
-      return PublicationOutcome{report._publication, status, report._topologyRevision, std::move(destinations)};
+      outcomes.resize(report._destinations.size());
+      const auto status = report._status == PublicationStatus::Accepted ? AcceptanceStatus::Accepted :
+          report._status == PublicationStatus::Partial ? AcceptanceStatus::Partial : AcceptanceStatus::Rejected;
+      return PublicationOutcome{report._publication, status, report._topologyRevision, std::move(outcomes)};
     }
-  } // namespace
-} // namespace angaria::detail
+
+    PublicationReport send(const std::shared_ptr<QueueWriterState>& state, PublicationId publication,
+                            const MessageView& message, std::span<DestinationOutcome> outcomes)
+    {
+      runtime_check_messaging_owner(state ? state->_task : nullptr);
+      if (outcomes.empty())
+      {
+        return {publication, PublicationStatus::OutcomeUnknown, state->_revision, {}, 1, ErrorCode::OutputBufferTooSmall};
+      }
+      std::lock_guard lock(state->_task->_producerMutex);
+      auto result = state->_producer.try_send(publication, message);
+      if (const auto* error = std::get_if<Error>(&result))
+      {
+        return publication_error(publication, error->_code);
+      }
+      const auto full = std::holds_alternative<recorded::QueueCreditFull>(result);
+      outcomes[0] = {state->_id, full ? DestinationStatus::Rejected : DestinationStatus::Accepted,
+                    full ? ErrorCode::QueueFull : ErrorCode::None,
+                    full ? std::optional<std::uint64_t>{} : std::get<recorded::ProducerAppendResult>(result)._queueSequence};
+      return {publication, full ? PublicationStatus::Rejected : PublicationStatus::Accepted,
+              state->_revision, outcomes.first(1), 1, ErrorCode::None};
+    }
+  }
+}
 
 namespace angaria
 {
@@ -120,11 +105,25 @@ namespace angaria
     return detail::endpoint_id(_state);
   }
 
+  Result<std::uint64_t> QueueWriter::acknowledged_sequence() const
+  {
+    try
+    {
+      detail::runtime_check_messaging_owner(_state ? _state->_task : nullptr);
+      std::lock_guard lock(_state->_task->_producerMutex);
+      return _state->_producer.acknowledged_sequence();
+    }
+    catch (...)
+    {
+      return detail::runtime_caught_error();
+    }
+  }
+
   SourceQueueSetId SourceQueueSet::id() const
   {
     try
     {
-      detail::runtime_check_task(detail::runtime_source_task(_state));
+      detail::runtime_check_messaging_owner(detail::runtime_source_task(_state));
       return _state->_id;
     }
     catch (...)
@@ -142,13 +141,10 @@ namespace angaria
   {
     try
     {
-      auto access = detail::task_access(_state ? _state->_task : nullptr);
-      // Reserve the complete owning result before acceptance can commit. Moving
-      // it out after the journal succeeds requires no new destination storage.
+      detail::runtime_check_messaging_owner(_state ? _state->_task : nullptr);
       std::vector<DestinationOutcome> outcomes(1);
-      const auto report = detail::runtime_send(access, _state->_task->_claim, _state->_id,
-                                                publication, message, outcomes, _state->_task);
-      return detail::own_publication_report(report, std::move(outcomes));
+      const auto report = detail::send(_state, publication, message, outcomes);
+      return detail::own_report(report, std::move(outcomes));
     }
     catch (...)
     {
@@ -156,14 +152,11 @@ namespace angaria
     }
   }
 
-  PublicationReport QueueWriter::send(PublicationId publication, MessageView message,
-                                        std::span<DestinationOutcome> outcomes)
+  PublicationReport QueueWriter::send(PublicationId publication, MessageView message, std::span<DestinationOutcome> outcomes)
   {
     try
     {
-      auto access = detail::task_access(_state ? _state->_task : nullptr);
-      return detail::runtime_send(access, _state->_task->_claim, _state->_id, publication,
-                                    message, outcomes, _state->_task);
+      return detail::send(_state, publication, message, outcomes);
     }
     catch (...)
     {
@@ -175,17 +168,11 @@ namespace angaria
   {
     try
     {
-      auto access = detail::task_access(_state);
-      auto report = detail::runtime_publication_status(access, _state->_claim, publication, {});
-      std::vector<DestinationOutcome> outcomes;
-      if (report._error == ErrorCode::OutputBufferTooSmall)
-      {
-        // Keep the same recovered snapshot and gate while sizing the owned
-        // result. Status never creates an acceptance or changes the ID.
-        outcomes.resize(report._requiredCapacity);
-        report = detail::runtime_publication_status(access, _state->_claim, publication, outcomes);
-      }
-      return detail::own_publication_report(report, std::move(outcomes));
+      detail::runtime_check_messaging_owner(_state);
+      std::vector<DestinationOutcome> outcomes(1);
+      std::lock_guard lock(_state->_producerMutex);
+      const auto report = detail::runtime_recorded_publication_status(_state, publication, outcomes);
+      return detail::own_report(report, std::move(outcomes));
     }
     catch (...)
     {
@@ -197,8 +184,9 @@ namespace angaria
   {
     try
     {
-      auto access = detail::task_access(_state);
-      return detail::runtime_publication_status(access, _state->_claim, publication, outcomes);
+      detail::runtime_check_messaging_owner(_state);
+      std::lock_guard lock(_state->_producerMutex);
+      return detail::runtime_recorded_publication_status(_state, publication, outcomes);
     }
     catch (...)
     {
@@ -249,13 +237,24 @@ namespace angaria
   {
     try
     {
-      auto access = detail::task_access(_state);
-      const auto topology = detail::runtime_topology(access);
-      const auto& loaded = detail::find_endpoint(topology._queues, queue);
-      detail::check_endpoint(loaded, loaded._definition._descriptor._producer, _state);
+      detail::runtime_check_messaging_owner(_state);
+      std::lock_guard lock(_state->_producerMutex);
+      const auto resources = detail::runtime_task_resources(_state, queue);
+      const auto found = resources->_queues.find(queue);
+      if (found == resources->_queues.end())
+      {
+        detail::runtime_fail(ErrorCode::NotActive, "writer.queue", "Queue is not an admitted Active connection");
+      }
+      if (found->second._log._header._producer != _state->_claim._task)
+      {
+        detail::runtime_fail(ErrorCode::WrongOwner, "writer.queue", "Task does not own this outgoing Queue");
+      }
       auto state = std::make_shared<detail::QueueWriterState>();
       state->_task = _state;
       state->_id = queue;
+      state->_revision = found->second._topologyRevision;
+      state->_producer = detail::runtime_value(detail::recorded::RecordedProducer::open_shared(
+          found->second, detail::runtime_producer_log(_state)));
       return QueueWriter{std::move(state)};
     }
     catch (...)
@@ -268,11 +267,28 @@ namespace angaria
   {
     try
     {
-      auto access = detail::task_access(_state);
-      detail::runtime_reconcile_sources(access, _state);
-      const auto topology = detail::runtime_topology(access);
-      const auto& loaded = detail::find_endpoint(topology._sources, source);
-      detail::check_endpoint(loaded, loaded._definition._descriptor._owner, _state);
+      detail::runtime_check_messaging_owner(_state);
+      const auto resources = detail::runtime_task_resources(_state, {}, source);
+      auto found = resources->_queues.end();
+      for (auto it = resources->_queues.begin(); it != resources->_queues.end(); ++it)
+      {
+        if (it->second._source == source)
+        {
+          if (found != resources->_queues.end())
+          {
+            detail::runtime_fail(ErrorCode::UnsupportedPolicy, "source.members", "Multiple-input selection is a later milestone");
+          }
+          found = it;
+        }
+      }
+      if (found == resources->_queues.end())
+      {
+        detail::runtime_fail(ErrorCode::NotActive, "source.members", "Source requires one admitted Active input Queue");
+      }
+      if (found->second._consumer != _state->_claim._task)
+      {
+        detail::runtime_fail(ErrorCode::WrongOwner, "source.owner", "Task does not own this Source");
+      }
       auto state = std::make_shared<detail::SourceQueueSetState>();
       state->_task = _state;
       state->_ownerPid = static_cast<std::uint64_t>(::getpid());
@@ -282,13 +298,20 @@ namespace angaria
       state->_reservation = std::make_shared<detail::SourceReservation>();
       state->_reservation->_id = source;
       state->_reservation->_claim = _state->_claim;
+      std::lock_guard lock(_state->_endpointMutex);
+      if (!_state->_openSources.emplace(source, state->_reservation).second)
       {
-        std::lock_guard lock(_state->_endpointMutex);
-        if (!_state->_openSources.emplace(source, state->_reservation).second)
-        {
-          detail::runtime_fail(ErrorCode::OwnershipBusy, "endpoint.source", "Source already has an open handle for this Task claim");
-        }
-        state->_registered = true;
+        detail::runtime_fail(ErrorCode::OwnershipBusy, "source", "Source already has an open handle in this Task claim");
+      }
+      state->_registered = true;
+      if (found->second._acknowledged)
+      {
+        state->_consumer = detail::runtime_value(detail::recorded::RecordedAcknowledgedConsumer::open(
+            found->second, nullptr, nullptr, _state->_claim));
+      }
+      else
+      {
+        state->_consumer = detail::runtime_value(detail::recorded::RecordedConsumer::open(found->second, nullptr, _state->_claim));
       }
       return SourceQueueSet{std::move(state)};
     }
@@ -298,22 +321,18 @@ namespace angaria
     }
   }
 
-  Result<PublishingQueueSet> Task::open_publishing_set(PublishingQueueSetId publisher)
+  Result<PublishingQueueSet> Task::open_publishing_set(PublishingQueueSetId)
   {
-    try
-    {
-      auto access = detail::task_access(_state);
-      const auto topology = detail::runtime_topology(access);
-      const auto& loaded = detail::find_endpoint(topology._publishing, publisher);
-      detail::check_endpoint(loaded, loaded._definition._descriptor._owner, _state);
-      auto state = std::make_shared<detail::PublishingQueueSetState>();
-      state->_task = _state;
-      state->_id = publisher;
-      return PublishingQueueSet{std::move(state)};
-    }
-    catch (...)
-    {
-      return detail::runtime_caught_error();
-    }
+    return Error{ErrorCode::UnsupportedPolicy, "Publishing is a later milestone", "publishing"};
   }
-} // namespace angaria
+
+  PublicationReport PublishingQueueSet::publish(PublicationId publication, MessageView, std::span<DestinationOutcome>)
+  {
+    return detail::publication_error(publication, ErrorCode::UnsupportedPolicy);
+  }
+
+  PublicationReport PublishingQueueSet::retry(PublicationId publication, std::span<const QueueId>, std::span<DestinationOutcome>)
+  {
+    return detail::publication_error(publication, ErrorCode::UnsupportedPolicy);
+  }
+}
