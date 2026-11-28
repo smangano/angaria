@@ -6,6 +6,12 @@ Steps 4.1 and 4.2 used framework versions **`0.4.1`** and **`0.4.2`**; step 4.3 
 
 The focused [helper consolidation](../helper-audit.md) after step 4.3 uses **`0.4.4`**, on `milestone-4-3-cleanup`, with a PR into `milestone-4`. It leaves the review-step numbering below unchanged. Steps **4.4** and **4.5** use framework versions **`0.4.5`** and **`0.4.6`** respectively.
 
+## Current status and remaining closeout
+
+The producer-owned runtime is implemented through step **4.38**, framework **0.4.40**, including public admission and fork-aware ownership. Step **4.39**, framework **0.4.41**, supplies the [current completion review](milestone-4-current-completion.md) and [milestone-5 review plan](milestone-5.md). It changes documentation and framework version only. Final current-candidate performance qualification and the separate integration PR remain pending.
+
+The original format-2 transport, allowed-loss implementation and compatibility discussion below are historical development records. Public admission in step 4.37 removed that engine; [current admission](../public-runtime-admission.md) admits format 3.0 only. Configured loss is explicitly scheduled for milestone 5.6. Use the current completion review's [integration gate](milestone-4-current-completion.md#integration-gate) instead of the historical 0.4.13 audit to decide readiness for `main`.
+
 ## Review steps
 
 A separate **0.4.7** [public interface review](../public-interface.md), branch `milestone-4-api-review`, follows step 4.5. It proposes the full application/log/replay surface through 1.0 without implementing new runtime operations or renumbering these development steps. Step 4.6 incorporates the approved message/header model, owning direct outcomes, and named setup while enabling direct publication at version 0.4.8.
@@ -45,6 +51,14 @@ A separate **0.4.7** [public interface review](../public-interface.md), branch `
 | 4.31 | `milestone-4-31` | Define producer-log codecs. | Fix private format-3 headers/references/records; qualify golden bytes, bounds, allocation-free encoding and borrowed decoding. |
 | 4.32 | `milestone-4-32` | Implement producer-owned append, recovery and replay. | Reserve/map once, claim the actual data inode, persist incarnation, release-publish acceptance, recover complete prefixes and retain frozen replay cuts; qualify actual process crashes and focused append/replay latency and throughput. |
 | 4.33 | `milestone-4-33` | Implement recorded/unacknowledged point-to-point endpoints. | Bind checked fixed context to the producer log and atomic ring, enforce logical credit, qualify order/wrap/empty/retry and retained copies, then compare complete ID/send/outcome-lookup/receive latency and verified throughput against nanomsg. |
+| 4.34 | `milestone-4-34` | Qualify restart, catch-up and connection independence. | Actual producer/consumer interruption, replay and ownership recovery preserve exact acceptance and credit while unrelated owners continue communicating. |
+| 4.35 | `milestone-4-35` | Implement optional acknowledged progress. | Consumer-owned operation images and receipts qualify exact tokens, release/redelivery, full-log progress and interruption without Session transactions. |
+| 4.36 | `milestone-4-36` | Qualify private end-to-end messaging. | Both modes and nanomsg share a recorded workload/host/build, with reconstructible latency, completed throughput, CPU and failure evidence. |
+| 4.37 | `milestone-4-37` | Admit the public producer-owned runtime. | Integrate fixed setup, shared Task logs, exact schemas, public replay and TOML acknowledgment; remove the superseded engine and qualify actual public calls. |
+| 4.38 | `milestone-4-38` | Remove repeated messaging PID queries. | Preserve fork/Thread/parent rejection, require zero direct Linux hot PID calls, and retain matched public latency/throughput evidence. |
+| 4.39 | `milestone-4-39` | Review current completion and the next milestone. | Record implemented/deferred boundaries, the Linux-first final qualification gate and the seven Source Queue Set steps; make no new speedup claim. |
+| 4.40 (planned) | `milestone-4-40` | Qualify the final current public runtime. | Complete the current audit's matrix, matched controls, additional ordinary-send workload, Mac checks and external retention before the integration review. |
+
 
 Split a step further if needed to keep its PR reviewable. Each implementation PR includes focused teaching tests, appropriate native crash/I/O checks, and primer updates. Existing lessons remain runnable; new examples use delivery methods only after those methods are implemented.
 
@@ -248,3 +262,11 @@ Public `LogArchive` freezes one accepted-prefix cut per producer and supplies bo
 The [ownership optimization](../performance-fork-aware-ownership.md) replaces hot PID calls in public Task/Source operations and producer-log readers with tokens invalidated by the existing registered fork handler. Public checks retain live claims, Thread/parent semantics and rejection before inherited mutexes or atomic shared-pointer operations. Stored format, acceptance, transport credit, acknowledgment and replay remain unchanged.
 
 New primitive/reader and held-lock public fork tests qualify the safety boundary. A Linux interception test calibrates actual `getpid` observations and requires zero direct calls in warmed messaging and empty polling. Matched baseline/head and nanomsg measurements must retain raw evidence, balanced order and observed ranges. The public primer's ownership rules and all eighteen runnable lessons remain applicable; its performance references track this work.
+
+## Step 4.39 — current completion and milestone-5 plan (0.4.41)
+
+The [current completion review](milestone-4-current-completion.md) separates the implemented format-3 protocol from the retired engine and records the pending exit evidence. Linux latency and completed-message throughput are the primary performance targets; macOS remains supported with measured regression coverage. Existing 0.4.40 results remain historical evidence, not a claim that the final-candidate matrix has run.
+
+The [milestone-5 plan](milestone-5.md) defines seven review steps: multi-input contract; strict priority/round robin; multi-input progress/recovery; proportional budgets; weighted random; allowed loss; and the public example/primer/qualification. Step 5.1 reviews precise scheduling and loss/credit rules before implementation. Waiting policies stay in milestone 7, and log rotation/retention/reclamation stay in milestone 8.
+
+Step 4.40 is the planned next qualification PR; any required runtime fix gets its own measured review step. Allocate versions when those PRs are created. Integration into `main` remains a separate PR on its own tested final commit; milestone 5 starts only from that integrated main.

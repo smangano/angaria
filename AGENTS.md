@@ -12,6 +12,7 @@ Boost and Intel TBB are permitted dependencies when warranted by the implementat
 ## Performance and correctness
 
 - Treat performance and correctness as equally important requirements. Consider latency, throughput, allocation, synchronization, and scaling costs throughout design and review.
+- Use Linux latency and completed-message throughput as the primary performance targets. Keep macOS correct, supported, and acceptably fast; document measured Mac tradeoffs and investigate significant repeatable regressions. Separate workload changes from implementation speedups and compare revisions on the same host.
 - Every implementation step must include either a focused performance unit test or a full matched benchmark against nanomsg, as appropriate to the change's scope. Run the selected check and report the baseline, result, expected direction and any regression in the same PR so problems are caught early. Keep focused checks for isolated costs; use end-to-end latency and verified throughput for transport/policy changes. Design-only steps specify the upcoming checks and make no measured speedup claim.
 - Assess a precaution's runtime cost against the likelihood and impact of the failure it prevents, given the supported operating conditions and assumptions.
 - After that risk assessment, a justified tradeoff may favor performance over overly defensive or overengineered precautions. Existing checks and tests are open to reassessment; their presence alone does not justify retaining a costly precaution.
