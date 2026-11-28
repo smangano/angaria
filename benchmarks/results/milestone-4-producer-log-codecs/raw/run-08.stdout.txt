@@ -1,0 +1,18 @@
+Running main() from /Users/smangano/3rdparty/googletest/googletest/src/gtest_main.cc
+[==========] Running 3 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 3 tests from PayloadSizes/ProducerLogPerformance
+[ RUN      ] PayloadSizes/ProducerLogPerformance.BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/0
+CODEC_PERFORMANCE {"payload_bytes":64,"samples":9,"cycles_per_sample":2048,"owned_record_bytes":256,"legacy_body_bytes":240,"legacy_full_record_bytes":448,"owned_borrowed":{"median_cycle_ns":48.869,"cycles_per_second":20462811.239,"allocations_per_cycle":0.000,"cycle_ns_samples":[44.169,49.500,48.869,48.137,48.828,48.380,49.764,48.970,49.011]},"legacy_owning":{"median_cycle_ns":93.689,"cycles_per_second":10673615.635,"allocations_per_cycle":3.000,"cycle_ns_samples":[93.384,92.346,93.506,92.570,97.351,95.663,95.724,93.689,93.689]}}
+[       OK ] PayloadSizes/ProducerLogPerformance.BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/0 (2 ms)
+[ RUN      ] PayloadSizes/ProducerLogPerformance.BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/1
+CODEC_PERFORMANCE {"payload_bytes":256,"samples":9,"cycles_per_sample":2048,"owned_record_bytes":448,"legacy_body_bytes":432,"legacy_full_record_bytes":640,"owned_borrowed":{"median_cycle_ns":50.558,"cycles_per_second":19779413.185,"allocations_per_cycle":0.000,"cycle_ns_samples":[50.619,50.537,50.558,50.618,50.456,50.537,52.531,50.558,50.517]},"legacy_owning":{"median_cycle_ns":98.002,"cycles_per_second":10203878.271,"allocations_per_cycle":3.000,"cycle_ns_samples":[99.630,98.186,100.342,100.667,97.981,97.636,97.859,98.002,97.941]}}
+[       OK ] PayloadSizes/ProducerLogPerformance.BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/1 (2 ms)
+[ RUN      ] PayloadSizes/ProducerLogPerformance.BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/2
+CODEC_PERFORMANCE {"payload_bytes":1024,"samples":9,"cycles_per_sample":2048,"owned_record_bytes":1216,"legacy_body_bytes":1200,"legacy_full_record_bytes":1408,"owned_borrowed":{"median_cycle_ns":57.312,"cycles_per_second":17448349.308,"allocations_per_cycle":0.000,"cycle_ns_samples":[59.407,57.414,57.312,56.233,56.315,57.658,57.942,56.335,56.234]},"legacy_owning":{"median_cycle_ns":133.341,"cycles_per_second":7499551.418,"allocations_per_cycle":3.000,"cycle_ns_samples":[136.556,148.396,136.393,133.810,133.098,132.426,133.341,132.812,132.792]}}
+[       OK ] PayloadSizes/ProducerLogPerformance.BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/2 (3 ms)
+[----------] 3 tests from PayloadSizes/ProducerLogPerformance (9 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 1 test suite ran. (9 ms total)
+[  PASSED  ] 3 tests.

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="3" failures="0" disabled="0" errors="0" time="0.009" timestamp="2026-11-27T19:47:56.471" name="AllTests">
+  <testsuite name="PayloadSizes/ProducerLogPerformance" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="0.009" timestamp="2026-11-27T19:47:56.471">
+    <testcase name="BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/0" value_param="64" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_performance.cpp" line="295" status="run" result="completed" time="0.002" timestamp="2026-11-27T19:47:56.471" classname="PayloadSizes/ProducerLogPerformance">
+      <properties>
+        <property name="payload_bytes" value="64"/>
+        <property name="owned_borrowed_median_cycle_ns" value="50.313477"/>
+        <property name="legacy_owning_median_cycle_ns" value="91.166504"/>
+        <property name="owned_borrowed_cycles_per_second" value="19875390.617418"/>
+        <property name="legacy_owning_cycles_per_second" value="10968940.972315"/>
+        <property name="owned_borrowed_allocations_per_cycle" value="0.000000"/>
+        <property name="legacy_owning_allocations_per_cycle" value="3.000000"/>
+      </properties>
+    </testcase>
+    <testcase name="BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/1" value_param="256" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_performance.cpp" line="295" status="run" result="completed" time="0.002" timestamp="2026-11-27T19:47:56.474" classname="PayloadSizes/ProducerLogPerformance">
+      <properties>
+        <property name="payload_bytes" value="256"/>
+        <property name="owned_borrowed_median_cycle_ns" value="51.879883"/>
+        <property name="legacy_owning_median_cycle_ns" value="99.121094"/>
+        <property name="owned_borrowed_cycles_per_second" value="19275294.117647"/>
+        <property name="legacy_owning_cycles_per_second" value="10088669.950739"/>
+        <property name="owned_borrowed_allocations_per_cycle" value="0.000000"/>
+        <property name="legacy_owning_allocations_per_cycle" value="3.000000"/>
+      </properties>
+    </testcase>
+    <testcase name="BorrowedRoundTripHasNoAllocationsAndReportsCodecCost/2" value_param="1024" file="/Users/smangano/Documents/ChatGPT/C++/angaria-protocol-design/test/test_producer_log_performance.cpp" line="295" status="run" result="completed" time="0.003" timestamp="2026-11-27T19:47:56.476" classname="PayloadSizes/ProducerLogPerformance">
+      <properties>
+        <property name="payload_bytes" value="1024"/>
+        <property name="owned_borrowed_median_cycle_ns" value="55.806641"/>
+        <property name="legacy_owning_median_cycle_ns" value="130.187988"/>
+        <property name="owned_borrowed_cycles_per_second" value="17919014.454205"/>
+        <property name="legacy_owning_cycles_per_second" value="7681200.187529"/>
+        <property name="owned_borrowed_allocations_per_cycle" value="0.000000"/>
+        <property name="legacy_owning_allocations_per_cycle" value="3.000000"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -50,3 +50,11 @@ jobs:
         run: cmake --build build --parallel 3
       - name: Run native tests and walkthroughs
         run: ctest --test-dir build --output-on-failure
+      - name: Retain tests and focused codec performance
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: codec-tests-${{ runner.os }}-${{ matrix.architecture }}
+          path: build/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+          retention-days: 14

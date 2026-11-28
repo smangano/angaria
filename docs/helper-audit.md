@@ -28,6 +28,7 @@ Use the related header below before introducing another local implementation. Th
 | [journal_atomic.h](../src/journal_atomic.h), [journal_metadata.h](../src/journal_metadata.h) | Native atomic word copies and bounded direct Publication metadata reads shared by compact claim cleanup and streamed loss replay. Payload bytes are not copied. |
 | [mapped_read_window.h](../src/mapped_read_window.h) | Bounded operation-local mapping reuse for immutable copies and native atomic word loads, shared by journal scans and runtime metadata reads. Callers own gate/range/validation policy; no borrowed spans escape. |
 | [journal_validation.h](../src/journal_validation.h) | Validated record ranges and exact boundary lookup by binary search over allocation order, shared by predecessor checks, compact claim cleanup, and loss validation. Operation-specific kind/readiness checks remain with callers. |
+| [producer_log_format.h](../src/producer_log_format.h) | Private format-3 producer headers, cross-log references and Publication encode-into/borrowed-decode representations. Reuses byte/arithmetic/wire helpers; does not reuse format-2 envelope/receipt geometry or access live atomic words. |
 | [text_escaping.h](../include/angaria/detail/text_escaping.h) | Printable ASCII/hex escaping, quote policy, and bounded diagnostic streaming. |
 | [native_file_state.h](../src/native_file_state.h) | Native file state and conversion of `stat` device/inode identity. Descriptor ownership and coordination remain separate. |
 

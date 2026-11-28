@@ -25,3 +25,7 @@ benchmarks/results/milestone-4-single-destination/**/*.out -text -diff
 benchmarks/results/milestone-4-manifest-validation/**/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 benchmarks/results/milestone-4-manifest-validation/**/*.txt -text whitespace=-blank-at-eol,-blank-at-eof
 benchmarks/results/milestone-4-manifest-validation/**/*.out -text -diff
+
+# Preserve Matplotlib's valid SVG path whitespace and verbatim unit-test output.
+benchmarks/results/milestone-4-producer-log-codecs/*.svg -text whitespace=-blank-at-eol,-blank-at-eof
+benchmarks/results/milestone-4-producer-log-codecs/raw/*.txt -text whitespace=-blank-at-eol,-blank-at-eof

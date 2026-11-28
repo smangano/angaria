@@ -10,6 +10,8 @@ You can run every example in this guide today. Some additional public methods re
 
 The [independent messaging protocol](independent-messaging-protocol.md) is a design for the next runtime, with producer-owned recording and optional acknowledgments. It is not implemented by these lessons yet. Before 1.0, storage and APIs can change without backward compatibility; use matching programs and libraries and recreate development Sessions after a breaking change. The lessons will switch when the replacement is runnable.
 
+Step **4.31** adds private [producer-log byte codecs](producer-log-format.md), not a new application messaging API. The seventeen programs below still use the current public runtime; no private codec setup is required to run them.
+
 ## A few ideas before the code
 
 A **process** is a running program. A **thread** is one path of execution inside a process. Two terminal windows can launch two independent processes, even when both run the same executable.

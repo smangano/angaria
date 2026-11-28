@@ -36,6 +36,7 @@ add_library(angaria STATIC
   src/message_record.cpp
   src/message.cpp
   src/publication_metadata.cpp
+  src/producer_log_format.cpp
   src/publication_runtime.cpp
   src/mapped_payload.cpp
   src/delivery_state.cpp
@@ -227,6 +228,13 @@ if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 
+  # Isolate allocation replacement hooks from the ordinary correctness suite.
+  add_executable(angaria_producer_log_performance test/test_producer_log_performance.cpp)
+  target_include_directories(angaria_producer_log_performance PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(angaria_producer_log_performance PRIVATE angaria GTest::gtest_main)
+  add_test(NAME producer_log_performance COMMAND angaria_producer_log_performance)
+  set_tests_properties(producer_log_performance PROPERTIES TIMEOUT 30)
+
   if(ANGARIA_BUILD_IPC_COMPARISON)
     add_executable(angaria_ipc_comparison_tests test/test_ipc_comparison_deadlines.cpp)
     target_include_directories(angaria_ipc_comparison_tests PRIVATE
@@ -340,6 +348,7 @@ if(BUILD_TESTING)
     test/test_message_record.cpp
     test/test_message.cpp
     test/test_publication_metadata.cpp
+    test/test_producer_log_format.cpp
     test/test_publication_api.cpp
     test/test_publication_runtime.cpp
     test/test_publication_recovery.cpp

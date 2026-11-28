@@ -2,6 +2,8 @@
 
 **Status: design for review, not implemented.** Milestone 4 step **4.30**, framework **0.4.32**, supplies step 1 of the [recorded messaging performance plan](recorded-unacknowledged-delivery-plan.md#implementation-steps-for-review). It specifies ownership, acceptance, delivery and processing-progress boundaries before new codecs or runtime code are written. The existing public runtime still follows its documented Session-gated protocol.
 
+Step **4.31**, framework **0.4.33**, implements the private [producer header, reference and Publication byte codecs](producer-log-format.md). That fixes the initial format-3.0 representations; it does not implement the live append/commit, recovery, ring or acknowledgment protocol described below. Producer-owned mapped recording is the next step.
+
 The first implementation is bounded, fixed-topology, local point-to-point messaging. Every acceptance is recorded. Application acknowledgment is configurable and remains enabled by default. Independent connections acquire no common Session lock and change no common Session transaction state while communicating. Independent means disjoint producer-stream and consumer/Source owners; sharing a Source, producer stream or fan-out acceptance group legitimately shares that group's scheduling and backpressure.
 
 Before 1.0 there is no backward-compatibility requirement. The proposed native storage format is **3.0**, with a new synchronization revision. Step 2 fixes its byte layouts and identifiers. Public admission replaces the old engine and requires fresh Sessions; it adds no old-format reader, migration utility or long-lived dual-engine switch. Unsupported formats are rejected before mutable access. Pinned source revisions retain historical benchmark reproducibility.
